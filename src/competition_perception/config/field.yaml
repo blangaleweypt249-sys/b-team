@@ -1,0 +1,49 @@
+field_localizer:
+  ros__parameters:
+    # FAST-LIO 输出的原始里程计话题。
+    odometry_topic: /fastlio2/lio_odom
+    field_pose_topic: /competition/field_pose
+    field_zone_topic: /competition/current_zone
+    # 启动时用于平均计算赛场原点的里程计帧数。
+    initial_sample_count: 30
+    field_yaw_offset_deg: 0.0
+    allowed_min_x: 0.0
+    allowed_max_x: 11.0
+    allowed_min_y: 0.0
+    allowed_max_y: 6.0
+    # 每个区域按 [最小 x, 最大 x, 最小 y, 最大 y] 配置，单位为米。
+    zones:
+      names: [start, storage_l1, storage_l2, public, gem_pick, red_goal, blue_goal]
+      start: [0.0, 0.7, 0.0, 0.7]
+      storage_l1: [0.7, 2.1, 0.0, 0.4]
+      storage_l2: [0.7, 2.1, 0.4, 0.8]
+      public: [2.5, 8.5, 0.0, 4.9]
+      gem_pick: [4.8, 6.2, 1.75, 3.15]
+      red_goal: [10.2, 11.0, 0.0, 0.8]
+      blue_goal: [0.0, 0.8, 0.0, 0.8]
+
+vision_detector:
+  ros__parameters:
+    # RGB 与深度话题需来自同一台相机，或已完成时间同步。
+    color_topic: /camera/color/image_raw
+    depth_topic: /camera/depth/image_raw
+    target_topic: /competition/vision/target
+    overlay_topic: /competition/vision/overlay
+    # true 表示深度图像素已与彩色图像素对齐。
+    depth_is_registered: true
+    depth_sample_window: 5
+    target_min_radius_px: 20.0
+    target_max_radius_px: 220.0
+    target_min_depth_m: 0.2
+    target_max_depth_m: 3.0
+    # 相机内参必须使用实际设备标定值替换。
+    camera_fx: 468.431622
+    camera_fy: 468.585260
+    camera_cx: 323.200725
+    camera_cy: 245.471993
+    show_debug_window: false
+
+field_visualizer:
+  ros__parameters:
+    field_pose_topic: /competition/field_pose
+    marker_topic: /competition/field_markers
