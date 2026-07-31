@@ -1,3 +1,0 @@
-config load "H723VGT6.ioc"
-project generate
-exit
