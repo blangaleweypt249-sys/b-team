@@ -46,10 +46,13 @@ FDCAN 使用片上 Message RAM，不使用 DMA1/2。
 
 - FreeRTOS V10.6.2 + CMSIS-RTOS2，抢占式调度，1 kHz Tick。
 - `heap_4` 为 64 KiB，启用方法 2 栈溢出检查和 malloc 失败 Hook。
-- `appTask`：Normal，4096 bytes，使用 `osDelayUntil` 执行 1 ms 周期入口
-  `App_Control1ms()`；每 10 个周期兼容调用一次 `App_Periodic10ms()`。
-- `commRxTask`：AboveNormal，2048 bytes，阻塞等待 UART/FDCAN 线程标志；ISR 不做协议解析。
-- `monitorTask`：BelowNormal，1536 bytes，每秒更新任务栈余量和 RTOS 堆余量。
+- 当前生成工程保留 `appTask`、`commRxTask` 和 `monitorTask` 作为兼容运行骨架；它们不代表
+  机构拆分后的最终任务设计已经实现。
+- 目标任务框架为 `upperSafetyTask`、`commRxTask`、`motorTxTask`、`upperArmTask`、
+  `upperConveyorTask`、`upperGripperTask` 和 `monitorTask`，相对优先级固定为
+  `upperSafetyTask > commRxTask > motorTxTask > 机构业务任务 > monitorTask`。
+- 本轮不创建上述目标任务的源文件，不填写任务函数，也不预设未经最坏执行时间和栈水位
+  验证的具体优先级枚举与栈大小。
 
 板端框架使用通用回调注册通信入口，Application 不直接接触 HAL 句柄：
 
@@ -63,8 +66,8 @@ void App_Control1ms(void);
 ```
 
 Type-C 的 D+/D- 实际连接 CH340N，H723 侧通过 UART4 PA0/PA1 与其通信。小电脑看到的是
-USB 虚拟串口，H723 不启用原生 USB CDC。帧格式、超时策略和电机拓扑见仓库根目录
-`代码框架说明.md`。
+USB 虚拟串口，H723 不启用原生 USB CDC。帧格式、超时策略、电机拓扑和目标任务职责见
+[上层代码框架说明.md](../上层代码框架说明.md)。
 
 三路 UART 接收使用 256-byte、32-byte 对齐、独占 Cache line 的循环 DMA 缓冲区。
 `CommRuntime_PcTransmit()` 会在启动 TX DMA 前 Clean D-Cache；调用者必须保证发送
