@@ -12,6 +12,8 @@ void UpperEntry_Control1ms(uint32_t tick_ms);
 void UpperEntry_OnPcData(const uint8_t *data,
                          size_t size,
                          uint32_t tick_ms);
-void UpperEntry_OnCanFrame(uint8_t can_bus, const can_frame_t *frame);
+void UpperEntry_OnCanFrame(uint8_t can_bus,
+                           const can_frame_t *frame,
+                           uint32_t tick_ms);
 
 #endif

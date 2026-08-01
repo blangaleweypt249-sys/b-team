@@ -2,6 +2,7 @@
 
 #include "cmsis_os2.h"
 #include "comm_runtime.h"
+#include "upper_config.h"
 #include "upper_motor_port.h"
 #include "upper_pc_link.h"
 
@@ -48,11 +49,16 @@ static void UpperEntry_OnCan(uint8_t can_bus,
                              void *user_data)
 {
     (void)user_data;
-    UpperEntry_OnCanFrame(can_bus, frame);
+    UpperEntry_OnCanFrame(can_bus, frame, CommRuntime_GetTickMs());
 }
 
 bool UpperEntry_Init(void)
 {
+    if (!UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT))
+    {
+        return false;
+    }
+
     upper_cmd_queue = osMessageQueueNew(UPPER_CMD_QUEUE_DEPTH,
                                         sizeof(upper_target_t),
                                         NULL);
@@ -114,6 +120,7 @@ static void UpperEntry_SendState(uint32_t tick_ms)
 
 void UpperEntry_Control1ms(uint32_t tick_ms)
 {
+    UpperMotorPort_BeginCycle(tick_ms);
     UpperEntry_ProcessCmd();
     if (upper_estop_pending)
     {
@@ -127,6 +134,10 @@ void UpperEntry_Control1ms(uint32_t tick_ms)
     }
 
     UpperRobot_Control1ms(&upper_robot, tick_ms);
+    if (!UpperMotorPort_Flush())
+    {
+        upper_robot.motor_manager.send_fail_count++;
+    }
     UpperEntry_SendState(tick_ms);
 }
 
@@ -137,9 +148,11 @@ void UpperEntry_OnPcData(const uint8_t *data,
     UpperPcLink_Push(&upper_pc_link, data, size, tick_ms);
 }
 
-void UpperEntry_OnCanFrame(uint8_t can_bus, const can_frame_t *frame)
+void UpperEntry_OnCanFrame(uint8_t can_bus,
+                           const can_frame_t *frame,
+                           uint32_t tick_ms)
 {
-    UpperMotorPort_OnFrame(can_bus, frame);
+    UpperMotorPort_OnFrame(can_bus, frame, tick_ms);
 }
 
 void App_Control1ms(void)

@@ -64,9 +64,30 @@ bool MotorManager_SetEnabled(motor_manager_t *manager,
                              size_t motor_index,
                              bool enabled)
 {
+    motor_cmd_t stop_cmd;
+
     if ((manager == NULL) || (motor_index >= manager->motor_count))
     {
         return false;
+    }
+
+    if (manager->enabled[motor_index] && !enabled)
+    {
+        stop_cmd = (motor_cmd_t){ .mode = MOTOR_CMD_STOP };
+        manager->cmd[motor_index] = stop_cmd;
+        if (manager->cfg[motor_index].protocol_ready &&
+            (manager->send != NULL))
+        {
+            if (manager->send(&manager->cfg[motor_index], &stop_cmd,
+                              manager->send_user_data))
+            {
+                manager->sent_count++;
+            }
+            else
+            {
+                manager->send_fail_count++;
+            }
+        }
     }
 
     manager->enabled[motor_index] = enabled;

@@ -8,6 +8,8 @@
 
 #define NODE_ARM_MG5010         1U
 #define NODE_ARM_J4310          2U
+/* Must match the J4310 Master ID stored by the DAMIAO setup tool. */
+#define CAN_J4310_MASTER_ID     0x000U
 
 #define NODE_MOVE_M3508_L       1U
 #define NODE_MOVE_M3508_R       2U

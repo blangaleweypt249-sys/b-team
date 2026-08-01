@@ -10,6 +10,7 @@
       <TargetName>H723VGT6</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
+      <pCCUsed>6240000::V6.24::ARMCLANG</pCCUsed>
       <uAC6>1</uAC6>
       <TargetOption>
         <TargetCommonOption>
@@ -767,7 +768,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>User/Driver</GroupName>
+          <GroupName>User/Driver/Motor/Core</GroupName>
           <Files>
             <File>
               <FileName>motor_manager.c</FileName>
@@ -779,6 +780,61 @@
               <FileType>1</FileType>
               <FilePath>../Driver/Motor/upper_motor_port.c</FilePath>
             </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User/Driver/Motor/DJI</GroupName>
+          <Files>
+            <File>
+              <FileName>dji_group.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Driver/Motor/DJI/dji_group.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User/Driver/Motor/LK MG5010E-i36</GroupName>
+          <Files>
+            <File>
+              <FileName>mg5010.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Driver/Motor/LK MG5010E-i36/mg5010.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User/Driver/Motor/DM J4310</GroupName>
+          <Files>
+            <File>
+              <FileName>j4310.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Driver/Motor/DM J4310/j4310.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User/Driver/Motor/M3508</GroupName>
+          <Files>
+            <File>
+              <FileName>m3508.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Driver/Motor/M3508/m3508.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User/Driver/Motor/M2006</GroupName>
+          <Files>
+            <File>
+              <FileName>m2006.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Driver/Motor/M2006/m2006.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User/Driver/PcLink</GroupName>
+          <Files>
             <File>
               <FileName>pc_protocol.c</FileName>
               <FileType>1</FileType>
