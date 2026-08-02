@@ -47,6 +47,7 @@ speed_t SerialGateway_GetBaudrate(int baudrate)
 
 struct perception_cache_t
 {
+  // 回调只更新最新样本；定时器根据时间戳决定该样本是否还能下发。
   perception_data_t data;
   rclcpp::Time field_pose_time;
   rclcpp::Time target_time;
@@ -84,7 +85,7 @@ public:
     controller_connected_pub_ = this->create_publisher<std_msgs::msg::Bool>(
       this->get_parameter("controller_connected_topic").as_string(), 10);
     controller_state_pub_ = this->create_publisher<std_msgs::msg::UInt8>(
-      this->get_parameter("controller_state_topic").as_string(), 10);
+      this->get_parameter("controller_stapic").as_string(), 10);
     controller_error_pub_ = this->create_publisher<std_msgs::msg::UInt8>(
       this->get_parameter("controller_error_topic").as_string(), 10);
 
@@ -201,6 +202,7 @@ private:
       const auto now = this->now();
       const auto timeout_ms = this->get_parameter("data_timeout_ms").as_int();
       const auto timeout = rclcpp::Duration::from_nanoseconds(timeout_ms * 1000000LL);
+      // 过期数据保留在缓存中仅便于诊断，flags 会让下位机忽略它。
       if (cache_.field_pose_received && (now - cache_.field_pose_time) < timeout)
       {
         perception_data.flags |= PERCEPTION_FIELD_POSE_VALID;
@@ -230,6 +232,7 @@ private:
     }
     receive_buffer_.insert(receive_buffer_.end(), read_buffer.begin(), read_buffer.begin() + read_size);
 
+    // 串口是字节流，持续丢弃无效前缀直到拼出完整合法状态帧。
     while (receive_buffer_.size() >= k_rx_status_frame_size)
     {
       if (receive_buffer_[0] != k_rx_header_0 || receive_buffer_[1] != k_rx_header_1)

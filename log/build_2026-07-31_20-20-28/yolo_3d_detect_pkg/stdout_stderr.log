@@ -1,0 +1,46 @@
+running egg_info
+creating ../../build/yolo_3d_detect_pkg/yolo_3d_detect_pkg.egg-info
+writing ../../build/yolo_3d_detect_pkg/yolo_3d_detect_pkg.egg-info/PKG-INFO
+writing dependency_links to ../../build/yolo_3d_detect_pkg/yolo_3d_detect_pkg.egg-info/dependency_links.txt
+writing entry points to ../../build/yolo_3d_detect_pkg/yolo_3d_detect_pkg.egg-info/entry_points.txt
+writing requirements to ../../build/yolo_3d_detect_pkg/yolo_3d_detect_pkg.egg-info/requires.txt
+writing top-level names to ../../build/yolo_3d_detect_pkg/yolo_3d_detect_pkg.egg-info/top_level.txt
+writing manifest file '../../build/yolo_3d_detect_pkg/yolo_3d_detect_pkg.egg-info/SOURCES.txt'
+reading manifest file '../../build/yolo_3d_detect_pkg/yolo_3d_detect_pkg.egg-info/SOURCES.txt'
+writing manifest file '../../build/yolo_3d_detect_pkg/yolo_3d_detect_pkg.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/husky/TR/build/yolo_3d_detect_pkg/build
+creating /home/husky/TR/build/yolo_3d_detect_pkg/build/lib
+creating /home/husky/TR/build/yolo_3d_detect_pkg/build/lib/yolo_3d_detect_pkg
+copying yolo_3d_detect_pkg/vision_detector.py -> /home/husky/TR/build/yolo_3d_detect_pkg/build/lib/yolo_3d_detect_pkg
+copying yolo_3d_detect_pkg/block_geometry.py -> /home/husky/TR/build/yolo_3d_detect_pkg/build/lib/yolo_3d_detect_pkg
+copying yolo_3d_detect_pkg/__init__.py -> /home/husky/TR/build/yolo_3d_detect_pkg/build/lib/yolo_3d_detect_pkg
+copying yolo_3d_detect_pkg/block_detector.py -> /home/husky/TR/build/yolo_3d_detect_pkg/build/lib/yolo_3d_detect_pkg
+running install
+running install_lib
+creating /home/husky/TR/install/yolo_3d_detect_pkg/lib/python3.12/site-packages/yolo_3d_detect_pkg
+copying /home/husky/TR/build/yolo_3d_detect_pkg/build/lib/yolo_3d_detect_pkg/vision_detector.py -> /home/husky/TR/install/yolo_3d_detect_pkg/lib/python3.12/site-packages/yolo_3d_detect_pkg
+copying /home/husky/TR/build/yolo_3d_detect_pkg/build/lib/yolo_3d_detect_pkg/block_geometry.py -> /home/husky/TR/install/yolo_3d_detect_pkg/lib/python3.12/site-packages/yolo_3d_detect_pkg
+copying /home/husky/TR/build/yolo_3d_detect_pkg/build/lib/yolo_3d_detect_pkg/__init__.py -> /home/husky/TR/install/yolo_3d_detect_pkg/lib/python3.12/site-packages/yolo_3d_detect_pkg
+copying /home/husky/TR/build/yolo_3d_detect_pkg/build/lib/yolo_3d_detect_pkg/block_detector.py -> /home/husky/TR/install/yolo_3d_detect_pkg/lib/python3.12/site-packages/yolo_3d_detect_pkg
+byte-compiling /home/husky/TR/install/yolo_3d_detect_pkg/lib/python3.12/site-packages/yolo_3d_detect_pkg/vision_detector.py to vision_detector.cpython-312.pyc
+byte-compiling /home/husky/TR/install/yolo_3d_detect_pkg/lib/python3.12/site-packages/yolo_3d_detect_pkg/block_geometry.py to block_geometry.cpython-312.pyc
+byte-compiling /home/husky/TR/install/yolo_3d_detect_pkg/lib/python3.12/site-packages/yolo_3d_detect_pkg/__init__.py to __init__.cpython-312.pyc
+byte-compiling /home/husky/TR/install/yolo_3d_detect_pkg/lib/python3.12/site-packages/yolo_3d_detect_pkg/block_detector.py to block_detector.cpython-312.pyc
+running install_data
+creating /home/husky/TR/install/yolo_3d_detect_pkg/share/ament_index
+creating /home/husky/TR/install/yolo_3d_detect_pkg/share/ament_index/resource_index
+creating /home/husky/TR/install/yolo_3d_detect_pkg/share/ament_index/resource_index/packages
+copying resource/yolo_3d_detect_pkg -> /home/husky/TR/install/yolo_3d_detect_pkg/share/ament_index/resource_index/packages
+copying package.xml -> /home/husky/TR/install/yolo_3d_detect_pkg/share/yolo_3d_detect_pkg
+creating /home/husky/TR/install/yolo_3d_detect_pkg/share/yolo_3d_detect_pkg/config
+copying config/vision.yaml -> /home/husky/TR/install/yolo_3d_detect_pkg/share/yolo_3d_detect_pkg/config
+creating /home/husky/TR/install/yolo_3d_detect_pkg/share/yolo_3d_detect_pkg/model
+copying model/README.md -> /home/husky/TR/install/yolo_3d_detect_pkg/share/yolo_3d_detect_pkg/model
+running install_egg_info
+Copying ../../build/yolo_3d_detect_pkg/yolo_3d_detect_pkg.egg-info to /home/husky/TR/install/yolo_3d_detect_pkg/lib/python3.12/site-packages/yolo_3d_detect_pkg-0.1.0-py3.12.egg-info
+running install_scripts
+Installing block_detector script to /home/husky/TR/install/yolo_3d_detect_pkg/lib/yolo_3d_detect_pkg
+Installing vision_detector script to /home/husky/TR/install/yolo_3d_detect_pkg/lib/yolo_3d_detect_pkg
+writing list of installed files to '/home/husky/TR/build/yolo_3d_detect_pkg/install.log'

@@ -1,0 +1,821 @@
+[0.000000] (-) TimerEvent: {}
+[0.000348] (-) JobUnselected: {'identifier': 'common_launch_pkg'}
+[0.000378] (-) JobUnselected: {'identifier': 'competition_gateway'}
+[0.000399] (-) JobUnselected: {'identifier': 'fyt_pos'}
+[0.000420] (-) JobUnselected: {'identifier': 'hba'}
+[0.000442] (-) JobUnselected: {'identifier': 'interface'}
+[0.000463] (-) JobUnselected: {'identifier': 'livox_ros_driver2'}
+[0.000483] (-) JobUnselected: {'identifier': 'localizer'}
+[0.000502] (-) JobUnselected: {'identifier': 'pgo'}
+[0.000521] (-) JobUnselected: {'identifier': 'yolo_3d_detect_pkg'}
+[0.000541] (fast_lio) JobQueued: {'identifier': 'fast_lio', 'dependencies': OrderedDict({'livox_ros_driver2': '/home/husky/TR/install/livox_ros_driver2'})}
+[0.000565] (fast_lio) JobStarted: {'identifier': 'fast_lio'}
+[0.010266] (fast_lio) JobProgress: {'identifier': 'fast_lio', 'progress': 'cmake'}
+[0.011022] (fast_lio) Command: {'cmd': ['/usr/bin/cmake', '/home/husky/TR/src/FAST_LIO2_ROS2/fastlio2', '-DCMAKE_INSTALL_PREFIX=/home/husky/TR/install/fast_lio'], 'cwd': '/home/husky/TR/build/fast_lio', 'env': OrderedDict({'GJS_DEBUG_TOPICS': 'JS ERROR;JS LOG', 'PYTHON_BASIC_REPL': '1', 'LESSOPEN': '| /usr/bin/lesspipe %s', 'RSYNC_PROXY': 'localhost:1080', 'HTTPS_PROXY': 'http://localhost:3128', 'GZ_SIM_RESOURCE_PATH': '/opt/ros/jazzy/share', 'no_proxy': 'localhost,127.0.0.1,::1,*.local,.local,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', 'AI_AGENT': 'github_copilot_vscode_agent', 'GIT_SSH_COMMAND': "ssh -o ProxyCommand='socat - PROXY:localhost:%h:%p,proxyport=3128'", 'USER': 'husky', 'SANDBOX_RUNTIME': '1', 'FONTCONFIG_PATH': '/etc/fonts', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'CLAUDE_CODE_HOST_SOCKS_PROXY_PORT': '40407', 'GIT_EDITOR': ':', 'all_proxy': 'socks5h://localhost:1080', 'GIO_MODULE_DIR': '/home/husky/snap/code/common/.cache/gio-modules', 'XDG_SESSION_TYPE': 'x11', 'GIT_ASKPASS': '/snap/code/253/usr/share/code/resources/app/extensions/git/dist/askpass.sh', 'GTK_EXE_PREFIX_VSCODE_SNAP_ORIG': '', 'DOCKER_HTTPS_PROXY': 'http://localhost:3128', 'GDK_BACKEND_VSCODE_SNAP_ORIG': '', 'CLUTTER_DISABLE_MIPMAPPED_TEXT': '1', 'SHLVL': '2', 'LD_LIBRARY_PATH': '/home/husky/TR/install/livox_ros_driver2/lib:/usr/local/lib:/usr/local/lib:/usr/local/lib:/home/husky/ws_livox/install/livox_ros_driver2/lib:/home/husky/ws_livox/install/rtabmap_msgs/lib:/home/husky/ws_livox/install/rtabmap_costmap_plugins/lib:/usr/local/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'COPILOT_AGENT': '1', 'HOME': '/home/husky', 'CHROME_DESKTOP': 'code.desktop', 'LOCPATH_VSCODE_SNAP_ORIG': '', 'OLDPWD': '/home/husky/.vscode/tmp/tmp_vscode_1', 'TERM_PROGRAM_VERSION': '1.130.0', 'DESKTOP_SESSION': 'ubuntu', 'GTK_PATH': '/snap/code/253/usr/lib/x86_64-linux-gnu/gtk-3.0', 'NO_PROXY': 'localhost,127.0.0.1,::1,*.local,.local,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', 'XDG_DATA_HOME_VSCODE_SNAP_ORIG': '', 'GTK_IM_MODULE_FILE': '/home/husky/snap/code/common/.cache/immodules/immodules.cache', 'GIO_LAUNCHED_DESKTOP_FILE': '/var/lib/snapd/desktop/applications/code_code.desktop', 'ROS_PYTHON_VERSION': '3', 'GNOME_SHELL_SESSION_MODE': 'ubuntu', 'GTK_MODULES': 'gail:atk-bridge', 'GSETTINGS_SCHEMA_DIR_VSCODE_SNAP_ORIG': '', 'VSCODE_GIT_ASKPASS_MAIN': '/snap/code/253/usr/share/code/resources/app/extensions/git/dist/askpass-main.js', 'VSCODE_GIT_ASKPASS_NODE': '/snap/code/253/usr/share/code/code', 'MANAGERPID': '1979', 'PYDEVD_DISABLE_FILE_VALIDATION': '1', 'SYSTEMD_EXEC_PID': '2425', 'BUNDLED_DEBUGPY_PATH': '/home/husky/.vscode/extensions/ms-python.debugpy-2026.6.0-linux-x64/bundled/libs/debugpy', 'VSCODE_PYTHON_AUTOACTIVATE_GUARD': '1', 'GSM_SKIP_SSH_AGENT_WORKAROUND': 'true', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLORTERM': 'truecolor', 'GIO_LAUNCHED_DESKTOP_FILE_PID': '7481', 'DEBUGINFOD_URLS': 'https://debuginfod.ubuntu.com', 'TMPDIR': '/home/husky/.vscode/tmp/tmp_vscode_1', 'https_proxy': 'http://localhost:3128', 'CLAUDE_CODE_HOST_HTTP_PROXY_PORT': '36309', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'husky', 'ALL_PROXY': 'socks5h://localhost:1080', 'http_proxy': 'http://localhost:3128', 'JOURNAL_STREAM': '10:14922', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'XDG_CONFIG_DIRS_VSCODE_SNAP_ORIG': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'MEMORY_PRESSURE_WATCH': '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.Shell@x11.service/memory.pressure', 'XDG_SESSION_CLASS': 'user', 'XDG_DATA_DIRS_VSCODE_SNAP_ORIG': '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'USERNAME': 'husky', 'TERM': 'xterm-256color', 'GNOME_DESKTOP_SESSION_ID': 'this-is-deprecated', 'grpc_proxy': 'socks5h://localhost:1080', 'FC_FONTATIONS': '1', 'HISTCONTROL': 'ignorespace', 'WINDOWPATH': '2', 'PATH': '/home/husky/.config/Code/User/globalStorage/github.copilot-chat/debugCommand:/home/husky/.config/Code/User/globalStorage/github.copilot-chat/copilotCli:/home/husky/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/home/husky/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/husky/.fishros/bin/:/home/husky/.vscode/extensions/ms-python.debugpy-2026.6.0-linux-x64/bundled/scripts/noConfigScripts:/home/husky/.fishros/bin/:/snap/code/253/usr/share/code/resources/app/node_modules.asar.unpacked/@vscode/ripgrep-universal/bin/linux-x64', 'SESSION_MANAGER': 'local/R9P:@/tmp/.ICE-unix/2393,unix/R9P:/tmp/.ICE-unix/2393', 'GTK_EXE_PREFIX': '/snap/code/253/usr', 'INVOCATION_ID': '232c109e81c442b8a729604705fddc62', 'XDG_MENU_PREFIX': 'gnome-', 'ftp_proxy': 'socks5h://localhost:1080', 'XDG_RUNTIME_DIR': '/run/user/1000', 'GDK_BACKEND': 'x11', 'DISPLAY': ':0', 'LOCPATH': '/snap/code/253/usr/lib/locale', 'VSCODE_DEBUGPY_ADAPTER_ENDPOINTS': '/home/husky/.vscode/extensions/ms-python.debugpy-2026.6.0-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-c7b6d7ac374ef3b7.txt', 'LANG': 'zh_CN.UTF-8', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'PYTHONSTARTUP': '/home/husky/.config/Code/User/workspaceStorage/2598fa35ecc8ded29a0518703103ae87/ms-python.python/pythonrc.py', 'GIO_MODULE_DIR_VSCODE_SNAP_ORIG': '', 'XDG_DATA_HOME': '/home/husky/snap/code/253/.local/share', 'XMODIFIERS': '@im=ibus', 'XDG_SESSION_DESKTOP': 'ubuntu', 'XAUTHORITY': '/run/user/1000/gdm/Xauthority', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'VSCODE_GIT_IPC_HANDLE': '/run/user/1000/vscode-git-f6e3659723.sock', 'TERM_PROGRAM': 'vscode', 'SSH_AUTH_SOCK': '/run/user/1000/keyring/ssh', 'GSETTINGS_SCHEMA_DIR': '/home/husky/snap/code/253/.local/share/glib-2.0/schemas', 'AMENT_PREFIX_PATH': '/home/husky/TR/install/livox_ros_driver2:/opt/ros/jazzy', 'DEBIAN_FRONTEND': 'noninteractive', 'SHELL': '/bin/bash', 'QT_ACCESSIBILITY': '1', 'ELECTRON_RUN_AS_NODE': '1', 'GDMSESSION': 'ubuntu', 'CLOUDSDK_PROXY_TYPE': 'https', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'GTK_PATH_VSCODE_SNAP_ORIG': '', 'FONTCONFIG_FILE': '/etc/fonts/fonts.conf', 'GTK_IM_MODULE_FILE_VSCODE_SNAP_ORIG': '', 'CLOUDSDK_PROXY_ADDRESS': 'localhost', 'GPG_AGENT_INFO': '/run/user/1000/gnupg/S.gpg-agent:0:1', 'GJS_DEBUG_OUTPUT': 'stderr', 'CLOUDSDK_PROXY_PORT': '3128', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'VSCODE_GIT_ASKPASS_EXTRA_ARGS': '', 'GIT_PAGER': 'cat', 'QT_IM_MODULE': 'ibus', 'PWD': '/home/husky/TR/build/fast_lio', 'CLAUDE_TMPDIR': '/home/husky/.vscode/tmp/tmp_vscode_1', 'GIT_MERGE_AUTOEDIT': 'no', 'XDG_CONFIG_DIRS': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'COPILOT_DEBUG_NONCE': '1b11bd14131318a94116e9e7ded58081', 'FTP_PROXY': 'socks5h://localhost:1080', 'XDG_DATA_DIRS': '/home/husky/snap/code/253/.local/share:/home/husky/snap/code/253:/snap/code/253/usr/share:/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'QTWEBENGINE_DICTIONARIES_PATH': '/usr/share/hunspell-bdic/', 'PYTHONPATH': '/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'HTTP_PROXY': 'http://localhost:3128', 'COLCON': '1', 'MEMORY_PRESSURE_WRITE': 'c29tZSAyMDAwMDAgMjAwMDAwMAA=', 'DOCKER_HTTP_PROXY': 'http://localhost:3128', 'CMAKE_PREFIX_PATH': '/home/husky/TR/install/livox_ros_driver2:/opt/ros/jazzy/opt/gz_sim_vendor:/opt/ros/jazzy/opt/gz_sensors_vendor:/opt/ros/jazzy/opt/gz_physics_vendor:/opt/ros/jazzy/opt/sdformat_vendor:/opt/ros/jazzy/opt/gz_gui_vendor:/opt/ros/jazzy/opt/gz_transport_vendor:/opt/ros/jazzy/opt/gz_rendering_vendor:/opt/ros/jazzy/opt/gz_plugin_vendor:/opt/ros/jazzy/opt/gz_fuel_tools_vendor:/opt/ros/jazzy/opt/gz_msgs_vendor:/opt/ros/jazzy/opt/gz_common_vendor:/opt/ros/jazzy/opt/gz_math_vendor:/opt/ros/jazzy/opt/gz_utils_vendor:/opt/ros/jazzy/opt/gz_tools_vendor:/opt/ros/jazzy/opt/gz_ogre_next_vendor:/opt/ros/jazzy/opt/gz_dartsim_vendor:/opt/ros/jazzy/opt/gz_cmake_vendor:/opt/ros/jazzy', 'GRPC_PROXY': 'socks5h://localhost:1080'}), 'shell': False}
+[0.023186] (fast_lio) StderrLine: {'line': b'\x1b[0mCurrent CPU archtecture: x86_64\x1b[0m\n'}
+[0.026624] (fast_lio) StderrLine: {'line': b'\x1b[0mProcesser number:  32\x1b[0m\n'}
+[0.026726] (fast_lio) StderrLine: {'line': b'\x1b[0mcore for MP: 3\x1b[0m\n'}
+[0.033003] (fast_lio) StdoutLine: {'line': b'-- Found ament_cmake: 2.5.6 (/opt/ros/jazzy/share/ament_cmake/cmake)\n'}
+[0.099845] (-) TimerEvent: {}
+[0.103419] (fast_lio) StdoutLine: {'line': b'-- Found rclcpp: 28.1.21 (/opt/ros/jazzy/share/rclcpp/cmake)\n'}
+[0.122398] (fast_lio) StdoutLine: {'line': b'-- Found rosidl_generator_c: 4.6.9 (/opt/ros/jazzy/share/rosidl_generator_c/cmake)\n'}
+[0.128090] (fast_lio) StdoutLine: {'line': b'-- Found rosidl_generator_cpp: 4.6.9 (/opt/ros/jazzy/share/rosidl_generator_cpp/cmake)\n'}
+[0.135069] (fast_lio) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[0.143306] (fast_lio) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[0.182578] (fast_lio) StdoutLine: {'line': b'-- Found rmw_implementation_cmake: 7.3.3 (/opt/ros/jazzy/share/rmw_implementation_cmake/cmake)\n'}
+[0.183331] (fast_lio) StdoutLine: {'line': b'-- Found rmw_fastrtps_cpp: 8.4.4 (/opt/ros/jazzy/share/rmw_fastrtps_cpp/cmake)\n'}
+[0.199947] (-) TimerEvent: {}
+[0.230865] (fast_lio) StdoutLine: {'line': b"-- Using RMW implementation 'rmw_fastrtps_cpp' as default\n"}
+[0.279810] (fast_lio) StdoutLine: {'line': b'-- Found rclcpp_components: 28.1.21 (/opt/ros/jazzy/share/rclcpp_components/cmake)\n'}
+[0.298450] (fast_lio) StdoutLine: {'line': b'-- Found geometry_msgs: 5.3.8 (/opt/ros/jazzy/share/geometry_msgs/cmake)\n'}
+[0.300028] (-) TimerEvent: {}
+[0.318671] (fast_lio) StdoutLine: {'line': b'-- Found nav_msgs: 5.3.8 (/opt/ros/jazzy/share/nav_msgs/cmake)\n'}
+[0.336008] (fast_lio) StdoutLine: {'line': b'-- Found sensor_msgs: 5.3.8 (/opt/ros/jazzy/share/sensor_msgs/cmake)\n'}
+[0.351714] (fast_lio) StdoutLine: {'line': b'-- Found std_srvs: 5.3.8 (/opt/ros/jazzy/share/std_srvs/cmake)\n'}
+[0.362310] (fast_lio) StdoutLine: {'line': b'-- Found visualization_msgs: 5.3.8 (/opt/ros/jazzy/share/visualization_msgs/cmake)\n'}
+[0.381783] (fast_lio) StdoutLine: {'line': b'-- Found pcl_ros: 2.6.4 (/opt/ros/jazzy/share/pcl_ros/cmake)\n'}
+[0.400107] (-) TimerEvent: {}
+[0.420178] (fast_lio) StderrLine: {'line': b'\x1b[33mCMake Warning (dev) at /usr/lib/x86_64-linux-gnu/cmake/pcl/Modules/FindFLANN.cmake:45 (find_package):\n'}
+[0.420402] (fast_lio) StderrLine: {'line': b'  Policy CMP0144 is not set: find_package uses upper-case <PACKAGENAME>_ROOT\n'}
+[0.420510] (fast_lio) StderrLine: {'line': b'  variables.  Run "cmake --help-policy CMP0144" for policy details.  Use the\n'}
+[0.420602] (fast_lio) StderrLine: {'line': b'  cmake_policy command to set the policy and suppress this warning.\n'}
+[0.420732] (fast_lio) StderrLine: {'line': b'\n'}
+[0.420824] (fast_lio) StderrLine: {'line': b'  CMake variable FLANN_ROOT is set to:\n'}
+[0.420909] (fast_lio) StderrLine: {'line': b'\n'}
+[0.421001] (fast_lio) StderrLine: {'line': b'    /usr\n'}
+[0.421096] (fast_lio) StderrLine: {'line': b'\n'}
+[0.421174] (fast_lio) StderrLine: {'line': b'  For compatibility, find_package is ignoring the variable, but code in a\n'}
+[0.421249] (fast_lio) StderrLine: {'line': b'  .cmake module might still use it.\n'}
+[0.421323] (fast_lio) StderrLine: {'line': b'Call Stack (most recent call first):\n'}
+[0.421395] (fast_lio) StderrLine: {'line': b'  /usr/lib/x86_64-linux-gnu/cmake/pcl/PCLConfig.cmake:261 (find_package)\n'}
+[0.421474] (fast_lio) StderrLine: {'line': b'  /usr/lib/x86_64-linux-gnu/cmake/pcl/PCLConfig.cmake:306 (find_flann)\n'}
+[0.421546] (fast_lio) StderrLine: {'line': b'  /usr/lib/x86_64-linux-gnu/cmake/pcl/PCLConfig.cmake:570 (find_external_library)\n'}
+[0.421619] (fast_lio) StderrLine: {'line': b'  /opt/ros/jazzy/share/pcl_conversions/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)\n'}
+[0.421696] (fast_lio) StderrLine: {'line': b'  /opt/ros/jazzy/share/pcl_conversions/cmake/pcl_conversionsConfig.cmake:41 (include)\n'}
+[0.421779] (fast_lio) StderrLine: {'line': b'  /opt/ros/jazzy/share/pcl_ros/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)\n'}
+[0.421855] (fast_lio) StderrLine: {'line': b'  /opt/ros/jazzy/share/pcl_ros/cmake/pcl_rosConfig.cmake:41 (include)\n'}
+[0.421931] (fast_lio) StderrLine: {'line': b'  CMakeLists.txt:62 (find_package)\n'}
+[0.422013] (fast_lio) StderrLine: {'line': b'This warning is for project developers.  Use -Wno-dev to suppress it.\n'}
+[0.422097] (fast_lio) StderrLine: {'line': b'\x1b[0m\n'}
+[0.422187] (fast_lio) StdoutLine: {'line': b'-- Found flann version 1.9.2\n'}
+[0.500216] (-) TimerEvent: {}
+[0.600460] (-) TimerEvent: {}
+[0.700690] (-) TimerEvent: {}
+[0.751820] (fast_lio) StdoutLine: {'line': b'-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)\n'}
+[0.756940] (fast_lio) StdoutLine: {'line': b'-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)\n'}
+[0.800806] (-) TimerEvent: {}
+[0.901095] (-) TimerEvent: {}
+[1.001438] (-) TimerEvent: {}
+[1.101693] (-) TimerEvent: {}
+[1.103633] (fast_lio) StdoutLine: {'line': b'-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)\n'}
+[1.109130] (fast_lio) StdoutLine: {'line': b'-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)\n'}
+[1.201804] (-) TimerEvent: {}
+[1.302067] (-) TimerEvent: {}
+[1.402350] (-) TimerEvent: {}
+[1.429447] (fast_lio) StdoutLine: {'line': b'-- Found Qhull version 8.0.2\n'}
+[1.502488] (-) TimerEvent: {}
+[1.602723] (-) TimerEvent: {}
+[1.702972] (-) TimerEvent: {}
+[1.756919] (fast_lio) StdoutLine: {'line': b'-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)\n'}
+[1.803090] (-) TimerEvent: {}
+[1.903319] (-) TimerEvent: {}
+[2.003550] (-) TimerEvent: {}
+[2.103801] (-) TimerEvent: {}
+[2.140067] (fast_lio) StdoutLine: {'line': b'-- Found eigen3_cmake_module: 0.3.1 (/opt/ros/jazzy/share/eigen3_cmake_module/cmake)\n'}
+[2.140904] (fast_lio) StdoutLine: {'line': b'-- Ensuring Eigen3 include directory is part of orocos-kdl CMake target\n'}
+[2.143695] (fast_lio) StdoutLine: {'line': b'-- Found livox_ros_driver2: 1.0.0 (/home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake)\n'}
+[2.161290] (fast_lio) StdoutLine: {'line': b'-- Found rosidl_default_generators: 1.6.1 (/opt/ros/jazzy/share/rosidl_default_generators/cmake)\n'}
+[2.168241] (fast_lio) StdoutLine: {'line': b'-- Found rosidl_adapter: 4.6.9 (/opt/ros/jazzy/share/rosidl_adapter/cmake)\n'}
+[2.170197] (fast_lio) StderrLine: {'line': b'\x1b[33mCMake Warning (dev) at CMakeLists.txt:83 (find_package):\n'}
+[2.170281] (fast_lio) StderrLine: {'line': b'  Policy CMP0074 is not set: find_package uses <PackageName>_ROOT variables.\n'}
+[2.170349] (fast_lio) StderrLine: {'line': b'  Run "cmake --help-policy CMP0074" for policy details.  Use the cmake_policy\n'}
+[2.170412] (fast_lio) StderrLine: {'line': b'  command to set the policy and suppress this warning.\n'}
+[2.170474] (fast_lio) StderrLine: {'line': b'\n'}
+[2.170536] (fast_lio) StderrLine: {'line': b'  CMake variable PCL_ROOT is set to:\n'}
+[2.170600] (fast_lio) StderrLine: {'line': b'\n'}
+[2.170661] (fast_lio) StderrLine: {'line': b'    /usr\n'}
+[2.170720] (fast_lio) StderrLine: {'line': b'\n'}
+[2.170782] (fast_lio) StderrLine: {'line': b'  For compatibility, CMake is ignoring the variable.\n'}
+[2.170840] (fast_lio) StderrLine: {'line': b'This warning is for project developers.  Use -Wno-dev to suppress it.\n'}
+[2.170898] (fast_lio) StderrLine: {'line': b'\x1b[0m\n'}
+[2.176883] (fast_lio) StderrLine: {'line': b'\x1b[0mEigen:/usr/include/eigen3\x1b[0m\n'}
+[2.177086] (fast_lio) StdoutLine: {'line': b'-- PCL: /usr/include/pcl-1.14\n'}
+[2.203895] (-) TimerEvent: {}
+[2.304103] (-) TimerEvent: {}
+[2.341587] (fast_lio) StdoutLine: {'line': b'-- Found ament_cmake_ros: 0.12.1 (/opt/ros/jazzy/share/ament_cmake_ros/cmake)\n'}
+[2.404199] (-) TimerEvent: {}
+[2.450705] (fast_lio) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[2.491998] (fast_lio) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[2.492837] (fast_lio) StdoutLine: {'line': b'-- Found python_cmake_module: 0.11.1 (/opt/ros/jazzy/share/python_cmake_module/cmake)\n'}
+[2.504312] (-) TimerEvent: {}
+[2.604551] (-) TimerEvent: {}
+[2.681646] (fast_lio) StdoutLine: {'line': b'-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter Development NumPy Development.Module Development.Embed \n'}
+[2.704654] (-) TimerEvent: {}
+[2.710017] (fast_lio) StdoutLine: {'line': b'-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter \n'}
+[2.723552] (fast_lio) StdoutLine: {'line': b'-- Configuring done (2.7s)\n'}
+[2.795395] (fast_lio) StdoutLine: {'line': b'-- Generating done (0.1s)\n'}
+[2.804753] (-) TimerEvent: {}
+[2.806372] (fast_lio) StdoutLine: {'line': b'-- Build files have been written to: /home/husky/TR/build/fast_lio\n'}
+[2.823387] (fast_lio) CommandEnded: {'returncode': 0}
+[2.823950] (fast_lio) JobProgress: {'identifier': 'fast_lio', 'progress': 'build'}
+[2.824675] (fast_lio) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/husky/TR/build/fast_lio', '--', '-j32', '-l32'], 'cwd': '/home/husky/TR/build/fast_lio', 'env': OrderedDict({'GJS_DEBUG_TOPICS': 'JS ERROR;JS LOG', 'PYTHON_BASIC_REPL': '1', 'LESSOPEN': '| /usr/bin/lesspipe %s', 'RSYNC_PROXY': 'localhost:1080', 'HTTPS_PROXY': 'http://localhost:3128', 'GZ_SIM_RESOURCE_PATH': '/opt/ros/jazzy/share', 'no_proxy': 'localhost,127.0.0.1,::1,*.local,.local,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', 'AI_AGENT': 'github_copilot_vscode_agent', 'GIT_SSH_COMMAND': "ssh -o ProxyCommand='socat - PROXY:localhost:%h:%p,proxyport=3128'", 'USER': 'husky', 'SANDBOX_RUNTIME': '1', 'FONTCONFIG_PATH': '/etc/fonts', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'CLAUDE_CODE_HOST_SOCKS_PROXY_PORT': '40407', 'GIT_EDITOR': ':', 'all_proxy': 'socks5h://localhost:1080', 'GIO_MODULE_DIR': '/home/husky/snap/code/common/.cache/gio-modules', 'XDG_SESSION_TYPE': 'x11', 'GIT_ASKPASS': '/snap/code/253/usr/share/code/resources/app/extensions/git/dist/askpass.sh', 'GTK_EXE_PREFIX_VSCODE_SNAP_ORIG': '', 'DOCKER_HTTPS_PROXY': 'http://localhost:3128', 'GDK_BACKEND_VSCODE_SNAP_ORIG': '', 'CLUTTER_DISABLE_MIPMAPPED_TEXT': '1', 'SHLVL': '2', 'LD_LIBRARY_PATH': '/home/husky/TR/install/livox_ros_driver2/lib:/usr/local/lib:/usr/local/lib:/usr/local/lib:/home/husky/ws_livox/install/livox_ros_driver2/lib:/home/husky/ws_livox/install/rtabmap_msgs/lib:/home/husky/ws_livox/install/rtabmap_costmap_plugins/lib:/usr/local/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'COPILOT_AGENT': '1', 'HOME': '/home/husky', 'CHROME_DESKTOP': 'code.desktop', 'LOCPATH_VSCODE_SNAP_ORIG': '', 'OLDPWD': '/home/husky/.vscode/tmp/tmp_vscode_1', 'TERM_PROGRAM_VERSION': '1.130.0', 'DESKTOP_SESSION': 'ubuntu', 'GTK_PATH': '/snap/code/253/usr/lib/x86_64-linux-gnu/gtk-3.0', 'NO_PROXY': 'localhost,127.0.0.1,::1,*.local,.local,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', 'XDG_DATA_HOME_VSCODE_SNAP_ORIG': '', 'GTK_IM_MODULE_FILE': '/home/husky/snap/code/common/.cache/immodules/immodules.cache', 'GIO_LAUNCHED_DESKTOP_FILE': '/var/lib/snapd/desktop/applications/code_code.desktop', 'ROS_PYTHON_VERSION': '3', 'GNOME_SHELL_SESSION_MODE': 'ubuntu', 'GTK_MODULES': 'gail:atk-bridge', 'GSETTINGS_SCHEMA_DIR_VSCODE_SNAP_ORIG': '', 'VSCODE_GIT_ASKPASS_MAIN': '/snap/code/253/usr/share/code/resources/app/extensions/git/dist/askpass-main.js', 'VSCODE_GIT_ASKPASS_NODE': '/snap/code/253/usr/share/code/code', 'MANAGERPID': '1979', 'PYDEVD_DISABLE_FILE_VALIDATION': '1', 'SYSTEMD_EXEC_PID': '2425', 'BUNDLED_DEBUGPY_PATH': '/home/husky/.vscode/extensions/ms-python.debugpy-2026.6.0-linux-x64/bundled/libs/debugpy', 'VSCODE_PYTHON_AUTOACTIVATE_GUARD': '1', 'GSM_SKIP_SSH_AGENT_WORKAROUND': 'true', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLORTERM': 'truecolor', 'GIO_LAUNCHED_DESKTOP_FILE_PID': '7481', 'DEBUGINFOD_URLS': 'https://debuginfod.ubuntu.com', 'TMPDIR': '/home/husky/.vscode/tmp/tmp_vscode_1', 'https_proxy': 'http://localhost:3128', 'CLAUDE_CODE_HOST_HTTP_PROXY_PORT': '36309', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'husky', 'ALL_PROXY': 'socks5h://localhost:1080', 'http_proxy': 'http://localhost:3128', 'JOURNAL_STREAM': '10:14922', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'XDG_CONFIG_DIRS_VSCODE_SNAP_ORIG': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'MEMORY_PRESSURE_WATCH': '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.Shell@x11.service/memory.pressure', 'XDG_SESSION_CLASS': 'user', 'XDG_DATA_DIRS_VSCODE_SNAP_ORIG': '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'USERNAME': 'husky', 'TERM': 'xterm-256color', 'GNOME_DESKTOP_SESSION_ID': 'this-is-deprecated', 'grpc_proxy': 'socks5h://localhost:1080', 'FC_FONTATIONS': '1', 'HISTCONTROL': 'ignorespace', 'WINDOWPATH': '2', 'PATH': '/home/husky/.config/Code/User/globalStorage/github.copilot-chat/debugCommand:/home/husky/.config/Code/User/globalStorage/github.copilot-chat/copilotCli:/home/husky/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/home/husky/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/husky/.fishros/bin/:/home/husky/.vscode/extensions/ms-python.debugpy-2026.6.0-linux-x64/bundled/scripts/noConfigScripts:/home/husky/.fishros/bin/:/snap/code/253/usr/share/code/resources/app/node_modules.asar.unpacked/@vscode/ripgrep-universal/bin/linux-x64', 'SESSION_MANAGER': 'local/R9P:@/tmp/.ICE-unix/2393,unix/R9P:/tmp/.ICE-unix/2393', 'GTK_EXE_PREFIX': '/snap/code/253/usr', 'INVOCATION_ID': '232c109e81c442b8a729604705fddc62', 'XDG_MENU_PREFIX': 'gnome-', 'ftp_proxy': 'socks5h://localhost:1080', 'XDG_RUNTIME_DIR': '/run/user/1000', 'GDK_BACKEND': 'x11', 'DISPLAY': ':0', 'LOCPATH': '/snap/code/253/usr/lib/locale', 'VSCODE_DEBUGPY_ADAPTER_ENDPOINTS': '/home/husky/.vscode/extensions/ms-python.debugpy-2026.6.0-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-c7b6d7ac374ef3b7.txt', 'LANG': 'zh_CN.UTF-8', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'PYTHONSTARTUP': '/home/husky/.config/Code/User/workspaceStorage/2598fa35ecc8ded29a0518703103ae87/ms-python.python/pythonrc.py', 'GIO_MODULE_DIR_VSCODE_SNAP_ORIG': '', 'XDG_DATA_HOME': '/home/husky/snap/code/253/.local/share', 'XMODIFIERS': '@im=ibus', 'XDG_SESSION_DESKTOP': 'ubuntu', 'XAUTHORITY': '/run/user/1000/gdm/Xauthority', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'VSCODE_GIT_IPC_HANDLE': '/run/user/1000/vscode-git-f6e3659723.sock', 'TERM_PROGRAM': 'vscode', 'SSH_AUTH_SOCK': '/run/user/1000/keyring/ssh', 'GSETTINGS_SCHEMA_DIR': '/home/husky/snap/code/253/.local/share/glib-2.0/schemas', 'AMENT_PREFIX_PATH': '/home/husky/TR/install/livox_ros_driver2:/opt/ros/jazzy', 'DEBIAN_FRONTEND': 'noninteractive', 'SHELL': '/bin/bash', 'QT_ACCESSIBILITY': '1', 'ELECTRON_RUN_AS_NODE': '1', 'GDMSESSION': 'ubuntu', 'CLOUDSDK_PROXY_TYPE': 'https', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'GTK_PATH_VSCODE_SNAP_ORIG': '', 'FONTCONFIG_FILE': '/etc/fonts/fonts.conf', 'GTK_IM_MODULE_FILE_VSCODE_SNAP_ORIG': '', 'CLOUDSDK_PROXY_ADDRESS': 'localhost', 'GPG_AGENT_INFO': '/run/user/1000/gnupg/S.gpg-agent:0:1', 'GJS_DEBUG_OUTPUT': 'stderr', 'CLOUDSDK_PROXY_PORT': '3128', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'VSCODE_GIT_ASKPASS_EXTRA_ARGS': '', 'GIT_PAGER': 'cat', 'QT_IM_MODULE': 'ibus', 'PWD': '/home/husky/TR/build/fast_lio', 'CLAUDE_TMPDIR': '/home/husky/.vscode/tmp/tmp_vscode_1', 'GIT_MERGE_AUTOEDIT': 'no', 'XDG_CONFIG_DIRS': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'COPILOT_DEBUG_NONCE': '1b11bd14131318a94116e9e7ded58081', 'FTP_PROXY': 'socks5h://localhost:1080', 'XDG_DATA_DIRS': '/home/husky/snap/code/253/.local/share:/home/husky/snap/code/253:/snap/code/253/usr/share:/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'QTWEBENGINE_DICTIONARIES_PATH': '/usr/share/hunspell-bdic/', 'PYTHONPATH': '/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'HTTP_PROXY': 'http://localhost:3128', 'COLCON': '1', 'MEMORY_PRESSURE_WRITE': 'c29tZSAyMDAwMDAgMjAwMDAwMAA=', 'DOCKER_HTTP_PROXY': 'http://localhost:3128', 'CMAKE_PREFIX_PATH': '/home/husky/TR/install/livox_ros_driver2:/opt/ros/jazzy/opt/gz_sim_vendor:/opt/ros/jazzy/opt/gz_sensors_vendor:/opt/ros/jazzy/opt/gz_physics_vendor:/opt/ros/jazzy/opt/sdformat_vendor:/opt/ros/jazzy/opt/gz_gui_vendor:/opt/ros/jazzy/opt/gz_transport_vendor:/opt/ros/jazzy/opt/gz_rendering_vendor:/opt/ros/jazzy/opt/gz_plugin_vendor:/opt/ros/jazzy/opt/gz_fuel_tools_vendor:/opt/ros/jazzy/opt/gz_msgs_vendor:/opt/ros/jazzy/opt/gz_common_vendor:/opt/ros/jazzy/opt/gz_math_vendor:/opt/ros/jazzy/opt/gz_utils_vendor:/opt/ros/jazzy/opt/gz_tools_vendor:/opt/ros/jazzy/opt/gz_ogre_next_vendor:/opt/ros/jazzy/opt/gz_dartsim_vendor:/opt/ros/jazzy/opt/gz_cmake_vendor:/opt/ros/jazzy', 'GRPC_PROXY': 'socks5h://localhost:1080'}), 'shell': False}
+[2.874573] (fast_lio) StdoutLine: {'line': b'[  5%] \x1b[34m\x1b[1mGenerating Rust code for ROS interfaces\x1b[0m\n'}
+[2.874926] (fast_lio) StdoutLine: {'line': b'[  5%] \x1b[34m\x1b[1mGenerating type hashes for ROS interfaces\x1b[0m\n'}
+[2.883437] (fast_lio) StdoutLine: {'line': b'[  5%] Built target ament_cmake_python_copy_fast_lio\n'}
+[2.904852] (-) TimerEvent: {}
+[3.005068] (-) TimerEvent: {}
+[3.016952] (fast_lio) StdoutLine: {'line': b'[  5%] Built target fast_lio__rosidl_generator_type_description\n'}
+[3.018458] (fast_lio) StdoutLine: {'line': b'running egg_info\n'}
+[3.018982] (fast_lio) StdoutLine: {'line': b'creating fast_lio.egg-info\n'}
+[3.025614] (fast_lio) StdoutLine: {'line': b'[  7%] \x1b[34m\x1b[1mGenerating C code for ROS interfaces\x1b[0m\n'}
+[3.029524] (fast_lio) StdoutLine: {'line': b'writing fast_lio.egg-info/PKG-INFO\n'}
+[3.029667] (fast_lio) StdoutLine: {'line': b'writing dependency_links to fast_lio.egg-info/dependency_links.txt\n'}
+[3.029778] (fast_lio) StdoutLine: {'line': b'writing top-level names to fast_lio.egg-info/top_level.txt\n'}
+[3.030099] (fast_lio) StdoutLine: {'line': b"writing manifest file 'fast_lio.egg-info/SOURCES.txt'\n"}
+[3.033982] (fast_lio) StdoutLine: {'line': b'[  7%] Built target fast_lio__rs\n'}
+[3.034679] (fast_lio) StdoutLine: {'line': b'[ 10%] \x1b[34m\x1b[1mGenerating C++ code for ROS interfaces\x1b[0m\n'}
+[3.061077] (fast_lio) StdoutLine: {'line': b"reading manifest file 'fast_lio.egg-info/SOURCES.txt'\n"}
+[3.061386] (fast_lio) StdoutLine: {'line': b"writing manifest file 'fast_lio.egg-info/SOURCES.txt'\n"}
+[3.082091] (fast_lio) StdoutLine: {'line': b'[ 10%] Built target ament_cmake_python_build_fast_lio_egg\n'}
+[3.105167] (-) TimerEvent: {}
+[3.205410] (-) TimerEvent: {}
+[3.217116] (fast_lio) StdoutLine: {'line': b'[ 10%] Built target fast_lio__cpp\n'}
+[3.225399] (fast_lio) StdoutLine: {'line': b'[ 12%] \x1b[32mBuilding C object CMakeFiles/fast_lio__rosidl_generator_c.dir/rosidl_generator_c/fast_lio/msg/detail/pose6_d__description.c.o\x1b[0m\n'}
+[3.225771] (fast_lio) StdoutLine: {'line': b'[ 15%] \x1b[32mBuilding C object CMakeFiles/fast_lio__rosidl_generator_c.dir/rosidl_generator_c/fast_lio/msg/detail/pose6_d__functions.c.o\x1b[0m\n'}
+[3.226152] (fast_lio) StdoutLine: {'line': b'[ 17%] \x1b[32mBuilding C object CMakeFiles/fast_lio__rosidl_generator_c.dir/rosidl_generator_c/fast_lio/msg/detail/pose6_d__type_support.c.o\x1b[0m\n'}
+[3.297744] (fast_lio) StdoutLine: {'line': b'[ 20%] \x1b[32m\x1b[1mLinking C shared library libfast_lio__rosidl_generator_c.so\x1b[0m\n'}
+[3.305490] (-) TimerEvent: {}
+[3.327647] (fast_lio) StdoutLine: {'line': b'[ 20%] Built target fast_lio__rosidl_generator_c\n'}
+[3.335975] (fast_lio) StdoutLine: {'line': b'[ 23%] \x1b[34m\x1b[1mGenerating C type support for eProsima Fast-RTPS\x1b[0m\n'}
+[3.336208] (fast_lio) StdoutLine: {'line': b'[ 25%] \x1b[34m\x1b[1mGenerating C type support dispatch for ROS interfaces\x1b[0m\n'}
+[3.336329] (fast_lio) StdoutLine: {'line': b'[ 28%] \x1b[34m\x1b[1mGenerating C++ introspection for ROS interfaces\x1b[0m\n'}
+[3.337247] (fast_lio) StdoutLine: {'line': b'[ 35%] \x1b[34m\x1b[1mGenerating C++ type support dispatch for ROS interfaces\x1b[0m\n'}
+[3.337352] (fast_lio) StdoutLine: {'line': b'[ 35%] \x1b[34m\x1b[1mGenerating C introspection for ROS interfaces\x1b[0m\n'}
+[3.337428] (fast_lio) StdoutLine: {'line': b'[ 35%] \x1b[34m\x1b[1mGenerating C++ type support for eProsima Fast-RTPS\x1b[0m\n'}
+[3.405608] (-) TimerEvent: {}
+[3.505856] (-) TimerEvent: {}
+[3.508471] (fast_lio) StdoutLine: {'line': b'[ 38%] \x1b[32mBuilding CXX object CMakeFiles/fast_lio__rosidl_typesupport_c.dir/rosidl_typesupport_c/fast_lio/msg/pose6_d__type_support.cpp.o\x1b[0m\n'}
+[3.515230] (fast_lio) StdoutLine: {'line': b'[ 41%] \x1b[32mBuilding CXX object CMakeFiles/fast_lio__rosidl_typesupport_cpp.dir/rosidl_typesupport_cpp/fast_lio/msg/pose6_d__type_support.cpp.o\x1b[0m\n'}
+[3.523817] (fast_lio) StdoutLine: {'line': b'[ 43%] \x1b[32mBuilding CXX object CMakeFiles/fast_lio__rosidl_typesupport_introspection_cpp.dir/rosidl_typesupport_introspection_cpp/fast_lio/msg/detail/pose6_d__type_support.cpp.o\x1b[0m\n'}
+[3.524764] (fast_lio) StdoutLine: {'line': b'[ 46%] \x1b[32mBuilding C object CMakeFiles/fast_lio__rosidl_typesupport_introspection_c.dir/rosidl_typesupport_introspection_c/fast_lio/msg/detail/pose6_d__type_support.c.o\x1b[0m\n'}
+[3.533688] (fast_lio) StdoutLine: {'line': b'[ 48%] \x1b[32mBuilding CXX object CMakeFiles/fast_lio__rosidl_typesupport_fastrtps_c.dir/rosidl_typesupport_fastrtps_c/fast_lio/msg/detail/pose6_d__type_support_c.cpp.o\x1b[0m\n'}
+[3.533919] (fast_lio) StdoutLine: {'line': b'[ 51%] \x1b[32mBuilding CXX object CMakeFiles/fast_lio__rosidl_typesupport_fastrtps_cpp.dir/rosidl_typesupport_fastrtps_cpp/fast_lio/msg/detail/dds_fastrtps/pose6_d__type_support.cpp.o\x1b[0m\n'}
+[3.546240] (fast_lio) StdoutLine: {'line': b'[ 53%] \x1b[32m\x1b[1mLinking CXX shared library libfast_lio__rosidl_typesupport_c.so\x1b[0m\n'}
+[3.569722] (fast_lio) StdoutLine: {'line': b'[ 56%] \x1b[32m\x1b[1mLinking C shared library libfast_lio__rosidl_typesupport_introspection_c.so\x1b[0m\n'}
+[3.576965] (fast_lio) StdoutLine: {'line': b'[ 56%] Built target fast_lio__rosidl_typesupport_c\n'}
+[3.594717] (fast_lio) StdoutLine: {'line': b'[ 56%] Built target fast_lio__rosidl_typesupport_introspection_c\n'}
+[3.605986] (-) TimerEvent: {}
+[3.706287] (-) TimerEvent: {}
+[3.729027] (fast_lio) StdoutLine: {'line': b'[ 58%] \x1b[32m\x1b[1mLinking CXX shared library libfast_lio__rosidl_typesupport_cpp.so\x1b[0m\n'}
+[3.762092] (fast_lio) StdoutLine: {'line': b'[ 58%] Built target fast_lio__rosidl_typesupport_cpp\n'}
+[3.765295] (fast_lio) StdoutLine: {'line': b'[ 61%] \x1b[32m\x1b[1mLinking CXX shared library libfast_lio__rosidl_typesupport_introspection_cpp.so\x1b[0m\n'}
+[3.780484] (fast_lio) StdoutLine: {'line': b'[ 66%] \x1b[32mBuilding CXX object CMakeFiles/fastlio_mapping.dir/src/laserMapping.cpp.o\x1b[0m\n'}
+[3.780736] (fast_lio) StdoutLine: {'line': b'[ 66%] \x1b[32mBuilding CXX object CMakeFiles/fastlio_mapping.dir/include/ikd-Tree/ikd_Tree.cpp.o\x1b[0m\n'}
+[3.780817] (fast_lio) StdoutLine: {'line': b'[ 69%] \x1b[32mBuilding CXX object CMakeFiles/fastlio_mapping.dir/src/preprocess.cpp.o\x1b[0m\n'}
+[3.798810] (fast_lio) StdoutLine: {'line': b'[ 69%] Built target fast_lio__rosidl_typesupport_introspection_cpp\n'}
+[3.806355] (-) TimerEvent: {}
+[3.860586] (fast_lio) StdoutLine: {'line': b'[ 71%] \x1b[32m\x1b[1mLinking CXX shared library libfast_lio__rosidl_typesupport_fastrtps_c.so\x1b[0m\n'}
+[3.880906] (fast_lio) StdoutLine: {'line': b'[ 74%] \x1b[32m\x1b[1mLinking CXX shared library libfast_lio__rosidl_typesupport_fastrtps_cpp.so\x1b[0m\n'}
+[3.897948] (fast_lio) StdoutLine: {'line': b'[ 74%] Built target fast_lio__rosidl_typesupport_fastrtps_c\n'}
+[3.906437] (-) TimerEvent: {}
+[3.917908] (fast_lio) StdoutLine: {'line': b'[ 74%] Built target fast_lio__rosidl_typesupport_fastrtps_cpp\n'}
+[3.934787] (fast_lio) StdoutLine: {'line': b'[ 74%] Built target fast_lio\n'}
+[3.953163] (fast_lio) StdoutLine: {'line': b'[ 76%] \x1b[34m\x1b[1mGenerating Python code for ROS interfaces\x1b[0m\n'}
+[4.006525] (-) TimerEvent: {}
+[4.106743] (-) TimerEvent: {}
+[4.195907] (fast_lio) StdoutLine: {'line': b'[ 76%] Built target fast_lio__py\n'}
+[4.206837] (-) TimerEvent: {}
+[4.213032] (fast_lio) StdoutLine: {'line': b'[ 79%] \x1b[32mBuilding C object CMakeFiles/fast_lio__rosidl_generator_py.dir/rosidl_generator_py/fast_lio/msg/_pose6_d_s.c.o\x1b[0m\n'}
+[4.306976] (-) TimerEvent: {}
+[4.324118] (fast_lio) StdoutLine: {'line': b'[ 82%] \x1b[32m\x1b[1mLinking C shared library libfast_lio__rosidl_generator_py.so\x1b[0m\n'}
+[4.355790] (fast_lio) StdoutLine: {'line': b'[ 82%] Built target fast_lio__rosidl_generator_py\n'}
+[4.374081] (fast_lio) StdoutLine: {'line': b'[ 87%] \x1b[32mBuilding C object CMakeFiles/fast_lio_s__rosidl_typesupport_c.dir/rosidl_generator_py/fast_lio/_fast_lio_s.ep.rosidl_typesupport_c.c.o\x1b[0m\n'}
+[4.374280] (fast_lio) StdoutLine: {'line': b'[ 87%] \x1b[32mBuilding C object CMakeFiles/fast_lio_s__rosidl_typesupport_fastrtps_c.dir/rosidl_generator_py/fast_lio/_fast_lio_s.ep.rosidl_typesupport_fastrtps_c.c.o\x1b[0m\n'}
+[4.375520] (fast_lio) StdoutLine: {'line': b'[ 89%] \x1b[32mBuilding C object CMakeFiles/fast_lio_s__rosidl_typesupport_introspection_c.dir/rosidl_generator_py/fast_lio/_fast_lio_s.ep.rosidl_typesupport_introspection_c.c.o\x1b[0m\n'}
+[4.407063] (-) TimerEvent: {}
+[4.459211] (fast_lio) StdoutLine: {'line': b'[ 92%] \x1b[32m\x1b[1mLinking C shared module rosidl_generator_py/fast_lio/fast_lio_s__rosidl_typesupport_c.so\x1b[0m\n'}
+[4.464397] (fast_lio) StdoutLine: {'line': b'[ 94%] \x1b[32m\x1b[1mLinking C shared module rosidl_generator_py/fast_lio/fast_lio_s__rosidl_typesupport_introspection_c.so\x1b[0m\n'}
+[4.468902] (fast_lio) StdoutLine: {'line': b'[ 97%] \x1b[32m\x1b[1mLinking C shared module rosidl_generator_py/fast_lio/fast_lio_s__rosidl_typesupport_fastrtps_c.so\x1b[0m\n'}
+[4.483490] (fast_lio) StdoutLine: {'line': b'[ 97%] Built target fast_lio_s__rosidl_typesupport_c\n'}
+[4.495154] (fast_lio) StdoutLine: {'line': b'[ 97%] Built target fast_lio_s__rosidl_typesupport_introspection_c\n'}
+[4.495687] (fast_lio) StdoutLine: {'line': b'[ 97%] Built target fast_lio_s__rosidl_typesupport_fastrtps_c\n'}
+[4.507141] (-) TimerEvent: {}
+[4.607286] (-) TimerEvent: {}
+[4.707456] (-) TimerEvent: {}
+[4.807660] (-) TimerEvent: {}
+[4.907931] (-) TimerEvent: {}
+[5.008229] (-) TimerEvent: {}
+[5.108468] (-) TimerEvent: {}
+[5.208673] (-) TimerEvent: {}
+[5.308856] (-) TimerEvent: {}
+[5.409093] (-) TimerEvent: {}
+[5.509360] (-) TimerEvent: {}
+[5.609614] (-) TimerEvent: {}
+[5.709895] (-) TimerEvent: {}
+[5.810152] (-) TimerEvent: {}
+[5.910308] (-) TimerEvent: {}
+[6.010499] (-) TimerEvent: {}
+[6.110645] (-) TimerEvent: {}
+[6.210869] (-) TimerEvent: {}
+[6.311095] (-) TimerEvent: {}
+[6.411296] (-) TimerEvent: {}
+[6.511504] (-) TimerEvent: {}
+[6.611667] (-) TimerEvent: {}
+[6.711855] (-) TimerEvent: {}
+[6.811993] (-) TimerEvent: {}
+[6.912134] (-) TimerEvent: {}
+[7.012273] (-) TimerEvent: {}
+[7.112470] (-) TimerEvent: {}
+[7.212670] (-) TimerEvent: {}
+[7.312851] (-) TimerEvent: {}
+[7.413027] (-) TimerEvent: {}
+[7.513216] (-) TimerEvent: {}
+[7.613372] (-) TimerEvent: {}
+[7.713581] (-) TimerEvent: {}
+[7.813855] (-) TimerEvent: {}
+[7.914119] (-) TimerEvent: {}
+[8.014317] (-) TimerEvent: {}
+[8.114456] (-) TimerEvent: {}
+[8.214591] (-) TimerEvent: {}
+[8.314776] (-) TimerEvent: {}
+[8.415005] (-) TimerEvent: {}
+[8.515245] (-) TimerEvent: {}
+[8.615461] (-) TimerEvent: {}
+[8.715662] (-) TimerEvent: {}
+[8.815875] (-) TimerEvent: {}
+[8.916148] (-) TimerEvent: {}
+[9.016429] (-) TimerEvent: {}
+[9.116681] (-) TimerEvent: {}
+[9.216905] (-) TimerEvent: {}
+[9.317118] (-) TimerEvent: {}
+[9.417384] (-) TimerEvent: {}
+[9.517662] (-) TimerEvent: {}
+[9.617902] (-) TimerEvent: {}
+[9.718101] (-) TimerEvent: {}
+[9.818321] (-) TimerEvent: {}
+[9.918530] (-) TimerEvent: {}
+[10.018730] (-) TimerEvent: {}
+[10.118864] (-) TimerEvent: {}
+[10.219020] (-) TimerEvent: {}
+[10.319191] (-) TimerEvent: {}
+[10.419434] (-) TimerEvent: {}
+[10.519642] (-) TimerEvent: {}
+[10.619813] (-) TimerEvent: {}
+[10.719972] (-) TimerEvent: {}
+[10.820142] (-) TimerEvent: {}
+[10.920314] (-) TimerEvent: {}
+[11.020470] (-) TimerEvent: {}
+[11.120614] (-) TimerEvent: {}
+[11.220738] (-) TimerEvent: {}
+[11.320889] (-) TimerEvent: {}
+[11.421065] (-) TimerEvent: {}
+[11.521253] (-) TimerEvent: {}
+[11.621395] (-) TimerEvent: {}
+[11.721518] (-) TimerEvent: {}
+[11.821643] (-) TimerEvent: {}
+[11.921755] (-) TimerEvent: {}
+[12.021866] (-) TimerEvent: {}
+[12.121975] (-) TimerEvent: {}
+[12.222107] (-) TimerEvent: {}
+[12.322224] (-) TimerEvent: {}
+[12.422373] (-) TimerEvent: {}
+[12.522515] (-) TimerEvent: {}
+[12.622684] (-) TimerEvent: {}
+[12.722836] (-) TimerEvent: {}
+[12.823078] (-) TimerEvent: {}
+[12.923225] (-) TimerEvent: {}
+[13.023356] (-) TimerEvent: {}
+[13.123482] (-) TimerEvent: {}
+[13.223614] (-) TimerEvent: {}
+[13.323738] (-) TimerEvent: {}
+[13.423858] (-) TimerEvent: {}
+[13.523965] (-) TimerEvent: {}
+[13.624078] (-) TimerEvent: {}
+[13.724200] (-) TimerEvent: {}
+[13.824332] (-) TimerEvent: {}
+[13.924454] (-) TimerEvent: {}
+[14.024563] (-) TimerEvent: {}
+[14.124667] (-) TimerEvent: {}
+[14.224769] (-) TimerEvent: {}
+[14.324897] (-) TimerEvent: {}
+[14.425033] (-) TimerEvent: {}
+[14.525162] (-) TimerEvent: {}
+[14.625286] (-) TimerEvent: {}
+[14.725405] (-) TimerEvent: {}
+[14.825538] (-) TimerEvent: {}
+[14.925690] (-) TimerEvent: {}
+[15.025807] (-) TimerEvent: {}
+[15.125931] (-) TimerEvent: {}
+[15.226072] (-) TimerEvent: {}
+[15.326200] (-) TimerEvent: {}
+[15.426325] (-) TimerEvent: {}
+[15.526476] (-) TimerEvent: {}
+[15.626637] (-) TimerEvent: {}
+[15.726758] (-) TimerEvent: {}
+[15.826876] (-) TimerEvent: {}
+[15.926998] (-) TimerEvent: {}
+[16.027151] (-) TimerEvent: {}
+[16.127303] (-) TimerEvent: {}
+[16.227588] (-) TimerEvent: {}
+[16.327831] (-) TimerEvent: {}
+[16.428095] (-) TimerEvent: {}
+[16.528427] (-) TimerEvent: {}
+[16.628695] (-) TimerEvent: {}
+[16.728963] (-) TimerEvent: {}
+[16.829239] (-) TimerEvent: {}
+[16.929482] (-) TimerEvent: {}
+[17.029722] (-) TimerEvent: {}
+[17.129963] (-) TimerEvent: {}
+[17.230229] (-) TimerEvent: {}
+[17.330479] (-) TimerEvent: {}
+[17.430730] (-) TimerEvent: {}
+[17.530994] (-) TimerEvent: {}
+[17.631267] (-) TimerEvent: {}
+[17.731521] (-) TimerEvent: {}
+[17.831765] (-) TimerEvent: {}
+[17.932005] (-) TimerEvent: {}
+[18.032272] (-) TimerEvent: {}
+[18.132535] (-) TimerEvent: {}
+[18.232780] (-) TimerEvent: {}
+[18.333022] (-) TimerEvent: {}
+[18.433280] (-) TimerEvent: {}
+[18.533532] (-) TimerEvent: {}
+[18.633781] (-) TimerEvent: {}
+[18.734017] (-) TimerEvent: {}
+[18.834272] (-) TimerEvent: {}
+[18.934534] (-) TimerEvent: {}
+[19.034778] (-) TimerEvent: {}
+[19.135013] (-) TimerEvent: {}
+[19.235264] (-) TimerEvent: {}
+[19.335503] (-) TimerEvent: {}
+[19.435761] (-) TimerEvent: {}
+[19.536000] (-) TimerEvent: {}
+[19.636245] (-) TimerEvent: {}
+[19.736480] (-) TimerEvent: {}
+[19.836737] (-) TimerEvent: {}
+[19.937010] (-) TimerEvent: {}
+[20.037291] (-) TimerEvent: {}
+[20.137569] (-) TimerEvent: {}
+[20.237881] (-) TimerEvent: {}
+[20.338111] (-) TimerEvent: {}
+[20.438372] (-) TimerEvent: {}
+[20.538647] (-) TimerEvent: {}
+[20.638919] (-) TimerEvent: {}
+[20.739208] (-) TimerEvent: {}
+[20.839484] (-) TimerEvent: {}
+[20.939750] (-) TimerEvent: {}
+[21.040015] (-) TimerEvent: {}
+[21.140307] (-) TimerEvent: {}
+[21.240582] (-) TimerEvent: {}
+[21.340865] (-) TimerEvent: {}
+[21.441139] (-) TimerEvent: {}
+[21.541407] (-) TimerEvent: {}
+[21.641684] (-) TimerEvent: {}
+[21.741959] (-) TimerEvent: {}
+[21.842242] (-) TimerEvent: {}
+[21.942439] (-) TimerEvent: {}
+[22.042700] (-) TimerEvent: {}
+[22.142973] (-) TimerEvent: {}
+[22.243230] (-) TimerEvent: {}
+[22.343466] (-) TimerEvent: {}
+[22.443708] (-) TimerEvent: {}
+[22.543954] (-) TimerEvent: {}
+[22.644201] (-) TimerEvent: {}
+[22.744443] (-) TimerEvent: {}
+[22.844701] (-) TimerEvent: {}
+[22.944966] (-) TimerEvent: {}
+[23.045289] (-) TimerEvent: {}
+[23.145646] (-) TimerEvent: {}
+[23.245888] (-) TimerEvent: {}
+[23.346125] (-) TimerEvent: {}
+[23.446372] (-) TimerEvent: {}
+[23.546635] (-) TimerEvent: {}
+[23.646889] (-) TimerEvent: {}
+[23.747106] (-) TimerEvent: {}
+[23.847361] (-) TimerEvent: {}
+[23.947600] (-) TimerEvent: {}
+[24.047864] (-) TimerEvent: {}
+[24.148125] (-) TimerEvent: {}
+[24.248389] (-) TimerEvent: {}
+[24.348644] (-) TimerEvent: {}
+[24.448912] (-) TimerEvent: {}
+[24.549189] (-) TimerEvent: {}
+[24.649425] (-) TimerEvent: {}
+[24.749686] (-) TimerEvent: {}
+[24.849926] (-) TimerEvent: {}
+[24.950196] (-) TimerEvent: {}
+[25.050460] (-) TimerEvent: {}
+[25.150716] (-) TimerEvent: {}
+[25.250977] (-) TimerEvent: {}
+[25.351242] (-) TimerEvent: {}
+[25.451499] (-) TimerEvent: {}
+[25.551753] (-) TimerEvent: {}
+[25.652002] (-) TimerEvent: {}
+[25.752266] (-) TimerEvent: {}
+[25.852540] (-) TimerEvent: {}
+[25.952833] (-) TimerEvent: {}
+[26.053099] (-) TimerEvent: {}
+[26.153360] (-) TimerEvent: {}
+[26.253634] (-) TimerEvent: {}
+[26.353879] (-) TimerEvent: {}
+[26.454123] (-) TimerEvent: {}
+[26.554382] (-) TimerEvent: {}
+[26.654640] (-) TimerEvent: {}
+[26.754917] (-) TimerEvent: {}
+[26.855264] (-) TimerEvent: {}
+[26.955509] (-) TimerEvent: {}
+[27.055772] (-) TimerEvent: {}
+[27.156034] (-) TimerEvent: {}
+[27.256325] (-) TimerEvent: {}
+[27.356575] (-) TimerEvent: {}
+[27.456840] (-) TimerEvent: {}
+[27.557123] (-) TimerEvent: {}
+[27.657395] (-) TimerEvent: {}
+[27.757621] (-) TimerEvent: {}
+[27.857863] (-) TimerEvent: {}
+[27.958127] (-) TimerEvent: {}
+[28.058382] (-) TimerEvent: {}
+[28.158645] (-) TimerEvent: {}
+[28.258884] (-) TimerEvent: {}
+[28.359107] (-) TimerEvent: {}
+[28.459349] (-) TimerEvent: {}
+[28.559602] (-) TimerEvent: {}
+[28.659860] (-) TimerEvent: {}
+[28.760101] (-) TimerEvent: {}
+[28.860364] (-) TimerEvent: {}
+[28.960638] (-) TimerEvent: {}
+[29.060891] (-) TimerEvent: {}
+[29.161107] (-) TimerEvent: {}
+[29.261338] (-) TimerEvent: {}
+[29.361569] (-) TimerEvent: {}
+[29.461823] (-) TimerEvent: {}
+[29.562078] (-) TimerEvent: {}
+[29.662331] (-) TimerEvent: {}
+[29.762602] (-) TimerEvent: {}
+[29.862873] (-) TimerEvent: {}
+[29.963159] (-) TimerEvent: {}
+[30.063412] (-) TimerEvent: {}
+[30.163650] (-) TimerEvent: {}
+[30.263877] (-) TimerEvent: {}
+[30.364108] (-) TimerEvent: {}
+[30.464354] (-) TimerEvent: {}
+[30.564595] (-) TimerEvent: {}
+[30.664837] (-) TimerEvent: {}
+[30.765072] (-) TimerEvent: {}
+[30.865307] (-) TimerEvent: {}
+[30.965511] (-) TimerEvent: {}
+[31.065749] (-) TimerEvent: {}
+[31.165995] (-) TimerEvent: {}
+[31.266257] (-) TimerEvent: {}
+[31.366526] (-) TimerEvent: {}
+[31.466781] (-) TimerEvent: {}
+[31.567031] (-) TimerEvent: {}
+[31.667307] (-) TimerEvent: {}
+[31.767571] (-) TimerEvent: {}
+[31.867829] (-) TimerEvent: {}
+[31.968078] (-) TimerEvent: {}
+[32.068331] (-) TimerEvent: {}
+[32.168592] (-) TimerEvent: {}
+[32.268836] (-) TimerEvent: {}
+[32.369097] (-) TimerEvent: {}
+[32.469368] (-) TimerEvent: {}
+[32.569612] (-) TimerEvent: {}
+[32.669852] (-) TimerEvent: {}
+[32.770110] (-) TimerEvent: {}
+[32.870373] (-) TimerEvent: {}
+[32.970659] (-) TimerEvent: {}
+[33.070909] (-) TimerEvent: {}
+[33.171148] (-) TimerEvent: {}
+[33.271380] (-) TimerEvent: {}
+[33.371619] (-) TimerEvent: {}
+[33.471863] (-) TimerEvent: {}
+[33.572104] (-) TimerEvent: {}
+[33.672354] (-) TimerEvent: {}
+[33.772589] (-) TimerEvent: {}
+[33.872835] (-) TimerEvent: {}
+[33.973087] (-) TimerEvent: {}
+[34.073333] (-) TimerEvent: {}
+[34.173609] (-) TimerEvent: {}
+[34.273849] (-) TimerEvent: {}
+[34.374098] (-) TimerEvent: {}
+[34.474351] (-) TimerEvent: {}
+[34.574583] (-) TimerEvent: {}
+[34.674830] (-) TimerEvent: {}
+[34.775087] (-) TimerEvent: {}
+[34.875334] (-) TimerEvent: {}
+[34.975598] (-) TimerEvent: {}
+[35.075841] (-) TimerEvent: {}
+[35.176104] (-) TimerEvent: {}
+[35.276384] (-) TimerEvent: {}
+[35.376643] (-) TimerEvent: {}
+[35.476892] (-) TimerEvent: {}
+[35.577153] (-) TimerEvent: {}
+[35.677384] (-) TimerEvent: {}
+[35.777596] (-) TimerEvent: {}
+[35.877789] (-) TimerEvent: {}
+[35.978082] (-) TimerEvent: {}
+[36.078353] (-) TimerEvent: {}
+[36.178610] (-) TimerEvent: {}
+[36.278862] (-) TimerEvent: {}
+[36.379100] (-) TimerEvent: {}
+[36.479312] (-) TimerEvent: {}
+[36.579501] (-) TimerEvent: {}
+[36.679700] (-) TimerEvent: {}
+[36.779855] (-) TimerEvent: {}
+[36.880006] (-) TimerEvent: {}
+[36.980164] (-) TimerEvent: {}
+[37.080342] (-) TimerEvent: {}
+[37.180569] (-) TimerEvent: {}
+[37.280806] (-) TimerEvent: {}
+[37.380957] (-) TimerEvent: {}
+[37.481094] (-) TimerEvent: {}
+[37.581268] (-) TimerEvent: {}
+[37.681450] (-) TimerEvent: {}
+[37.781720] (-) TimerEvent: {}
+[37.881971] (-) TimerEvent: {}
+[37.982205] (-) TimerEvent: {}
+[38.082353] (-) TimerEvent: {}
+[38.182493] (-) TimerEvent: {}
+[38.282666] (-) TimerEvent: {}
+[38.382816] (-) TimerEvent: {}
+[38.482997] (-) TimerEvent: {}
+[38.583144] (-) TimerEvent: {}
+[38.683260] (-) TimerEvent: {}
+[38.783389] (-) TimerEvent: {}
+[38.883544] (-) TimerEvent: {}
+[38.983702] (-) TimerEvent: {}
+[39.083799] (-) TimerEvent: {}
+[39.183899] (-) TimerEvent: {}
+[39.284010] (-) TimerEvent: {}
+[39.384178] (-) TimerEvent: {}
+[39.484320] (-) TimerEvent: {}
+[39.584451] (-) TimerEvent: {}
+[39.684613] (-) TimerEvent: {}
+[39.784752] (-) TimerEvent: {}
+[39.884893] (-) TimerEvent: {}
+[39.985027] (-) TimerEvent: {}
+[40.085171] (-) TimerEvent: {}
+[40.185326] (-) TimerEvent: {}
+[40.285539] (-) TimerEvent: {}
+[40.385752] (-) TimerEvent: {}
+[40.485954] (-) TimerEvent: {}
+[40.586205] (-) TimerEvent: {}
+[40.686430] (-) TimerEvent: {}
+[40.786606] (-) TimerEvent: {}
+[40.886739] (-) TimerEvent: {}
+[40.986867] (-) TimerEvent: {}
+[41.087022] (-) TimerEvent: {}
+[41.187245] (-) TimerEvent: {}
+[41.287451] (-) TimerEvent: {}
+[41.387657] (-) TimerEvent: {}
+[41.487929] (-) TimerEvent: {}
+[41.588268] (-) TimerEvent: {}
+[41.688461] (-) TimerEvent: {}
+[41.788613] (-) TimerEvent: {}
+[41.888773] (-) TimerEvent: {}
+[41.988894] (-) TimerEvent: {}
+[42.089016] (-) TimerEvent: {}
+[42.189295] (-) TimerEvent: {}
+[42.289526] (-) TimerEvent: {}
+[42.389728] (-) TimerEvent: {}
+[42.489989] (-) TimerEvent: {}
+[42.590232] (-) TimerEvent: {}
+[42.690470] (-) TimerEvent: {}
+[42.790705] (-) TimerEvent: {}
+[42.890949] (-) TimerEvent: {}
+[42.991214] (-) TimerEvent: {}
+[43.091488] (-) TimerEvent: {}
+[43.191762] (-) TimerEvent: {}
+[43.292014] (-) TimerEvent: {}
+[43.392288] (-) TimerEvent: {}
+[43.492531] (-) TimerEvent: {}
+[43.592780] (-) TimerEvent: {}
+[43.693017] (-) TimerEvent: {}
+[43.793253] (-) TimerEvent: {}
+[43.893495] (-) TimerEvent: {}
+[43.993729] (-) TimerEvent: {}
+[44.093982] (-) TimerEvent: {}
+[44.194231] (-) TimerEvent: {}
+[44.294487] (-) TimerEvent: {}
+[44.394758] (-) TimerEvent: {}
+[44.495005] (-) TimerEvent: {}
+[44.595278] (-) TimerEvent: {}
+[44.695526] (-) TimerEvent: {}
+[44.795786] (-) TimerEvent: {}
+[44.896038] (-) TimerEvent: {}
+[44.996285] (-) TimerEvent: {}
+[45.096520] (-) TimerEvent: {}
+[45.196781] (-) TimerEvent: {}
+[45.297099] (-) TimerEvent: {}
+[45.397352] (-) TimerEvent: {}
+[45.497598] (-) TimerEvent: {}
+[45.597843] (-) TimerEvent: {}
+[45.698111] (-) TimerEvent: {}
+[45.798393] (-) TimerEvent: {}
+[45.898679] (-) TimerEvent: {}
+[45.998942] (-) TimerEvent: {}
+[46.099224] (-) TimerEvent: {}
+[46.199475] (-) TimerEvent: {}
+[46.299710] (-) TimerEvent: {}
+[46.399953] (-) TimerEvent: {}
+[46.500210] (-) TimerEvent: {}
+[46.600447] (-) TimerEvent: {}
+[46.700692] (-) TimerEvent: {}
+[46.800943] (-) TimerEvent: {}
+[46.901212] (-) TimerEvent: {}
+[47.001472] (-) TimerEvent: {}
+[47.101712] (-) TimerEvent: {}
+[47.201957] (-) TimerEvent: {}
+[47.302202] (-) TimerEvent: {}
+[47.402447] (-) TimerEvent: {}
+[47.502688] (-) TimerEvent: {}
+[47.602939] (-) TimerEvent: {}
+[47.703196] (-) TimerEvent: {}
+[47.803434] (-) TimerEvent: {}
+[47.903675] (-) TimerEvent: {}
+[48.003919] (-) TimerEvent: {}
+[48.104169] (-) TimerEvent: {}
+[48.204427] (-) TimerEvent: {}
+[48.304671] (-) TimerEvent: {}
+[48.404913] (-) TimerEvent: {}
+[48.505113] (-) TimerEvent: {}
+[48.605358] (-) TimerEvent: {}
+[48.705612] (-) TimerEvent: {}
+[48.805910] (-) TimerEvent: {}
+[48.906212] (-) TimerEvent: {}
+[49.003574] (fast_lio) StdoutLine: {'line': b'[100%] \x1b[32m\x1b[1mLinking CXX executable fastlio_mapping\x1b[0m\n'}
+[49.006301] (-) TimerEvent: {}
+[49.106492] (-) TimerEvent: {}
+[49.206716] (-) TimerEvent: {}
+[49.306922] (-) TimerEvent: {}
+[49.407110] (-) TimerEvent: {}
+[49.507304] (-) TimerEvent: {}
+[49.607531] (-) TimerEvent: {}
+[49.707711] (-) TimerEvent: {}
+[49.781242] (fast_lio) StdoutLine: {'line': b'[100%] Built target fastlio_mapping\n'}
+[49.791136] (fast_lio) CommandEnded: {'returncode': 0}
+[49.791720] (fast_lio) JobProgress: {'identifier': 'fast_lio', 'progress': 'install'}
+[49.799776] (fast_lio) Command: {'cmd': ['/usr/bin/cmake', '--install', '/home/husky/TR/build/fast_lio'], 'cwd': '/home/husky/TR/build/fast_lio', 'env': OrderedDict({'GJS_DEBUG_TOPICS': 'JS ERROR;JS LOG', 'PYTHON_BASIC_REPL': '1', 'LESSOPEN': '| /usr/bin/lesspipe %s', 'RSYNC_PROXY': 'localhost:1080', 'HTTPS_PROXY': 'http://localhost:3128', 'GZ_SIM_RESOURCE_PATH': '/opt/ros/jazzy/share', 'no_proxy': 'localhost,127.0.0.1,::1,*.local,.local,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', 'AI_AGENT': 'github_copilot_vscode_agent', 'GIT_SSH_COMMAND': "ssh -o ProxyCommand='socat - PROXY:localhost:%h:%p,proxyport=3128'", 'USER': 'husky', 'SANDBOX_RUNTIME': '1', 'FONTCONFIG_PATH': '/etc/fonts', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'CLAUDE_CODE_HOST_SOCKS_PROXY_PORT': '40407', 'GIT_EDITOR': ':', 'all_proxy': 'socks5h://localhost:1080', 'GIO_MODULE_DIR': '/home/husky/snap/code/common/.cache/gio-modules', 'XDG_SESSION_TYPE': 'x11', 'GIT_ASKPASS': '/snap/code/253/usr/share/code/resources/app/extensions/git/dist/askpass.sh', 'GTK_EXE_PREFIX_VSCODE_SNAP_ORIG': '', 'DOCKER_HTTPS_PROXY': 'http://localhost:3128', 'GDK_BACKEND_VSCODE_SNAP_ORIG': '', 'CLUTTER_DISABLE_MIPMAPPED_TEXT': '1', 'SHLVL': '2', 'LD_LIBRARY_PATH': '/home/husky/TR/install/livox_ros_driver2/lib:/usr/local/lib:/usr/local/lib:/usr/local/lib:/home/husky/ws_livox/install/livox_ros_driver2/lib:/home/husky/ws_livox/install/rtabmap_msgs/lib:/home/husky/ws_livox/install/rtabmap_costmap_plugins/lib:/usr/local/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'COPILOT_AGENT': '1', 'HOME': '/home/husky', 'CHROME_DESKTOP': 'code.desktop', 'LOCPATH_VSCODE_SNAP_ORIG': '', 'OLDPWD': '/home/husky/.vscode/tmp/tmp_vscode_1', 'TERM_PROGRAM_VERSION': '1.130.0', 'DESKTOP_SESSION': 'ubuntu', 'GTK_PATH': '/snap/code/253/usr/lib/x86_64-linux-gnu/gtk-3.0', 'NO_PROXY': 'localhost,127.0.0.1,::1,*.local,.local,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', 'XDG_DATA_HOME_VSCODE_SNAP_ORIG': '', 'GTK_IM_MODULE_FILE': '/home/husky/snap/code/common/.cache/immodules/immodules.cache', 'GIO_LAUNCHED_DESKTOP_FILE': '/var/lib/snapd/desktop/applications/code_code.desktop', 'ROS_PYTHON_VERSION': '3', 'GNOME_SHELL_SESSION_MODE': 'ubuntu', 'GTK_MODULES': 'gail:atk-bridge', 'GSETTINGS_SCHEMA_DIR_VSCODE_SNAP_ORIG': '', 'VSCODE_GIT_ASKPASS_MAIN': '/snap/code/253/usr/share/code/resources/app/extensions/git/dist/askpass-main.js', 'VSCODE_GIT_ASKPASS_NODE': '/snap/code/253/usr/share/code/code', 'MANAGERPID': '1979', 'PYDEVD_DISABLE_FILE_VALIDATION': '1', 'SYSTEMD_EXEC_PID': '2425', 'BUNDLED_DEBUGPY_PATH': '/home/husky/.vscode/extensions/ms-python.debugpy-2026.6.0-linux-x64/bundled/libs/debugpy', 'VSCODE_PYTHON_AUTOACTIVATE_GUARD': '1', 'GSM_SKIP_SSH_AGENT_WORKAROUND': 'true', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLORTERM': 'truecolor', 'GIO_LAUNCHED_DESKTOP_FILE_PID': '7481', 'DEBUGINFOD_URLS': 'https://debuginfod.ubuntu.com', 'TMPDIR': '/home/husky/.vscode/tmp/tmp_vscode_1', 'https_proxy': 'http://localhost:3128', 'CLAUDE_CODE_HOST_HTTP_PROXY_PORT': '36309', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'husky', 'ALL_PROXY': 'socks5h://localhost:1080', 'http_proxy': 'http://localhost:3128', 'JOURNAL_STREAM': '10:14922', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'XDG_CONFIG_DIRS_VSCODE_SNAP_ORIG': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'MEMORY_PRESSURE_WATCH': '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.Shell@x11.service/memory.pressure', 'XDG_SESSION_CLASS': 'user', 'XDG_DATA_DIRS_VSCODE_SNAP_ORIG': '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'USERNAME': 'husky', 'TERM': 'xterm-256color', 'GNOME_DESKTOP_SESSION_ID': 'this-is-deprecated', 'grpc_proxy': 'socks5h://localhost:1080', 'FC_FONTATIONS': '1', 'HISTCONTROL': 'ignorespace', 'WINDOWPATH': '2', 'PATH': '/home/husky/.config/Code/User/globalStorage/github.copilot-chat/debugCommand:/home/husky/.config/Code/User/globalStorage/github.copilot-chat/copilotCli:/home/husky/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/home/husky/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/husky/.fishros/bin/:/home/husky/.vscode/extensions/ms-python.debugpy-2026.6.0-linux-x64/bundled/scripts/noConfigScripts:/home/husky/.fishros/bin/:/snap/code/253/usr/share/code/resources/app/node_modules.asar.unpacked/@vscode/ripgrep-universal/bin/linux-x64', 'SESSION_MANAGER': 'local/R9P:@/tmp/.ICE-unix/2393,unix/R9P:/tmp/.ICE-unix/2393', 'GTK_EXE_PREFIX': '/snap/code/253/usr', 'INVOCATION_ID': '232c109e81c442b8a729604705fddc62', 'XDG_MENU_PREFIX': 'gnome-', 'ftp_proxy': 'socks5h://localhost:1080', 'XDG_RUNTIME_DIR': '/run/user/1000', 'GDK_BACKEND': 'x11', 'DISPLAY': ':0', 'LOCPATH': '/snap/code/253/usr/lib/locale', 'VSCODE_DEBUGPY_ADAPTER_ENDPOINTS': '/home/husky/.vscode/extensions/ms-python.debugpy-2026.6.0-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-c7b6d7ac374ef3b7.txt', 'LANG': 'zh_CN.UTF-8', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'PYTHONSTARTUP': '/home/husky/.config/Code/User/workspaceStorage/2598fa35ecc8ded29a0518703103ae87/ms-python.python/pythonrc.py', 'GIO_MODULE_DIR_VSCODE_SNAP_ORIG': '', 'XDG_DATA_HOME': '/home/husky/snap/code/253/.local/share', 'XMODIFIERS': '@im=ibus', 'XDG_SESSION_DESKTOP': 'ubuntu', 'XAUTHORITY': '/run/user/1000/gdm/Xauthority', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'VSCODE_GIT_IPC_HANDLE': '/run/user/1000/vscode-git-f6e3659723.sock', 'TERM_PROGRAM': 'vscode', 'SSH_AUTH_SOCK': '/run/user/1000/keyring/ssh', 'GSETTINGS_SCHEMA_DIR': '/home/husky/snap/code/253/.local/share/glib-2.0/schemas', 'AMENT_PREFIX_PATH': '/home/husky/TR/install/livox_ros_driver2:/opt/ros/jazzy', 'DEBIAN_FRONTEND': 'noninteractive', 'SHELL': '/bin/bash', 'QT_ACCESSIBILITY': '1', 'ELECTRON_RUN_AS_NODE': '1', 'GDMSESSION': 'ubuntu', 'CLOUDSDK_PROXY_TYPE': 'https', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'GTK_PATH_VSCODE_SNAP_ORIG': '', 'FONTCONFIG_FILE': '/etc/fonts/fonts.conf', 'GTK_IM_MODULE_FILE_VSCODE_SNAP_ORIG': '', 'CLOUDSDK_PROXY_ADDRESS': 'localhost', 'GPG_AGENT_INFO': '/run/user/1000/gnupg/S.gpg-agent:0:1', 'GJS_DEBUG_OUTPUT': 'stderr', 'CLOUDSDK_PROXY_PORT': '3128', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'VSCODE_GIT_ASKPASS_EXTRA_ARGS': '', 'GIT_PAGER': 'cat', 'QT_IM_MODULE': 'ibus', 'PWD': '/home/husky/TR/build/fast_lio', 'CLAUDE_TMPDIR': '/home/husky/.vscode/tmp/tmp_vscode_1', 'GIT_MERGE_AUTOEDIT': 'no', 'XDG_CONFIG_DIRS': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'COPILOT_DEBUG_NONCE': '1b11bd14131318a94116e9e7ded58081', 'FTP_PROXY': 'socks5h://localhost:1080', 'XDG_DATA_DIRS': '/home/husky/snap/code/253/.local/share:/home/husky/snap/code/253:/snap/code/253/usr/share:/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'QTWEBENGINE_DICTIONARIES_PATH': '/usr/share/hunspell-bdic/', 'PYTHONPATH': '/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'HTTP_PROXY': 'http://localhost:3128', 'COLCON': '1', 'MEMORY_PRESSURE_WRITE': 'c29tZSAyMDAwMDAgMjAwMDAwMAA=', 'DOCKER_HTTP_PROXY': 'http://localhost:3128', 'CMAKE_PREFIX_PATH': '/home/husky/TR/install/livox_ros_driver2:/opt/ros/jazzy/opt/gz_sim_vendor:/opt/ros/jazzy/opt/gz_sensors_vendor:/opt/ros/jazzy/opt/gz_physics_vendor:/opt/ros/jazzy/opt/sdformat_vendor:/opt/ros/jazzy/opt/gz_gui_vendor:/opt/ros/jazzy/opt/gz_transport_vendor:/opt/ros/jazzy/opt/gz_rendering_vendor:/opt/ros/jazzy/opt/gz_plugin_vendor:/opt/ros/jazzy/opt/gz_fuel_tools_vendor:/opt/ros/jazzy/opt/gz_msgs_vendor:/opt/ros/jazzy/opt/gz_common_vendor:/opt/ros/jazzy/opt/gz_math_vendor:/opt/ros/jazzy/opt/gz_utils_vendor:/opt/ros/jazzy/opt/gz_tools_vendor:/opt/ros/jazzy/opt/gz_ogre_next_vendor:/opt/ros/jazzy/opt/gz_dartsim_vendor:/opt/ros/jazzy/opt/gz_cmake_vendor:/opt/ros/jazzy', 'GRPC_PROXY': 'socks5h://localhost:1080'}), 'shell': False}
+[49.806094] (fast_lio) StdoutLine: {'line': b'-- Install configuration: "Release"\n'}
+[49.806228] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/ament_index/resource_index/rosidl_interfaces/fast_lio\n'}
+[49.806404] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/msg/Pose6D.json\n'}
+[49.806517] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio\n'}
+[49.806618] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg\n'}
+[49.806699] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/rosidl_generator_c__visibility_control.h\n'}
+[49.806783] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail\n'}
+[49.806878] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__description.c\n'}
+[49.806968] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__type_support.c\n'}
+[49.807074] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__type_support.h\n'}
+[49.807177] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__functions.c\n'}
+[49.807292] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__struct.h\n'}
+[49.807394] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__functions.h\n'}
+[49.807498] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/pose6_d.h\n'}
+[49.807650] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/environment/library_path.sh\n'}
+[49.807715] (-) TimerEvent: {}
+[49.807792] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/environment/library_path.dsv\n'}
+[49.807935] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_generator_c.so\n'}
+[49.808374] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_generator_c.so" to ""\n'}
+[49.808494] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio\n'}
+[49.808560] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg\n'}
+[49.808620] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/rosidl_typesupport_fastrtps_c__visibility_control.h\n'}
+[49.808705] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail\n'}
+[49.808768] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__rosidl_typesupport_fastrtps_c.h\n'}
+[49.808845] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_fastrtps_c.so\n'}
+[49.809247] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_fastrtps_c.so" to ""\n'}
+[49.809340] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio\n'}
+[49.809412] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg\n'}
+[49.809479] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/rosidl_generator_cpp__visibility_control.hpp\n'}
+[49.809538] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/pose6_d.hpp\n'}
+[49.809614] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail\n'}
+[49.809678] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__struct.hpp\n'}
+[49.809747] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__builder.hpp\n'}
+[49.809834] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__traits.hpp\n'}
+[49.809926] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__type_support.hpp\n'}
+[49.810054] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio\n'}
+[49.810131] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg\n'}
+[49.810189] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/rosidl_typesupport_fastrtps_cpp__visibility_control.h\n'}
+[49.810258] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail\n'}
+[49.810321] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__rosidl_typesupport_fastrtps_cpp.hpp\n'}
+[49.810390] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/dds_fastrtps\n'}
+[49.810470] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_fastrtps_cpp.so\n'}
+[49.810901] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_fastrtps_cpp.so" to ""\n'}
+[49.810983] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio\n'}
+[49.811062] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg\n'}
+[49.811121] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/rosidl_typesupport_introspection_c__visibility_control.h\n'}
+[49.811206] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail\n'}
+[49.811268] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__type_support.c\n'}
+[49.811335] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__rosidl_typesupport_introspection_c.h\n'}
+[49.811391] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_introspection_c.so\n'}
+[49.811710] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_introspection_c.so" to ""\n'}
+[49.811790] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_c.so\n'}
+[49.812135] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_c.so" to ""\n'}
+[49.812213] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio\n'}
+[49.812295] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg\n'}
+[49.812354] (fast_lio) StdoutLine: {'line': b'-- Up-to-date: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail\n'}
+[49.812425] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__type_support.cpp\n'}
+[49.812483] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/include/fast_lio/fast_lio/msg/detail/pose6_d__rosidl_typesupport_introspection_cpp.hpp\n'}
+[49.812553] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_introspection_cpp.so\n'}
+[49.812924] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_introspection_cpp.so" to ""\n'}
+[49.812996] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_cpp.so\n'}
+[49.813361] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_typesupport_cpp.so" to ""\n'}
+[49.813439] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/environment/pythonpath.sh\n'}
+[49.813508] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/environment/pythonpath.dsv\n'}
+[49.813603] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio-0.0.0-py3.12.egg-info\n'}
+[49.813697] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio-0.0.0-py3.12.egg-info/top_level.txt\n'}
+[49.813807] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio-0.0.0-py3.12.egg-info/dependency_links.txt\n'}
+[49.813906] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio-0.0.0-py3.12.egg-info/PKG-INFO\n'}
+[49.814006] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio-0.0.0-py3.12.egg-info/SOURCES.txt\n'}
+[49.814131] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio\n'}
+[49.814219] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/fast_lio_s__rosidl_typesupport_c.so\n'}
+[49.814327] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/_fast_lio_s.ep.rosidl_typesupport_fastrtps_c.c\n'}
+[49.814479] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/_fast_lio_s.ep.rosidl_typesupport_introspection_c.c\n'}
+[49.814586] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/fast_lio_s__rosidl_typesupport_introspection_c.so\n'}
+[49.814694] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/msg\n'}
+[49.814763] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/msg/__init__.py\n'}
+[49.814857] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/msg/_pose6_d_s.c\n'}
+[49.814973] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/msg/_pose6_d.py\n'}
+[49.815115] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/__init__.py\n'}
+[49.815210] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/fast_lio_s__rosidl_typesupport_fastrtps_c.so\n'}
+[49.815335] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/_fast_lio_s.ep.rosidl_typesupport_c.c\n'}
+[49.842138] (fast_lio) StdoutLine: {'line': b"Listing '/home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio'...\n"}
+[49.842280] (fast_lio) StdoutLine: {'line': b"Compiling '/home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/__init__.py'...\n"}
+[49.842378] (fast_lio) StdoutLine: {'line': b"Listing '/home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/msg'...\n"}
+[49.842463] (fast_lio) StdoutLine: {'line': b"Compiling '/home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/msg/__init__.py'...\n"}
+[49.842547] (fast_lio) StdoutLine: {'line': b"Compiling '/home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/msg/_pose6_d.py'...\n"}
+[49.846392] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/fast_lio_s__rosidl_typesupport_fastrtps_c.so\n'}
+[49.846833] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/fast_lio_s__rosidl_typesupport_fastrtps_c.so" to ""\n'}
+[49.847018] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/fast_lio_s__rosidl_typesupport_introspection_c.so\n'}
+[49.847401] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/fast_lio_s__rosidl_typesupport_introspection_c.so" to ""\n'}
+[49.847534] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/fast_lio_s__rosidl_typesupport_c.so\n'}
+[49.847941] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/python3.12/site-packages/fast_lio/fast_lio_s__rosidl_typesupport_c.so" to ""\n'}
+[49.848018] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_generator_py.so\n'}
+[49.848431] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/libfast_lio__rosidl_generator_py.so" to ""\n'}
+[49.848513] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/ament_index/resource_index/rust_packages/fast_lio\n'}
+[49.848624] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/rust\n'}
+[49.848706] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/rust/build.rs\n'}
+[49.848788] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/rust/src\n'}
+[49.848858] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/rust/src/lib.rs\n'}
+[49.848954] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/rust/src/msg.rs\n'}
+[49.849067] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/rust/src/msg\n'}
+[49.849139] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/rust/src/msg/rmw.rs\n'}
+[49.849234] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/rust/Cargo.toml\n'}
+[49.849350] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/msg/Pose6D.idl\n'}
+[49.849463] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/msg/Pose6D.msg\n'}
+[49.849610] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/lib/fast_lio/fastlio_mapping\n'}
+[49.853088] (fast_lio) StdoutLine: {'line': b'-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/fast_lio/lib/fast_lio/fastlio_mapping" to ""\n'}
+[49.853174] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/config\n'}
+[49.853252] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/config/velodyne.yaml\n'}
+[49.853352] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/config/mid360.yaml\n'}
+[49.853450] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/config/ouster64.yaml\n'}
+[49.853528] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/config/avia.yaml\n'}
+[49.853603] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/config/horizon.yaml\n'}
+[49.853682] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/launch\n'}
+[49.853759] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/launch/mapping.launch.py\n'}
+[49.853860] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/launch/gdb_debug_example.launch\n'}
+[49.853955] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/launch/__pycache__\n'}
+[49.854037] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/launch/__pycache__/mapping.launch.cpython-312.pyc\n'}
+[49.854210] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/rviz\n'}
+[49.854329] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/rviz/fastlio.rviz\n'}
+[49.854455] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/ament_index/resource_index/package_run_dependencies/fast_lio\n'}
+[49.854584] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/ament_index/resource_index/parent_prefix_path/fast_lio\n'}
+[49.854711] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/environment/ament_prefix_path.sh\n'}
+[49.854847] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/environment/ament_prefix_path.dsv\n'}
+[49.854907] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/environment/path.sh\n'}
+[49.854971] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/environment/path.dsv\n'}
+[49.855090] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/local_setup.bash\n'}
+[49.855214] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/local_setup.sh\n'}
+[49.855348] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/local_setup.zsh\n'}
+[49.855458] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/local_setup.dsv\n'}
+[49.855576] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/package.dsv\n'}
+[49.855729] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/ament_index/resource_index/packages/fast_lio\n'}
+[49.855886] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/export_fast_lio__rosidl_generator_cExport.cmake\n'}
+[49.856022] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/export_fast_lio__rosidl_generator_cExport-release.cmake\n'}
+[49.856163] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/export_fast_lio__rosidl_typesupport_fastrtps_cExport.cmake\n'}
+[49.856285] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/export_fast_lio__rosidl_typesupport_fastrtps_cExport-release.cmake\n'}
+[49.856422] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/export_fast_lio__rosidl_generator_cppExport.cmake\n'}
+[49.856561] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/export_fast_lio__rosidl_typesupport_fastrtps_cppExport.cmake\n'}
+[49.856681] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/export_fast_lio__rosidl_typesupport_fastrtps_cppExport-release.cmake\n'}
+[49.856813] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/fast_lio__rosidl_typesupport_introspection_cExport.cmake\n'}
+[49.856945] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/fast_lio__rosidl_typesupport_introspection_cExport-release.cmake\n'}
+[49.857075] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/fast_lio__rosidl_typesupport_cExport.cmake\n'}
+[49.857194] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/fast_lio__rosidl_typesupport_cExport-release.cmake\n'}
+[49.857319] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/fast_lio__rosidl_typesupport_introspection_cppExport.cmake\n'}
+[49.857452] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/fast_lio__rosidl_typesupport_introspection_cppExport-release.cmake\n'}
+[49.857583] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/fast_lio__rosidl_typesupport_cppExport.cmake\n'}
+[49.857709] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/fast_lio__rosidl_typesupport_cppExport-release.cmake\n'}
+[49.857833] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/export_fast_lio__rosidl_generator_pyExport.cmake\n'}
+[49.857953] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/export_fast_lio__rosidl_generator_pyExport-release.cmake\n'}
+[49.858074] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/rosidl_cmake-extras.cmake\n'}
+[49.858254] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/ament_cmake_export_include_directories-extras.cmake\n'}
+[49.858377] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/ament_cmake_export_libraries-extras.cmake\n'}
+[49.858498] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/ament_cmake_export_targets-extras.cmake\n'}
+[49.858612] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/rosidl_cmake_export_typesupport_targets-extras.cmake\n'}
+[49.858727] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/ament_cmake_export_dependencies-extras.cmake\n'}
+[49.858850] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/rosidl_cmake_export_typesupport_libraries-extras.cmake\n'}
+[49.858966] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/rosidl_cmake_aggregate_target-extras.cmake\n'}
+[49.859097] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/fast_lioConfig.cmake\n'}
+[49.859201] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/cmake/fast_lioConfig-version.cmake\n'}
+[49.859317] (fast_lio) StdoutLine: {'line': b'-- Installing: /home/husky/TR/install/fast_lio/share/fast_lio/package.xml\n'}
+[49.861535] (fast_lio) CommandEnded: {'returncode': 0}
+[49.875533] (fast_lio) JobEnded: {'identifier': 'fast_lio', 'rc': 0}
+[49.875947] (-) EventReactorShutdown: {}

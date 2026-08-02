@@ -1,0 +1,43 @@
+field_localizer:
+  ros__parameters:
+    # FAST-LIO 输出的是雷达坐标系位姿，节点会按下方外参换算为车体中心位姿。
+    odometry_topic: /Odometry
+    field_pose_topic: /competition/field_pose
+    field_zone_topic: /competition/current_zone
+    # 启动区静止时采样建立比赛坐标原点；采样期间不会发布场地位姿。
+    initial_sample_count: 30
+    field_yaw_offset_deg: 0.0
+    # 抽签后改为对应起点；本方起点始终是 (0, 0)，向场内和朝赛场中线移动均为正。
+    # 左下角为 bottom_left，右下角为 bottom_right。
+    start_corner: bottom_left
+    # 这三项必须随雷达安装位置和朝向重新标定，单位为米和度。
+    lidar_to_base_enabled: true
+    base_to_lidar_x_m: 0.26182
+    base_to_lidar_y_m: -0.23658
+    base_to_lidar_yaw_deg: -89.71
+    allowed_min_x: 0.0
+    allowed_max_x: 11.0
+    allowed_min_y: 0.0
+    allowed_max_y: 6.0
+    # 每个区域为 [最小 x, 最大 x, 最小 y, 最大 y]，坐标单位为米。
+    zones:
+      names: [start, storage_l1, storage_l2, public, gem_pick, red_goal, blue_goal]
+      start: [0.0, 0.7, 0.0, 0.7]
+      storage_l1: [0.7, 2.1, 0.0, 0.4]
+      storage_l2: [0.7, 2.1, 0.4, 0.8]
+      public: [2.5, 8.5, 0.0, 4.9]
+      gem_pick: [4.8, 6.2, 1.75, 3.15]
+      red_goal: [10.2, 11.0, 0.0, 0.8]
+      blue_goal: [0.0, 0.8, 0.0, 0.8]
+
+field_visualizer:
+  ros__parameters:
+    field_pose_topic: /competition/field_pose
+    marker_topic: /competition/field_markers
+
+simple_position:
+  ros__parameters:
+    # 用于快速验证 LiDAR 定位：首帧为原点，不进行车体外参或赛场坐标转换。
+    odometry_topic: /Odometry
+    position_topic: /lidar/relative_position
+    print_period_s: 0.5

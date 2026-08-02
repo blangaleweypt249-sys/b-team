@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: fyt-pos
+Version: 0.1.0
+Summary: 比赛场地定位、区域判定与 RViz 可视化。
+Maintainer: upre
+Maintainer-email: upre@todo.todo
+License: Apache-2.0

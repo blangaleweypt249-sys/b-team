@@ -1,0 +1,6 @@
+source;share/fyt_pos/hook/pythonpath.ps1
+source;share/fyt_pos/hook/pythonpath.dsv
+source;share/fyt_pos/hook/pythonpath.sh
+source;share/fyt_pos/hook/ament_prefix_path.ps1
+source;share/fyt_pos/hook/ament_prefix_path.dsv
+source;share/fyt_pos/hook/ament_prefix_path.sh

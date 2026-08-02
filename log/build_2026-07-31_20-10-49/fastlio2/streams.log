@@ -1,0 +1,124 @@
+[0.009s] Invoking command in '/home/husky/TR/build/fastlio2': AMENT_PREFIX_PATH=/home/husky/TR/install/livox_ros_driver2:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/husky/TR/install/livox_ros_driver2:/opt/ros/jazzy/opt/gz_sim_vendor:/opt/ros/jazzy/opt/gz_sensors_vendor:/opt/ros/jazzy/opt/gz_physics_vendor:/opt/ros/jazzy/opt/sdformat_vendor:/opt/ros/jazzy/opt/gz_gui_vendor:/opt/ros/jazzy/opt/gz_transport_vendor:/opt/ros/jazzy/opt/gz_rendering_vendor:/opt/ros/jazzy/opt/gz_plugin_vendor:/opt/ros/jazzy/opt/gz_fuel_tools_vendor:/opt/ros/jazzy/opt/gz_msgs_vendor:/opt/ros/jazzy/opt/gz_common_vendor:/opt/ros/jazzy/opt/gz_math_vendor:/opt/ros/jazzy/opt/gz_utils_vendor:/opt/ros/jazzy/opt/gz_tools_vendor:/opt/ros/jazzy/opt/gz_ogre_next_vendor:/opt/ros/jazzy/opt/gz_dartsim_vendor:/opt/ros/jazzy/opt/gz_cmake_vendor:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com LD_LIBRARY_PATH=/home/husky/TR/install/livox_ros_driver2/lib:${LD_LIBRARY_PATH} PYTHONPATH=/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/cmake /home/husky/TR/src/FAST_LIO2_ROS2/fastlio2 -DCMAKE_INSTALL_PREFIX=/home/husky/TR/install/fastlio2
+[0.053s] -- The C compiler identification is GNU 12.4.0
+[0.095s] -- The CXX compiler identification is GNU 12.4.0
+[0.109s] -- Detecting C compiler ABI info
+[0.176s] -- Detecting C compiler ABI info - done
+[0.181s] -- Check for working C compiler: /usr/bin/cc - skipped
+[0.181s] -- Detecting C compile features
+[0.182s] -- Detecting C compile features - done
+[0.188s] -- Detecting CXX compiler ABI info
+[0.260s] -- Detecting CXX compiler ABI info - done
+[0.266s] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[0.266s] -- Detecting CXX compile features
+[0.266s] -- Detecting CXX compile features - done
+[0.270s] -- Found ament_cmake: 2.5.6 (/opt/ros/jazzy/share/ament_cmake/cmake)
+[0.386s] -- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+[0.488s] -- Found rclcpp: 28.1.21 (/opt/ros/jazzy/share/rclcpp/cmake)
+[0.533s] -- Found rosidl_generator_c: 4.6.9 (/opt/ros/jazzy/share/rosidl_generator_c/cmake)
+[0.549s] -- Found rosidl_generator_cpp: 4.6.9 (/opt/ros/jazzy/share/rosidl_generator_cpp/cmake)
+[0.565s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.583s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.653s] -- Found rmw_implementation_cmake: 7.3.3 (/opt/ros/jazzy/share/rmw_implementation_cmake/cmake)
+[0.657s] -- Found rmw_fastrtps_cpp: 8.4.4 (/opt/ros/jazzy/share/rmw_fastrtps_cpp/cmake)
+[0.733s] -- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.13")  
+[0.749s] -- Found FastRTPS: /opt/ros/jazzy/include (Required is at least version "2.13") 
+[0.767s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[0.832s] -- Found std_msgs: 5.3.8 (/opt/ros/jazzy/share/std_msgs/cmake)
+[0.846s] -- Found tf2: 0.36.21 (/opt/ros/jazzy/share/tf2/cmake)
+[0.865s] -- Found tf2_ros: 0.36.21 (/opt/ros/jazzy/share/tf2_ros/cmake)
+[0.985s] -- Found nav_msgs: 5.3.8 (/opt/ros/jazzy/share/nav_msgs/cmake)
+[1.008s] -- Found sensor_msgs: 5.3.8 (/opt/ros/jazzy/share/sensor_msgs/cmake)
+[1.024s] -- Found livox_ros_driver2: 1.0.0 (/home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake)
+[1.104s] [33mCMake Warning (dev) at /usr/lib/x86_64-linux-gnu/cmake/pcl/Modules/FindFLANN.cmake:45 (find_package):
+[1.104s]   Policy CMP0144 is not set: find_package uses upper-case <PACKAGENAME>_ROOT
+[1.104s]   variables.  Run "cmake --help-policy CMP0144" for policy details.  Use the
+[1.104s]   cmake_policy command to set the policy and suppress this warning.
+[1.104s] 
+[1.104s]   CMake variable FLANN_ROOT is set to:
+[1.105s] 
+[1.105s]     /usr
+[1.105s] 
+[1.105s]   For compatibility, find_package is ignoring the variable, but code in a
+[1.105s]   .cmake module might still use it.
+[1.105s] Call Stack (most recent call first):
+[1.105s]   /usr/lib/x86_64-linux-gnu/cmake/pcl/PCLConfig.cmake:261 (find_package)
+[1.105s]   /usr/lib/x86_64-linux-gnu/cmake/pcl/PCLConfig.cmake:306 (find_flann)
+[1.105s]   /usr/lib/x86_64-linux-gnu/cmake/pcl/PCLConfig.cmake:570 (find_external_library)
+[1.105s]   /opt/ros/jazzy/share/pcl_conversions/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)
+[1.105s]   /opt/ros/jazzy/share/pcl_conversions/cmake/pcl_conversionsConfig.cmake:41 (include)
+[1.105s]   /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)
+[1.105s]   /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_ros_driver2Config.cmake:41 (include)
+[1.106s]   CMakeLists.txt:30 (find_package)
+[1.106s] This warning is for project developers.  Use -Wno-dev to suppress it.
+[1.106s] [0m
+[1.106s] -- Found flann version 1.9.2
+[1.348s] -- Found OpenMP_CXX: -fopenmp (found version "4.5") 
+[1.348s] -- Found OpenMP: TRUE (found version "4.5") found components: CXX 
+[2.375s] -- Checking for module 'libusb-1.0'
+[2.389s] --   Found libusb-1.0, version 1.0.27
+[2.428s] -- Found libusb: /usr/lib/x86_64-linux-gnu/libusb-1.0.so  
+[2.428s] -- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+[2.481s] -- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)
+[2.482s] -- Found Pcap: /usr/lib/x86_64-linux-gnu/libpcap.so  
+[2.494s] -- Found ZLIB: /usr/lib/x86_64-linux-gnu/libz.so (found version "1.3")  
+[2.509s] -- Found PNG: /usr/lib/x86_64-linux-gnu/libpng.so (found version "1.6.43") 
+[2.834s] -- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+[2.838s] -- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)
+[3.151s] -- Found Qhull version 8.0.2
+[3.481s] -- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+[3.792s] -- Found PCL_COMMON: /usr/lib/x86_64-linux-gnu/libpcl_common.so  
+[3.793s] -- Found PCL_KDTREE: /usr/lib/x86_64-linux-gnu/libpcl_kdtree.so  
+[3.794s] -- Found PCL_OCTREE: /usr/lib/x86_64-linux-gnu/libpcl_octree.so  
+[3.794s] -- Found PCL_SEARCH: /usr/lib/x86_64-linux-gnu/libpcl_search.so  
+[3.795s] -- Found PCL_SAMPLE_CONSENSUS: /usr/lib/x86_64-linux-gnu/libpcl_sample_consensus.so  
+[3.796s] -- Found PCL_FILTERS: /usr/lib/x86_64-linux-gnu/libpcl_filters.so  
+[3.796s] -- Found PCL_2D: /usr/include/pcl-1.14  
+[3.796s] -- Found PCL_GEOMETRY: /usr/include/pcl-1.14  
+[3.797s] -- Found PCL_IO: /usr/lib/x86_64-linux-gnu/libpcl_io.so  
+[3.797s] -- Found PCL_FEATURES: /usr/lib/x86_64-linux-gnu/libpcl_features.so  
+[3.798s] -- Found PCL_ML: /usr/lib/x86_64-linux-gnu/libpcl_ml.so  
+[3.799s] -- Found PCL_SEGMENTATION: /usr/lib/x86_64-linux-gnu/libpcl_segmentation.so  
+[3.800s] -- Found PCL_VISUALIZATION: /usr/lib/x86_64-linux-gnu/libpcl_visualization.so  
+[3.800s] -- Found PCL_SURFACE: /usr/lib/x86_64-linux-gnu/libpcl_surface.so  
+[3.801s] -- Found PCL_REGISTRATION: /usr/lib/x86_64-linux-gnu/libpcl_registration.so  
+[3.802s] -- Found PCL_KEYPOINTS: /usr/lib/x86_64-linux-gnu/libpcl_keypoints.so  
+[3.803s] -- Found PCL_TRACKING: /usr/lib/x86_64-linux-gnu/libpcl_tracking.so  
+[3.803s] -- Found PCL_RECOGNITION: /usr/lib/x86_64-linux-gnu/libpcl_recognition.so  
+[3.804s] -- Found PCL_STEREO: /usr/lib/x86_64-linux-gnu/libpcl_stereo.so  
+[3.805s] -- Found PCL_APPS: /usr/lib/x86_64-linux-gnu/libpcl_apps.so  
+[3.805s] -- Found PCL_IN_HAND_SCANNER: /usr/include/pcl-1.14  
+[3.805s] -- Found PCL_MODELER: /usr/include/pcl-1.14  
+[3.806s] -- Found PCL_POINT_CLOUD_EDITOR: /usr/include/pcl-1.14  
+[3.806s] -- Found PCL_OUTOFCORE: /usr/lib/x86_64-linux-gnu/libpcl_outofcore.so  
+[3.807s] -- Found PCL_PEOPLE: /usr/lib/x86_64-linux-gnu/libpcl_people.so  
+[3.892s] [33mCMake Warning (dev) at CMakeLists.txt:35 (find_package):
+[3.892s]   Policy CMP0074 is not set: find_package uses <PackageName>_ROOT variables.
+[3.892s]   Run "cmake --help-policy CMP0074" for policy details.  Use the cmake_policy
+[3.892s]   command to set the policy and suppress this warning.
+[3.892s] 
+[3.892s]   CMake variable PCL_ROOT is set to:
+[3.892s] 
+[3.892s]     /usr
+[3.892s] 
+[3.893s]   For compatibility, CMake is ignoring the variable.
+[3.893s] This warning is for project developers.  Use -Wno-dev to suppress it.
+[3.893s] [0m
+[3.908s] [31mCMake Error at CMakeLists.txt:37 (find_package):
+[3.908s]   By not providing "FindSophus.cmake" in CMAKE_MODULE_PATH this project has
+[3.908s]   asked CMake to find a package configuration file provided by "Sophus", but
+[3.908s]   CMake did not find one.
+[3.908s] 
+[3.909s]   Could not find a package configuration file provided by "Sophus" with any
+[3.909s]   of the following names:
+[3.909s] 
+[3.909s]     SophusConfig.cmake
+[3.909s]     sophus-config.cmake
+[3.909s] 
+[3.909s]   Add the installation prefix of "Sophus" to CMAKE_PREFIX_PATH or set
+[3.909s]   "Sophus_DIR" to a directory containing one of the above files.  If "Sophus"
+[3.909s]   provides a separate development package or SDK, be sure it has been
+[3.909s]   installed.
+[3.909s] 
+[3.909s] [0m
+[3.909s] -- Configuring incomplete, errors occurred!
+[3.924s] Invoked command in '/home/husky/TR/build/fastlio2' returned '1': AMENT_PREFIX_PATH=/home/husky/TR/install/livox_ros_driver2:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/husky/TR/install/livox_ros_driver2:/opt/ros/jazzy/opt/gz_sim_vendor:/opt/ros/jazzy/opt/gz_sensors_vendor:/opt/ros/jazzy/opt/gz_physics_vendor:/opt/ros/jazzy/opt/sdformat_vendor:/opt/ros/jazzy/opt/gz_gui_vendor:/opt/ros/jazzy/opt/gz_transport_vendor:/opt/ros/jazzy/opt/gz_rendering_vendor:/opt/ros/jazzy/opt/gz_plugin_vendor:/opt/ros/jazzy/opt/gz_fuel_tools_vendor:/opt/ros/jazzy/opt/gz_msgs_vendor:/opt/ros/jazzy/opt/gz_common_vendor:/opt/ros/jazzy/opt/gz_math_vendor:/opt/ros/jazzy/opt/gz_utils_vendor:/opt/ros/jazzy/opt/gz_tools_vendor:/opt/ros/jazzy/opt/gz_ogre_next_vendor:/opt/ros/jazzy/opt/gz_dartsim_vendor:/opt/ros/jazzy/opt/gz_cmake_vendor:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com LD_LIBRARY_PATH=/home/husky/TR/install/livox_ros_driver2/lib:${LD_LIBRARY_PATH} PYTHONPATH=/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/cmake /home/husky/TR/src/FAST_LIO2_ROS2/fastlio2 -DCMAKE_INSTALL_PREFIX=/home/husky/TR/install/fastlio2

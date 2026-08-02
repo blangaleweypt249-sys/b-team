@@ -1,0 +1,342 @@
+-- livox_ros_driver2 version: 1.2.6
+-- Found ament_cmake_auto: 2.5.6 (/opt/ros/jazzy/share/ament_cmake_auto/cmake)
+-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+-- Found rosidl_adapter: 4.6.9 (/opt/ros/jazzy/share/rosidl_adapter/cmake)
+-- Found rmw_implementation_cmake: 7.3.3 (/opt/ros/jazzy/share/rmw_implementation_cmake/cmake)
+-- Found rmw_fastrtps_cpp: 8.4.4 (/opt/ros/jazzy/share/rmw_fastrtps_cpp/cmake)
+-- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[33mCMake Warning (dev) at /usr/lib/x86_64-linux-gnu/cmake/pcl/Modules/FindFLANN.cmake:45 (find_package):
+  Policy CMP0144 is not set: find_package uses upper-case <PACKAGENAME>_ROOT
+  variables.  Run "cmake --help-policy CMP0144" for policy details.  Use the
+  cmake_policy command to set the policy and suppress this warning.
+
+  CMake variable FLANN_ROOT is set to:
+
+    /usr
+
+  For compatibility, find_package is ignoring the variable, but code in a
+  .cmake module might still use it.
+Call Stack (most recent call first):
+  /usr/lib/x86_64-linux-gnu/cmake/pcl/PCLConfig.cmake:261 (find_package)
+  /usr/lib/x86_64-linux-gnu/cmake/pcl/PCLConfig.cmake:306 (find_flann)
+  /usr/lib/x86_64-linux-gnu/cmake/pcl/PCLConfig.cmake:570 (find_external_library)
+  /opt/ros/jazzy/share/pcl_conversions/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)
+  /opt/ros/jazzy/share/pcl_conversions/cmake/pcl_conversionsConfig.cmake:41 (include)
+  /opt/ros/jazzy/share/ament_cmake_auto/cmake/ament_auto_find_build_dependencies.cmake:67 (find_package)
+  CMakeLists.txt:225 (ament_auto_find_build_dependencies)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+[0m
+-- Found flann version 1.9.2
+-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)
+-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)
+-- Found Qhull version 8.0.2
+-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+[0m/usr/include/apr-1.0[0m
+[0mapr-1[0m
+-- Found ament_cmake_ros: 0.12.1 (/opt/ros/jazzy/share/ament_cmake_ros/cmake)
+-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+-- Found python_cmake_module: 0.11.1 (/opt/ros/jazzy/share/python_cmake_module/cmake)
+-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter Development NumPy Development.Module Development.Embed 
+-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+-- Found ament_lint_auto: 0.17.5 (/opt/ros/jazzy/share/ament_lint_auto/cmake)
+-- Added test 'copyright' to check source files copyright and LICENSE
+-- Added test 'cppcheck' to perform static code analysis on C / C++ code
+-- Configured cppcheck include dirs: /home/husky/TR/src/livox_ros_driver2/3rdparty;/home/husky/TR/src/livox_ros_driver2/src
+-- Configured cppcheck exclude dirs and/or files: 
+-- Added test 'cpplint' to check C / C++ code against the Google style
+-- Configured cpplint exclude dirs and/or files: 
+-- Added test 'flake8' to check Python code syntax and style conventions
+-- Configured 'flake8' exclude dirs and/or files: 
+-- Added test 'lint_cmake' to check CMake code style
+-- Added test 'pep257' to check Python code against some of the docstring style conventions in PEP 257
+-- Added test 'uncrustify' to check C / C++ code style
+-- Configured uncrustify additional arguments: 
+-- Added test 'xmllint' to check XML markup files
+-- Configuring done (2.7s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/husky/TR/build/livox_ros_driver2
+[  1%] [34m[1mGenerating Rust code for ROS interfaces[0m
+[  3%] [34m[1mGenerating type hashes for ROS interfaces[0m
+[  4%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2_node.dir/rclcpp_components/node_main_livox_ros_driver2_node.cpp.o[0m
+[  4%] Built target ament_cmake_python_copy_livox_ros_driver2
+running egg_info
+creating livox_ros_driver2.egg-info
+writing livox_ros_driver2.egg-info/PKG-INFO
+writing dependency_links to livox_ros_driver2.egg-info/dependency_links.txt
+writing top-level names to livox_ros_driver2.egg-info/top_level.txt
+writing manifest file 'livox_ros_driver2.egg-info/SOURCES.txt'
+reading manifest file 'livox_ros_driver2.egg-info/SOURCES.txt'
+writing manifest file 'livox_ros_driver2.egg-info/SOURCES.txt'
+[  4%] Built target livox_interfaces2__rosidl_generator_type_description
+[  6%] [34m[1mGenerating C code for ROS interfaces[0m
+[  6%] Built target livox_interfaces2__rs
+[  6%] Built target ament_cmake_python_build_livox_ros_driver2_egg
+[  7%] [34m[1mGenerating C++ code for ROS interfaces[0m
+[  7%] Built target livox_interfaces2__cpp
+[  9%] [32mBuilding C object CMakeFiles/livox_interfaces2__rosidl_generator_c.dir/rosidl_generator_c/livox_ros_driver2/msg/detail/custom_point__description.c.o[0m
+[ 12%] [32mBuilding C object CMakeFiles/livox_interfaces2__rosidl_generator_c.dir/rosidl_generator_c/livox_ros_driver2/msg/detail/custom_msg__description.c.o[0m
+[ 12%] [32mBuilding C object CMakeFiles/livox_interfaces2__rosidl_generator_c.dir/rosidl_generator_c/livox_ros_driver2/msg/detail/custom_msg__functions.c.o[0m
+[ 14%] [32mBuilding C object CMakeFiles/livox_interfaces2__rosidl_generator_c.dir/rosidl_generator_c/livox_ros_driver2/msg/detail/custom_msg__type_support.c.o[0m
+[ 17%] [32mBuilding C object CMakeFiles/livox_interfaces2__rosidl_generator_c.dir/rosidl_generator_c/livox_ros_driver2/msg/detail/custom_point__functions.c.o[0m
+[ 17%] [32mBuilding C object CMakeFiles/livox_interfaces2__rosidl_generator_c.dir/rosidl_generator_c/livox_ros_driver2/msg/detail/custom_point__type_support.c.o[0m
+[ 19%] [32m[1mLinking C shared library liblivox_ros_driver2__rosidl_generator_c.so[0m
+[ 19%] Built target livox_interfaces2__rosidl_generator_c
+[ 20%] [34m[1mGenerating C type support dispatch for ROS interfaces[0m
+[ 22%] [34m[1mGenerating C type support for eProsima Fast-RTPS[0m
+[ 26%] [34m[1mGenerating C++ type support for eProsima Fast-RTPS[0m
+[ 26%] [34m[1mGenerating C++ introspection for ROS interfaces[0m
+[ 26%] [34m[1mGenerating C++ type support dispatch for ROS interfaces[0m
+[ 28%] [34m[1mGenerating C introspection for ROS interfaces[0m
+[ 33%] [32mBuilding CXX object CMakeFiles/livox_interfaces2__rosidl_typesupport_cpp.dir/rosidl_typesupport_cpp/livox_ros_driver2/msg/custom_point__type_support.cpp.o[0m
+[ 33%] [32mBuilding CXX object CMakeFiles/livox_interfaces2__rosidl_typesupport_c.dir/rosidl_typesupport_c/livox_ros_driver2/msg/custom_msg__type_support.cpp.o[0m
+[ 33%] [32mBuilding CXX object CMakeFiles/livox_interfaces2__rosidl_typesupport_cpp.dir/rosidl_typesupport_cpp/livox_ros_driver2/msg/custom_msg__type_support.cpp.o[0m
+[ 34%] [32mBuilding CXX object CMakeFiles/livox_interfaces2__rosidl_typesupport_c.dir/rosidl_typesupport_c/livox_ros_driver2/msg/custom_point__type_support.cpp.o[0m
+[ 38%] [32mBuilding CXX object CMakeFiles/livox_interfaces2__rosidl_typesupport_introspection_cpp.dir/rosidl_typesupport_introspection_cpp/livox_ros_driver2/msg/detail/custom_point__type_support.cpp.o[0m
+[ 38%] [32mBuilding CXX object CMakeFiles/livox_interfaces2__rosidl_typesupport_introspection_cpp.dir/rosidl_typesupport_introspection_cpp/livox_ros_driver2/msg/detail/custom_msg__type_support.cpp.o[0m
+[ 39%] [32mBuilding C object CMakeFiles/livox_interfaces2__rosidl_typesupport_introspection_c.dir/rosidl_typesupport_introspection_c/livox_ros_driver2/msg/detail/custom_point__type_support.c.o[0m
+[ 41%] [32mBuilding C object CMakeFiles/livox_interfaces2__rosidl_typesupport_introspection_c.dir/rosidl_typesupport_introspection_c/livox_ros_driver2/msg/detail/custom_msg__type_support.c.o[0m
+[ 46%] [32mBuilding CXX object CMakeFiles/livox_interfaces2__rosidl_typesupport_fastrtps_cpp.dir/rosidl_typesupport_fastrtps_cpp/livox_ros_driver2/msg/detail/dds_fastrtps/custom_point__type_support.cpp.o[0m
+[ 46%] [32mBuilding CXX object CMakeFiles/livox_interfaces2__rosidl_typesupport_fastrtps_c.dir/rosidl_typesupport_fastrtps_c/livox_ros_driver2/msg/detail/custom_point__type_support_c.cpp.o[0m
+[ 46%] [32mBuilding CXX object CMakeFiles/livox_interfaces2__rosidl_typesupport_fastrtps_cpp.dir/rosidl_typesupport_fastrtps_cpp/livox_ros_driver2/msg/detail/dds_fastrtps/custom_msg__type_support.cpp.o[0m
+[ 47%] [32mBuilding CXX object CMakeFiles/livox_interfaces2__rosidl_typesupport_fastrtps_c.dir/rosidl_typesupport_fastrtps_c/livox_ros_driver2/msg/detail/custom_msg__type_support_c.cpp.o[0m
+[ 49%] [32m[1mLinking CXX shared library liblivox_ros_driver2__rosidl_typesupport_c.so[0m
+[ 50%] [32m[1mLinking C shared library liblivox_ros_driver2__rosidl_typesupport_introspection_c.so[0m
+[ 50%] Built target livox_interfaces2__rosidl_typesupport_c
+[ 50%] Built target livox_interfaces2__rosidl_typesupport_introspection_c
+[ 52%] [32m[1mLinking CXX shared library liblivox_ros_driver2__rosidl_typesupport_cpp.so[0m
+[ 52%] Built target livox_interfaces2__rosidl_typesupport_cpp
+[ 53%] [32m[1mLinking CXX shared library liblivox_ros_driver2__rosidl_typesupport_introspection_cpp.so[0m
+[ 60%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/comm/cache_index.cpp.o[0m
+[ 60%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/comm/lidar_imu_data_queue.cpp.o[0m
+[ 60%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/lddc.cpp.o[0m
+[ 60%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/driver_node.cpp.o[0m
+[ 65%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/lds.cpp.o[0m
+[ 65%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/livox_ros_driver2.cpp.o[0m
+[ 65%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/lds_lidar.cpp.o[0m
+[ 68%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/parse_cfg_file/parse_cfg_file.cpp.o[0m
+[ 68%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/comm/comm.cpp.o[0m
+[ 69%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/comm/pub_handler.cpp.o[0m
+[ 71%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/comm/ldq.cpp.o[0m
+[ 73%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/comm/semaphore.cpp.o[0m
+[ 76%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/call_back/lidar_common_callback.cpp.o[0m
+[ 76%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/call_back/livox_lidar_callback.cpp.o[0m
+[ 77%] [32mBuilding CXX object CMakeFiles/livox_ros_driver2.dir/src/parse_cfg_file/parse_livox_lidar_cfg.cpp.o[0m
+[ 77%] Built target livox_interfaces2__rosidl_typesupport_introspection_cpp
+[ 79%] [32m[1mLinking CXX shared library liblivox_ros_driver2__rosidl_typesupport_fastrtps_c.so[0m
+[ 80%] [32m[1mLinking CXX shared library liblivox_ros_driver2__rosidl_typesupport_fastrtps_cpp.so[0m
+[ 80%] Built target livox_interfaces2__rosidl_typesupport_fastrtps_c
+[ 80%] Built target livox_interfaces2__rosidl_typesupport_fastrtps_cpp
+[ 80%] Built target livox_interfaces2
+[ 82%] [34m[1mGenerating Python code for ROS interfaces[0m
+[ 82%] Built target livox_interfaces2__py
+[ 85%] [32mBuilding C object CMakeFiles/livox_interfaces2__rosidl_generator_py.dir/rosidl_generator_py/livox_ros_driver2/msg/_custom_point_s.c.o[0m
+[ 85%] [32mBuilding C object CMakeFiles/livox_interfaces2__rosidl_generator_py.dir/rosidl_generator_py/livox_ros_driver2/msg/_custom_msg_s.c.o[0m
+[ 87%] [32m[1mLinking C shared library liblivox_interfaces2__rosidl_generator_py.so[0m
+[ 87%] Built target livox_interfaces2__rosidl_generator_py
+[ 90%] [32mBuilding C object CMakeFiles/livox_ros_driver2_s__rosidl_typesupport_c.dir/rosidl_generator_py/livox_ros_driver2/_livox_ros_driver2_s.ep.rosidl_typesupport_c.c.o[0m
+[ 90%] [32mBuilding C object CMakeFiles/livox_ros_driver2_s__rosidl_typesupport_fastrtps_c.dir/rosidl_generator_py/livox_ros_driver2/_livox_ros_driver2_s.ep.rosidl_typesupport_fastrtps_c.c.o[0m
+[ 92%] [32mBuilding C object CMakeFiles/livox_ros_driver2_s__rosidl_typesupport_introspection_c.dir/rosidl_generator_py/livox_ros_driver2/_livox_ros_driver2_s.ep.rosidl_typesupport_introspection_c.c.o[0m
+[ 93%] [32m[1mLinking C shared module rosidl_generator_py/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_fastrtps_c.so[0m
+[ 95%] [32m[1mLinking C shared module rosidl_generator_py/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_c.so[0m
+[ 96%] [32m[1mLinking C shared module rosidl_generator_py/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_introspection_c.so[0m
+[ 96%] Built target livox_ros_driver2_s__rosidl_typesupport_fastrtps_c
+[ 96%] Built target livox_ros_driver2_s__rosidl_typesupport_introspection_c
+[ 96%] Built target livox_ros_driver2_s__rosidl_typesupport_c
+[ 98%] [32m[1mLinking CXX executable livox_ros_driver2_node[0m
+[ 98%] Built target livox_ros_driver2_node
+[100%] [32m[1mLinking CXX shared library liblivox_ros_driver2.so[0m
+[100%] Built target livox_ros_driver2
+-- Install configuration: ""
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/ament_index/resource_index/rosidl_interfaces/livox_ros_driver2
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/msg/CustomPoint.json
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/msg/CustomMsg.json
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/rosidl_generator_c__visibility_control.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/custom_msg.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/custom_point.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__type_support.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__struct.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__functions.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__description.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__functions.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__type_support.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__functions.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__description.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__type_support.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__struct.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__functions.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__type_support.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/environment/library_path.sh
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/environment/library_path.dsv
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_generator_c.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_generator_c.so" to ""
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/rosidl_typesupport_fastrtps_c__visibility_control.h
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__rosidl_typesupport_fastrtps_c.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__rosidl_typesupport_fastrtps_c.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_fastrtps_c.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_fastrtps_c.so" to ""
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/rosidl_typesupport_introspection_c__visibility_control.h
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__rosidl_typesupport_introspection_c.h
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__type_support.c
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__type_support.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__rosidl_typesupport_introspection_c.h
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_introspection_c.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_introspection_c.so" to ""
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_c.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_c.so" to ""
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/rosidl_generator_cpp__visibility_control.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/custom_point.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/custom_msg.hpp
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__struct.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__builder.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__traits.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__struct.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__builder.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__type_support.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__traits.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__type_support.hpp
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/rosidl_typesupport_fastrtps_cpp__visibility_control.h
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__rosidl_typesupport_fastrtps_cpp.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__rosidl_typesupport_fastrtps_cpp.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/dds_fastrtps
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_fastrtps_cpp.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_fastrtps_cpp.so" to ""
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg
+-- Up-to-date: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__type_support.cpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__rosidl_typesupport_introspection_cpp.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_msg__type_support.cpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/include/livox_ros_driver2/livox_ros_driver2/msg/detail/custom_point__rosidl_typesupport_introspection_cpp.hpp
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_introspection_cpp.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_introspection_cpp.so" to ""
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_cpp.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2__rosidl_typesupport_cpp.so" to ""
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/environment/pythonpath.sh
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/environment/pythonpath.dsv
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2-1.0.0-py3.12.egg-info
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2-1.0.0-py3.12.egg-info/top_level.txt
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2-1.0.0-py3.12.egg-info/dependency_links.txt
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2-1.0.0-py3.12.egg-info/PKG-INFO
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2-1.0.0-py3.12.egg-info/SOURCES.txt
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_fastrtps_c.so
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_introspection_c.so
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/msg
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/msg/_custom_point_s.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/msg/_custom_msg.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/msg/__init__.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/msg/_custom_msg_s.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/msg/_custom_point.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/_livox_ros_driver2_s.ep.rosidl_typesupport_fastrtps_c.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/__init__.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/_livox_ros_driver2_s.ep.rosidl_typesupport_c.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/_livox_ros_driver2_s.ep.rosidl_typesupport_introspection_c.c
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_c.so
+Listing '/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2'...
+Compiling '/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/__init__.py'...
+Listing '/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/msg'...
+Compiling '/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/msg/__init__.py'...
+Compiling '/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/msg/_custom_msg.py'...
+Compiling '/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/msg/_custom_point.py'...
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_fastrtps_c.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_fastrtps_c.so" to ""
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_introspection_c.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_introspection_c.so" to ""
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_c.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/python3.12/site-packages/livox_ros_driver2/livox_ros_driver2_s__rosidl_typesupport_c.so" to ""
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/liblivox_interfaces2__rosidl_generator_py.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/liblivox_interfaces2__rosidl_generator_py.so" to ""
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/ament_index/resource_index/rust_packages/livox_ros_driver2
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/rust
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/rust/build.rs
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/rust/src
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/rust/src/lib.rs
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/rust/src/msg.rs
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/rust/src/msg
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/rust/src/msg/rmw.rs
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/rust/Cargo.toml
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/msg/CustomPoint.idl
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/msg/CustomMsg.idl
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/msg/CustomPoint.msg
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/msg/CustomMsg.msg
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/livox_ros_driver2/livox_ros_driver2_node
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/livox_ros_driver2/livox_ros_driver2_node" to ""
+-- Installing: /home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2.so
+-- Set non-toolchain portion of runtime path of "/home/husky/TR/install/livox_ros_driver2/lib/liblivox_ros_driver2.so" to ""
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/config
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/config/MID360_config.json
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/config/display_point_cloud_ROS2.rviz
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/config/mixed_HAP_MID360_config.json
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/config/display_point_cloud_ROS1.rviz
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/config/MID360s_config.json
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/config/HAP_config.json
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/launch_ROS2
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/launch_ROS2/rviz_mixed.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/launch_ROS2/msg_MID360_launch.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/launch_ROS2/rviz_HAP_launch.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/launch_ROS2/msg_MID360s_launch.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/launch_ROS2/msg_HAP_launch.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/launch_ROS2/rviz_MID360_launch.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/launch_ROS2/rviz_MID360s_launch.py
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/launch_ROS2/__pycache__
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/launch_ROS2/__pycache__/rviz_MID360_launch.cpython-312.pyc
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/ament_index/resource_index/package_run_dependencies/livox_ros_driver2
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/ament_index/resource_index/parent_prefix_path/livox_ros_driver2
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/environment/ament_prefix_path.sh
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/environment/ament_prefix_path.dsv
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/environment/path.sh
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/environment/path.dsv
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/local_setup.bash
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/local_setup.sh
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/local_setup.zsh
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/local_setup.dsv
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/package.dsv
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/ament_index/resource_index/packages/livox_ros_driver2
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/ament_index/resource_index/rclcpp_components/livox_ros_driver2
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/export_livox_interfaces2__rosidl_generator_cExport.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/export_livox_interfaces2__rosidl_generator_cExport-noconfig.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/export_livox_interfaces2__rosidl_typesupport_fastrtps_cExport.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/export_livox_interfaces2__rosidl_typesupport_fastrtps_cExport-noconfig.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_interfaces2__rosidl_typesupport_introspection_cExport.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_interfaces2__rosidl_typesupport_introspection_cExport-noconfig.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_interfaces2__rosidl_typesupport_cExport.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_interfaces2__rosidl_typesupport_cExport-noconfig.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/export_livox_interfaces2__rosidl_generator_cppExport.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/export_livox_interfaces2__rosidl_typesupport_fastrtps_cppExport.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/export_livox_interfaces2__rosidl_typesupport_fastrtps_cppExport-noconfig.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_interfaces2__rosidl_typesupport_introspection_cppExport.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_interfaces2__rosidl_typesupport_introspection_cppExport-noconfig.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_interfaces2__rosidl_typesupport_cppExport.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_interfaces2__rosidl_typesupport_cppExport-noconfig.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/export_livox_interfaces2__rosidl_generator_pyExport.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/export_livox_interfaces2__rosidl_generator_pyExport-noconfig.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/rosidl_cmake-extras.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/ament_cmake_export_dependencies-extras.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/ament_cmake_export_include_directories-extras.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/ament_cmake_export_libraries-extras.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/ament_cmake_export_targets-extras.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/rosidl_cmake_export_typesupport_targets-extras.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/rosidl_cmake_export_typesupport_libraries-extras.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/rosidl_cmake_aggregate_target-extras.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_ros_driver2Config.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/cmake/livox_ros_driver2Config-version.cmake
+-- Installing: /home/husky/TR/install/livox_ros_driver2/share/livox_ros_driver2/package.xml
