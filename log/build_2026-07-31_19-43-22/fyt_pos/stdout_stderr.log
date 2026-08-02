@@ -1,0 +1,51 @@
+running egg_info
+creating ../../build/fyt_pos/fyt_pos.egg-info
+writing ../../build/fyt_pos/fyt_pos.egg-info/PKG-INFO
+writing dependency_links to ../../build/fyt_pos/fyt_pos.egg-info/dependency_links.txt
+writing entry points to ../../build/fyt_pos/fyt_pos.egg-info/entry_points.txt
+writing requirements to ../../build/fyt_pos/fyt_pos.egg-info/requires.txt
+writing top-level names to ../../build/fyt_pos/fyt_pos.egg-info/top_level.txt
+writing manifest file '../../build/fyt_pos/fyt_pos.egg-info/SOURCES.txt'
+reading manifest file '../../build/fyt_pos/fyt_pos.egg-info/SOURCES.txt'
+writing manifest file '../../build/fyt_pos/fyt_pos.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/husky/TR/build/fyt_pos/build
+creating /home/husky/TR/build/fyt_pos/build/lib
+creating /home/husky/TR/build/fyt_pos/build/lib/fyt_pos
+copying fyt_pos/simple_position.py -> /home/husky/TR/build/fyt_pos/build/lib/fyt_pos
+copying fyt_pos/field_geometry.py -> /home/husky/TR/build/fyt_pos/build/lib/fyt_pos
+copying fyt_pos/field_localizer.py -> /home/husky/TR/build/fyt_pos/build/lib/fyt_pos
+copying fyt_pos/field_visualizer.py -> /home/husky/TR/build/fyt_pos/build/lib/fyt_pos
+copying fyt_pos/__init__.py -> /home/husky/TR/build/fyt_pos/build/lib/fyt_pos
+running install
+running install_lib
+creating /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos
+copying /home/husky/TR/build/fyt_pos/build/lib/fyt_pos/simple_position.py -> /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos
+copying /home/husky/TR/build/fyt_pos/build/lib/fyt_pos/field_geometry.py -> /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos
+copying /home/husky/TR/build/fyt_pos/build/lib/fyt_pos/field_localizer.py -> /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos
+copying /home/husky/TR/build/fyt_pos/build/lib/fyt_pos/field_visualizer.py -> /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos
+copying /home/husky/TR/build/fyt_pos/build/lib/fyt_pos/__init__.py -> /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos
+byte-compiling /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos/simple_position.py to simple_position.cpython-312.pyc
+byte-compiling /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos/field_geometry.py to field_geometry.cpython-312.pyc
+byte-compiling /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos/field_localizer.py to field_localizer.cpython-312.pyc
+byte-compiling /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos/field_visualizer.py to field_visualizer.cpython-312.pyc
+byte-compiling /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos/__init__.py to __init__.cpython-312.pyc
+running install_data
+creating /home/husky/TR/install/fyt_pos/share/ament_index
+creating /home/husky/TR/install/fyt_pos/share/ament_index/resource_index
+creating /home/husky/TR/install/fyt_pos/share/ament_index/resource_index/packages
+copying resource/fyt_pos -> /home/husky/TR/install/fyt_pos/share/ament_index/resource_index/packages
+copying package.xml -> /home/husky/TR/install/fyt_pos/share/fyt_pos
+creating /home/husky/TR/install/fyt_pos/share/fyt_pos/config
+copying config/field.yaml -> /home/husky/TR/install/fyt_pos/share/fyt_pos/config
+creating /home/husky/TR/install/fyt_pos/share/fyt_pos/launch
+copying launch/simple_position.launch.py -> /home/husky/TR/install/fyt_pos/share/fyt_pos/launch
+copying launch/fyt_pos.launch.py -> /home/husky/TR/install/fyt_pos/share/fyt_pos/launch
+running install_egg_info
+Copying ../../build/fyt_pos/fyt_pos.egg-info to /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos-0.1.0-py3.12.egg-info
+running install_scripts
+Installing field_localizer script to /home/husky/TR/install/fyt_pos/lib/fyt_pos
+Installing field_visualizer script to /home/husky/TR/install/fyt_pos/lib/fyt_pos
+Installing simple_position script to /home/husky/TR/install/fyt_pos/lib/fyt_pos
+writing list of installed files to '/home/husky/TR/build/fyt_pos/install.log'

@@ -1,0 +1,43 @@
+vision_detector:
+  ros__parameters:
+    # 灵石节点使用颜色与圆形几何，不依赖 YOLO 权重。
+    color_topic: /camera/color/image_raw
+    depth_topic: /camera/depth/image_raw
+    target_topic: /competition/vision/target
+    overlay_topic: /competition/vision/overlay
+    depth_is_registered: true
+    depth_sample_window: 5
+    target_min_radius_px: 20.0
+    target_max_radius_px: 220.0
+    target_min_depth_m: 0.2
+    target_max_depth_m: 3.0
+    camera_fx: 468.431622
+    camera_fy: 468.585260
+    camera_cx: 323.200725
+    camera_cy: 245.471993
+    show_debug_window: false
+
+block_detector:
+  ros__parameters:
+    # 此节点只输出相机坐标系下的目标中心；机械臂坐标变换由后续模块处理。
+    color_topic: /camera/color/image_raw
+    depth_topic: /camera/depth/image_raw
+    blocks_topic: /competition/vision/blocks
+    overlay_topic: /competition/vision/blocks_overlay
+    # 留空时加载包内 model/detector.pt；训练完成后以同名文件替换并重新构建。
+    # 也可填写部署机上的绝对路径以临时使用其他 .pt、.onnx 或 TensorRT engine。
+    model_path: ''
+    # 新模型的目标类别索引必须与训练标签一致。
+    box_class_id: 0
+    confidence_threshold: 0.4
+    inference_image_size: 640
+    max_detections: 7
+    # false 时按彩色与深度图的分辨率比例映射中心像素。
+    depth_is_registered: true
+    depth_sample_window: 5
+    min_depth_m: 0.2
+    max_depth_m: 2.5
+    camera_fx: 468.431622
+    camera_fy: 468.585260
+    camera_cx: 323.200725
+    camera_cy: 245.471993

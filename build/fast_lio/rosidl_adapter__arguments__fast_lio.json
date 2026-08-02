@@ -1,0 +1,6 @@
+{
+  "package_name": "fast_lio",
+  "non_idl_tuples": [
+    "/home/husky/TR/src/FAST_LIO2_ROS2/fastlio2:msg/Pose6D.msg"
+  ]
+}

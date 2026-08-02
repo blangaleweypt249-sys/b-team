@@ -1,0 +1,16 @@
+serial_gateway:
+  ros__parameters:
+    # 该进程必须是此设备文件的唯一打开者。
+    serial_device: /dev/ttyUSB0
+    baudrate: 115200
+    # 感知帧发送周期。20 ms 对应 50 Hz。
+    send_period_ms: 20
+    # 超过此时间未收到定位或灵石目标时，在发送帧中清除对应有效位。
+    data_timeout_ms: 200
+    # 超过此时间未收到有效下位机状态帧时，发布控制器离线状态。
+    controller_timeout_ms: 500
+    field_pose_topic: /competition/field_pose
+    target_topic: /competition/vision/target
+    controller_connected_topic: /competition/serial/controller_connected
+    controller_state_topic: /competition/serial/controller_state
+    controller_error_topic: /competition/serial/controller_error

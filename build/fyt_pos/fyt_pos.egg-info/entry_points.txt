@@ -1,0 +1,4 @@
+[console_scripts]
+field_localizer = fyt_pos.field_localizer:main
+field_visualizer = fyt_pos.field_visualizer:main
+simple_position = fyt_pos.simple_position:main

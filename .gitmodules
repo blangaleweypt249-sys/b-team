@@ -1,0 +1,6 @@
+[submodule "src/FAST_LIO2_ROS2"]
+    path = src/FAST_LIO2_ROS2
+    url = https://github.com/huskyjk/FAST_LIO2_ROS2.git
+[submodule "src/livox_ros_driver2"]
+    path = src/livox_ros_driver2
+    url = https://github.com/huskyjk/livox_ros_driver2.git

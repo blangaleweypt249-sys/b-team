@@ -1,0 +1,26 @@
+[0.489s] Invoking command in '/home/husky/TR/src/fyt_pos': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/husky/TR/build/fyt_pos/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/husky/TR/install/fyt_pos/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/fyt_pos build --build-base /home/husky/TR/build/fyt_pos/build install --record /home/husky/TR/build/fyt_pos/install.log --install-scripts $base/lib/fyt_pos --single-version-externally-managed install_data
+[0.636s] running egg_info
+[0.645s] writing ../../build/fyt_pos/fyt_pos.egg-info/PKG-INFO
+[0.645s] writing dependency_links to ../../build/fyt_pos/fyt_pos.egg-info/dependency_links.txt
+[0.646s] writing entry points to ../../build/fyt_pos/fyt_pos.egg-info/entry_points.txt
+[0.646s] writing requirements to ../../build/fyt_pos/fyt_pos.egg-info/requires.txt
+[0.646s] writing top-level names to ../../build/fyt_pos/fyt_pos.egg-info/top_level.txt
+[0.666s] reading manifest file '../../build/fyt_pos/fyt_pos.egg-info/SOURCES.txt'
+[0.666s] writing manifest file '../../build/fyt_pos/fyt_pos.egg-info/SOURCES.txt'
+[0.666s] running build
+[0.666s] running build_py
+[0.667s] copying fyt_pos/field_geometry.py -> /home/husky/TR/build/fyt_pos/build/lib/fyt_pos
+[0.667s] running install
+[0.670s] running install_lib
+[0.680s] copying /home/husky/TR/build/fyt_pos/build/lib/fyt_pos/field_geometry.py -> /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos
+[0.681s] byte-compiling /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos/field_geometry.py to field_geometry.cpython-312.pyc
+[0.682s] running install_data
+[0.682s] running install_egg_info
+[0.692s] removing '/home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos-0.1.0-py3.12.egg-info' (and everything under it)
+[0.693s] Copying ../../build/fyt_pos/fyt_pos.egg-info to /home/husky/TR/install/fyt_pos/lib/python3.12/site-packages/fyt_pos-0.1.0-py3.12.egg-info
+[0.693s] running install_scripts
+[0.779s] Installing field_localizer script to /home/husky/TR/install/fyt_pos/lib/fyt_pos
+[0.779s] Installing field_visualizer script to /home/husky/TR/install/fyt_pos/lib/fyt_pos
+[0.779s] Installing simple_position script to /home/husky/TR/install/fyt_pos/lib/fyt_pos
+[0.779s] writing list of installed files to '/home/husky/TR/build/fyt_pos/install.log'
+[0.795s] Invoked command in '/home/husky/TR/src/fyt_pos' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/husky/TR/build/fyt_pos/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/husky/TR/install/fyt_pos/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/fyt_pos build --build-base /home/husky/TR/build/fyt_pos/build install --record /home/husky/TR/build/fyt_pos/install.log --install-scripts $base/lib/fyt_pos --single-version-externally-managed install_data

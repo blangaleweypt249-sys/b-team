@@ -1,0 +1,2 @@
+/usr/bin/ar qc libserial_protocol.a CMakeFiles/serial_protocol.dir/src/serial_protocol.cpp.o
+/usr/bin/ranlib libserial_protocol.a
