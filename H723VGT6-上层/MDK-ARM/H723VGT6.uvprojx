@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H723xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../BSP/Can;../BSP/Communication;../Driver/Can;../Driver/Motor;../Driver/PcLink;../Algorithm/Pid;../App/Arm;../App/Move;../App/Ore;../App/Gate;../App/Conveyor;../App/Gripper;../Application/Communication;../Application/Robot;../Application/Task;../Config;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include</IncludePath>
+              <IncludePath>../Core/Inc;../BSP/Can;../BSP/Communication;../Driver/Can;../Driver/Motor;../Driver/PcLink;../Algorithm/Pid;../Algorithm/MotorOnlineTune;../App/Arm;../App/Move;../App/Ore;../App/Gate;../App/Conveyor;../App/Gripper;../Application/Communication;../Application/Robot;../Application/Task;../Config;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -849,6 +849,11 @@
               <FileName>pid.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Algorithm/Pid/pid.c</FilePath>
+            </File>
+            <File>
+              <FileName>motor_online_tune.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Algorithm/MotorOnlineTune/motor_online_tune.c</FilePath>
             </File>
           </Files>
         </Group>

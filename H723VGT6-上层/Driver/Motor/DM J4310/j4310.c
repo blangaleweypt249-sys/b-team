@@ -3,6 +3,8 @@
 #include <float.h>
 #include <string.h>
 
+#include "motor_online_tune.h"
+
 #define J4310_CAN_STD_ID_MAX  0x7FFU
 #define J4310_FEEDBACK_ID_MAX 0x0FU
 #define J4310_KP_MAX          500.0f
@@ -17,6 +19,8 @@ typedef struct
     uint16_t master_id;
     uint8_t feedback_id;
     j4310_limits_t limits;
+    motor_online_mit_t mit_tuner;
+    uint32_t online_last_feedback_ms;
     volatile uint32_t sequence;
     volatile j4310_feedback_t feedback;
 } j4310_context_t;
@@ -81,6 +85,35 @@ static j4310_context_t *J4310_Find(uint8_t motor_id)
     return NULL;
 }
 
+static bool J4310_ConfigureOnlineMit(j4310_context_t *context,
+                                     bool enabled)
+{
+    motor_online_mit_cfg_t cfg;
+
+    cfg.minimum_kp = 0.0f;
+    cfg.maximum_kp = J4310_KP_MAX;
+    cfg.minimum_kd = 0.0f;
+    cfg.maximum_kd = J4310_KD_MAX;
+    cfg.near_error = J4310_Clamp(context->limits.position_max_rad * 0.004f,
+                                 0.015f,
+                                 0.05f);
+    cfg.far_error = J4310_Clamp(context->limits.position_max_rad * 0.04f,
+                                0.25f,
+                                1.0f);
+    if (cfg.far_error <= cfg.near_error)
+    {
+        cfg.far_error = cfg.near_error + 0.1f;
+    }
+    cfg.velocity_scale = J4310_Clamp(
+        context->limits.velocity_max_rad_s * 0.10f, 1.0f, 3.0f);
+    cfg.diverging_rate = -0.05f;
+    cfg.stalled_rate = 0.01f;
+    cfg.stalled_velocity = 0.10f;
+    cfg.smoothing = 0.20f;
+    context->online_last_feedback_ms = 0U;
+    return MotorOnlineMit_Init(&context->mit_tuner, &cfg, enabled);
+}
+
 static bool J4310_BuildSpecial(uint8_t motor_id,
                                uint8_t command,
                                can_frame_t *frame)
@@ -137,6 +170,13 @@ bool J4310_AddMotor(uint8_t motor_id,
             j4310_context[index].master_id = master_id;
             j4310_context[index].feedback_id = feedback_id;
             j4310_context[index].limits = *limits;
+            if (!J4310_ConfigureOnlineMit(&j4310_context[index], true))
+            {
+                (void)memset(&j4310_context[index],
+                             0,
+                             sizeof(j4310_context[index]));
+                return false;
+            }
             return true;
         }
     }
@@ -150,6 +190,15 @@ bool J4310_BuildEnable(uint8_t motor_id, can_frame_t *frame)
 
 bool J4310_BuildDisable(uint8_t motor_id, can_frame_t *frame)
 {
+    j4310_context_t *context;
+
+    context = J4310_Find(motor_id);
+    if (context != NULL)
+    {
+        MotorOnlineMit_SetEnabled(&context->mit_tuner,
+                                  context->mit_tuner.enabled != 0U);
+        context->online_last_feedback_ms = 0U;
+    }
     return J4310_BuildSpecial(motor_id, J4310_CMD_DISABLE, frame);
 }
 
@@ -167,6 +216,9 @@ bool J4310_BuildMit(uint8_t motor_id,
     uint16_t kp_raw;
     uint16_t kd_raw;
     uint16_t torque;
+    j4310_feedback_t feedback;
+    float applied_kp;
+    float applied_kd;
 
     context = J4310_Find(motor_id);
     if ((context == NULL) || (frame == NULL) ||
@@ -177,6 +229,53 @@ bool J4310_BuildMit(uint8_t motor_id,
         return false;
     }
 
+    position_rad = J4310_Clamp(position_rad,
+                               -context->limits.position_max_rad,
+                               context->limits.position_max_rad);
+    velocity_rad_s = J4310_Clamp(velocity_rad_s,
+                                 -context->limits.velocity_max_rad_s,
+                                 context->limits.velocity_max_rad_s);
+    torque_nm = J4310_Clamp(torque_nm,
+                            -context->limits.torque_max_nm,
+                            context->limits.torque_max_nm);
+    kp = J4310_Clamp(kp, 0.0f, J4310_KP_MAX);
+    kd = J4310_Clamp(kd, 0.0f, J4310_KD_MAX);
+    if ((kp != context->mit_tuner.base_kp) ||
+        (kd != context->mit_tuner.base_kd))
+    {
+        if (!MotorOnlineMit_SetCommand(&context->mit_tuner, kp, kd))
+        {
+            return false;
+        }
+        context->online_last_feedback_ms = 0U;
+    }
+    if ((context->mit_tuner.enabled != 0U) &&
+        J4310_GetFeedback(motor_id, &feedback) &&
+        (feedback.updated_at_ms != context->online_last_feedback_ms))
+    {
+        float dt_s;
+
+        dt_s = 0.01f;
+        if (context->online_last_feedback_ms != 0U)
+        {
+            dt_s = (float)(uint32_t)(feedback.updated_at_ms -
+                                     context->online_last_feedback_ms) /
+                   1000.0f;
+            dt_s = J4310_Clamp(dt_s, 0.005f, 0.10f);
+        }
+        MotorOnlineMit_Update(
+            &context->mit_tuner,
+            position_rad - feedback.position_rad,
+            velocity_rad_s - feedback.velocity_rad_s,
+            feedback.velocity_rad_s,
+            dt_s,
+            &context->mit_tuner.applied_kp,
+            &context->mit_tuner.applied_kd);
+        context->online_last_feedback_ms = feedback.updated_at_ms;
+    }
+    applied_kp = context->mit_tuner.applied_kp;
+    applied_kd = context->mit_tuner.applied_kd;
+
     position = J4310_FloatToUint(position_rad,
                                  -context->limits.position_max_rad,
                                  context->limits.position_max_rad,
@@ -185,8 +284,14 @@ bool J4310_BuildMit(uint8_t motor_id,
                                  -context->limits.velocity_max_rad_s,
                                  context->limits.velocity_max_rad_s,
                                  12U);
-    kp_raw = J4310_FloatToUint(kp, 0.0f, J4310_KP_MAX, 12U);
-    kd_raw = J4310_FloatToUint(kd, 0.0f, J4310_KD_MAX, 12U);
+    kp_raw = J4310_FloatToUint(applied_kp,
+                               0.0f,
+                               J4310_KP_MAX,
+                               12U);
+    kd_raw = J4310_FloatToUint(applied_kd,
+                               0.0f,
+                               J4310_KD_MAX,
+                               12U);
     torque = J4310_FloatToUint(torque_nm,
                                -context->limits.torque_max_nm,
                                context->limits.torque_max_nm,
@@ -296,4 +401,36 @@ bool J4310_GetFeedback(uint8_t motor_id, j4310_feedback_t *feedback)
     }
 
     return feedback->rx_frames != 0U;
+}
+
+bool J4310_SetOnlineMitEnabled(uint8_t motor_id, bool enabled)
+{
+    j4310_context_t *context;
+
+    context = J4310_Find(motor_id);
+    if (context == NULL)
+    {
+        return false;
+    }
+    MotorOnlineMit_SetEnabled(&context->mit_tuner, enabled);
+    context->online_last_feedback_ms = 0U;
+    return true;
+}
+
+bool J4310_GetOnlineMitState(uint8_t motor_id,
+                             j4310_online_mit_state_t *state)
+{
+    const j4310_context_t *context;
+
+    context = J4310_Find(motor_id);
+    if ((context == NULL) || (state == NULL))
+    {
+        return false;
+    }
+    state->enabled = context->mit_tuner.enabled != 0U;
+    state->base_kp = context->mit_tuner.base_kp;
+    state->base_kd = context->mit_tuner.base_kd;
+    state->applied_kp = context->mit_tuner.applied_kp;
+    state->applied_kd = context->mit_tuner.applied_kd;
+    return true;
 }

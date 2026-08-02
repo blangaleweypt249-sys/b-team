@@ -3,6 +3,8 @@
 #include <float.h>
 #include <string.h>
 
+#include "motor_online_tune.h"
+
 #define M3508_ENCODER_COUNTS         8192U
 #define M3508_REDUCTION_RATIO        (3591.0f / 187.0f)
 #define M3508_CURRENT_RAW_MAX        16384
@@ -14,6 +16,8 @@ typedef struct
     m3508_pid_cfg_t cfg;
     float integral;
     float previous_error;
+    float full_integral_error;
+    float integral_separation_error;
     bool previous_valid;
 } m3508_pid_t;
 
@@ -30,6 +34,8 @@ typedef struct
     uint32_t feedback_monitor_started_at_ms;
     volatile m3508_timeout_stats_t timeout_stats;
     m3508_pid_t speed_pid;
+    m3508_pid_cfg_t speed_pid_base;
+    motor_online_pid_t speed_online_pid;
     m3508_pid_t position_pid;
 } m3508_context_t;
 
@@ -87,36 +93,127 @@ static float M3508_PidCalc(m3508_pid_t *pid,
                            float output_limit)
 {
     float derivative;
+    float previous_integral;
+    float integration_weight;
+    float absolute_error;
+    float candidate_integral;
+    float unsaturated_output;
     float output;
 
     derivative = 0.0f;
+    previous_integral = pid->integral;
+    integration_weight = 1.0f;
+    absolute_error = (error < 0.0f) ? -error : error;
     if (pid->previous_valid)
     {
         derivative = (error - pid->previous_error) / dt_s;
     }
 
-    pid->integral += error * dt_s;
-    if (pid->cfg.integral_limit > 0.0f)
+    if ((pid->cfg.ki <= 0.0f) || (pid->cfg.integral_limit <= 0.0f))
     {
-        pid->integral = M3508_Clamp(pid->integral,
-                                    -pid->cfg.integral_limit,
-                                    pid->cfg.integral_limit);
+        candidate_integral = 0.0f;
+    }
+    else if ((pid->integral_separation_error > 0.0f) &&
+             (absolute_error >= pid->integral_separation_error))
+    {
+        integration_weight = 0.0f;
+        candidate_integral = 0.0f;
     }
     else
     {
-        pid->integral = 0.0f;
+        if ((pid->integral_separation_error >
+             pid->full_integral_error) &&
+            (absolute_error > pid->full_integral_error))
+        {
+            integration_weight =
+                (pid->integral_separation_error - absolute_error) /
+                (pid->integral_separation_error -
+                 pid->full_integral_error);
+        }
+        candidate_integral = M3508_Clamp(
+            previous_integral + integration_weight * error * dt_s,
+            -pid->cfg.integral_limit,
+            pid->cfg.integral_limit);
     }
 
     if (output_limit > pid->cfg.output_limit)
     {
         output_limit = pid->cfg.output_limit;
     }
-    output = pid->cfg.kp * error + pid->cfg.ki * pid->integral +
-             pid->cfg.kd * derivative;
-    output = M3508_Clamp(output, -output_limit, output_limit);
+    unsaturated_output = pid->cfg.kp * error +
+                         pid->cfg.ki * candidate_integral +
+                         pid->cfg.kd * derivative;
+    output = M3508_Clamp(unsaturated_output, -output_limit, output_limit);
+    if ((integration_weight > 0.0f) &&
+        (unsaturated_output != output) &&
+        ((error * unsaturated_output) > 0.0f))
+    {
+        candidate_integral = previous_integral;
+        unsaturated_output = pid->cfg.kp * error +
+                             pid->cfg.ki * candidate_integral +
+                             pid->cfg.kd * derivative;
+        output = M3508_Clamp(unsaturated_output,
+                             -output_limit,
+                             output_limit);
+    }
+    pid->integral = candidate_integral;
     pid->previous_error = error;
     pid->previous_valid = true;
     return output;
+}
+
+static bool M3508_ConfigureOnlinePid(m3508_context_t *context,
+                                     bool enabled)
+{
+    motor_online_pid_cfg_t cfg;
+    const m3508_pid_cfg_t *base;
+
+    base = &context->speed_pid_base;
+    (void)memset(&cfg, 0, sizeof(cfg));
+    cfg.strategy = MOTOR_ONLINE_STRATEGY_HYBRID;
+    cfg.base_gains.kp = base->kp;
+    cfg.base_gains.ki = base->ki;
+    cfg.base_gains.kd = base->kd;
+    cfg.minimum_gains.kp = base->kp * 0.55f;
+    cfg.minimum_gains.ki = base->ki * 0.40f;
+    cfg.minimum_gains.kd = base->kd * 0.40f;
+    cfg.maximum_gains.kp = base->kp * 1.55f;
+    cfg.maximum_gains.ki = base->ki * 1.60f;
+    cfg.maximum_gains.kd = base->kd * 1.80f;
+    cfg.learning_rate.kp = base->kp * 0.0005f;
+    cfg.learning_rate.ki = base->ki * 0.00025f;
+    cfg.learning_rate.kd = base->kd * 0.0002f;
+    cfg.adaptation_deadband = 0.083776f;
+    cfg.normalization_epsilon = 0.05f;
+    cfg.adaptation_leak_per_s = 0.10f;
+    cfg.small_error_threshold = 0.314159f;
+    cfg.large_error_threshold = 4.712389f;
+    cfg.error_rate_threshold = 47.123890f;
+    cfg.boost_factor = 1.18f;
+    cfg.damping_factor = 0.68f;
+    cfg.smoothing = 0.10f;
+    return MotorOnlinePid_Init(&context->speed_online_pid, &cfg, enabled);
+}
+
+static float M3508_SpeedPidCalc(m3508_context_t *context,
+                                float error,
+                                float dt_s,
+                                float output_limit)
+{
+    motor_online_gains_t gains;
+
+    gains = MotorOnlinePid_Update(&context->speed_online_pid, error, dt_s);
+    context->speed_pid.cfg.kp = gains.kp;
+    context->speed_pid.cfg.ki = gains.ki;
+    context->speed_pid.cfg.kd = gains.kd;
+    context->speed_pid.cfg.integral_limit =
+        context->speed_pid_base.integral_limit;
+    context->speed_pid.cfg.output_limit =
+        context->speed_pid_base.output_limit;
+    return M3508_PidCalc(&context->speed_pid,
+                         error,
+                         dt_s,
+                         output_limit);
 }
 
 static int16_t M3508_CurrentToRaw(float current_a)
@@ -137,6 +234,8 @@ static int16_t M3508_CurrentToRaw(float current_a)
 static void M3508_ResetControl(m3508_context_t *context)
 {
     M3508_ResetPid(&context->speed_pid);
+    MotorOnlinePid_Reset(&context->speed_online_pid, true);
+    context->speed_pid.cfg = context->speed_pid_base;
     M3508_ResetPid(&context->position_pid);
 }
 
@@ -204,7 +303,17 @@ bool M3508_Init(const m3508_cfg_t *cfg)
     {
         m3508_context[index].mode = M3508_MODE_STOP;
         m3508_context[index].speed_pid.cfg = cfg->speed_pid;
+        m3508_context[index].speed_pid.full_integral_error = 0.314159f;
+        m3508_context[index].speed_pid.integral_separation_error =
+            4.712389f;
+        m3508_context[index].speed_pid_base = cfg->speed_pid;
+        if (!M3508_ConfigureOnlinePid(&m3508_context[index], true))
+        {
+            return false;
+        }
         m3508_context[index].position_pid.cfg = cfg->position_pid;
+        m3508_context[index].position_pid.full_integral_error = 0.01f;
+        m3508_context[index].position_pid.integral_separation_error = 0.25f;
         m3508_context[index].feedback.motor_id = (uint8_t)(index + 1U);
     }
     return true;
@@ -393,8 +502,8 @@ bool M3508_CalcCurrentRaw(uint8_t motor_id,
         case M3508_MODE_VELOCITY:
             if (feedback_valid)
             {
-                current_a = M3508_PidCalc(
-                    &context->speed_pid,
+                current_a = M3508_SpeedPidCalc(
+                    context,
                     context->target - feedback.output_vel_rad_s,
                     0.001f,
                     m3508_cfg.current_limit_a);
@@ -412,8 +521,8 @@ bool M3508_CalcCurrentRaw(uint8_t motor_id,
                     context->target - feedback.output_pos_rad,
                     0.001f,
                     m3508_cfg.position_vel_limit_rad_s);
-                current_a = M3508_PidCalc(
-                    &context->speed_pid,
+                current_a = M3508_SpeedPidCalc(
+                    context,
                     target_vel_rad_s - feedback.output_vel_rad_s,
                     0.001f,
                     m3508_cfg.current_limit_a);
@@ -427,5 +536,63 @@ bool M3508_CalcCurrentRaw(uint8_t motor_id,
     }
 
     *current_raw = M3508_CurrentToRaw(current_a);
+    return true;
+}
+
+bool M3508_SetSpeedPid(uint8_t motor_id,
+                       const m3508_pid_cfg_t *cfg)
+{
+    m3508_context_t *context;
+    bool enabled;
+
+    if (!M3508_IsValidId(motor_id) || !M3508_IsValidPid(cfg))
+    {
+        return false;
+    }
+    context = &m3508_context[motor_id - 1U];
+    enabled = context->speed_online_pid.enabled != 0U;
+    context->speed_pid_base = *cfg;
+    context->speed_pid.cfg = *cfg;
+    if (!M3508_ConfigureOnlinePid(context, enabled))
+    {
+        return false;
+    }
+    M3508_ResetPid(&context->speed_pid);
+    return true;
+}
+
+bool M3508_SetOnlinePidEnabled(uint8_t motor_id, bool enabled)
+{
+    m3508_context_t *context;
+
+    if (!M3508_IsValidId(motor_id))
+    {
+        return false;
+    }
+    context = &m3508_context[motor_id - 1U];
+    MotorOnlinePid_SetEnabled(&context->speed_online_pid, enabled);
+    context->speed_pid.cfg = context->speed_pid_base;
+    M3508_ResetPid(&context->speed_pid);
+    return true;
+}
+
+bool M3508_GetOnlinePidState(uint8_t motor_id,
+                             m3508_online_pid_state_t *state)
+{
+    const m3508_context_t *context;
+
+    if (!M3508_IsValidId(motor_id) || (state == NULL))
+    {
+        return false;
+    }
+    context = &m3508_context[motor_id - 1U];
+    state->enabled = context->speed_online_pid.enabled != 0U;
+    state->strategy = state->enabled ?
+                      (uint8_t)MOTOR_ONLINE_STRATEGY_HYBRID : 0U;
+    state->active_rule =
+        (uint8_t)context->speed_online_pid.active_rule;
+    state->applied_kp = context->speed_online_pid.applied_gains.kp;
+    state->applied_ki = context->speed_online_pid.applied_gains.ki;
+    state->applied_kd = context->speed_online_pid.applied_gains.kd;
     return true;
 }

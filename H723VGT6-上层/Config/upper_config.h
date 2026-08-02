@@ -9,7 +9,13 @@
 #define UPPER_PC_TIMEOUT_MS     200U
 #define UPPER_MOTOR_FEEDBACK_TIMEOUT_MS       50U
 
+#define UPPER_MG5010_CONTROL_PERIOD_MS         5U
 #define UPPER_MG5010_CURRENT_LIMIT_A           3.0f
+/* Outer-loop gains use output-shaft rad/s and produce current in A. */
+#define UPPER_MG5010_SPEED_KP                  2.291831181f
+#define UPPER_MG5010_SPEED_KI                  5.729577951f
+#define UPPER_MG5010_SPEED_KD                  0.028647890f
+#define UPPER_MG5010_SPEED_I_LIMIT             0.139626340f
 
 /* These MIT mapping limits must match the values stored in the J4310. */
 #define UPPER_J4310_POSITION_MAX_RAD           12.5f

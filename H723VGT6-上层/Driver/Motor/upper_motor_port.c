@@ -98,10 +98,11 @@ static bool UpperMotorPort_SendMg5010(const motor_cfg_t *cfg,
         break;
 
     case MOTOR_CMD_VELOCITY:
-        built = Mg5010_BuildVelocity(
+        built = Mg5010_BuildControlledVelocity(
             cfg->node_id,
             cmd->vel_rad_s,
             UPPER_MG5010_CURRENT_LIMIT_A,
+            (float)cfg->period_ms / 1000.0f,
             &command_frame);
         break;
 
@@ -269,6 +270,7 @@ static bool UpperMotorPort_SendM2006(const motor_cfg_t *cfg,
 bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
 {
     j4310_limits_t j4310_limits;
+    motor_online_gains_t mg5010_speed_gains;
     m2006_cfg_t m2006_driver_cfg;
     m3508_cfg_t m3508_driver_cfg;
     size_t index;
@@ -287,6 +289,10 @@ bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
     Mg5010_Init();
     J4310_Init();
 
+    mg5010_speed_gains.kp = UPPER_MG5010_SPEED_KP;
+    mg5010_speed_gains.ki = UPPER_MG5010_SPEED_KI;
+    mg5010_speed_gains.kd = UPPER_MG5010_SPEED_KD;
+
     j4310_limits = (j4310_limits_t)
     {
         UPPER_J4310_POSITION_MAX_RAD,
@@ -295,11 +301,22 @@ bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
     };
     for (index = 0U; index < motor_count; index++)
     {
-        if ((cfg[index].model == MOTOR_MODEL_J4310) &&
-            !J4310_AddMotor(cfg[index].node_id,
-                            CAN_J4310_MASTER_ID,
-                            cfg[index].node_id & 0x0FU,
-                            &j4310_limits))
+        if (cfg[index].model == MOTOR_MODEL_MG5010)
+        {
+            if (!Mg5010_SetOuterSpeedPid(cfg[index].node_id,
+                                         mg5010_speed_gains,
+                                         UPPER_MG5010_SPEED_I_LIMIT) ||
+                !Mg5010_SetOnlinePidEnabled(cfg[index].node_id, true))
+            {
+                return false;
+            }
+        }
+        else if ((cfg[index].model == MOTOR_MODEL_J4310) &&
+                 (!J4310_AddMotor(cfg[index].node_id,
+                                  CAN_J4310_MASTER_ID,
+                                  cfg[index].node_id & 0x0FU,
+                                  &j4310_limits) ||
+                  !J4310_SetOnlineMitEnabled(cfg[index].node_id, true)))
         {
             return false;
         }

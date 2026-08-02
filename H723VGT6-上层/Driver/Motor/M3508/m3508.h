@@ -27,6 +27,16 @@ typedef struct
 
 typedef struct
 {
+    bool enabled;
+    uint8_t strategy;
+    uint8_t active_rule;
+    float applied_kp;
+    float applied_ki;
+    float applied_kd;
+} m3508_online_pid_state_t;
+
+typedef struct
+{
     float current_limit_a;
     float position_vel_limit_rad_s;
     uint32_t feedback_timeout_ms;
@@ -72,5 +82,10 @@ bool M3508_OnFrame(uint8_t motor_id,
 bool M3508_GetFeedback(uint8_t motor_id, m3508_feedback_t *feedback);
 bool M3508_GetTimeoutStats(uint8_t motor_id,
                            m3508_timeout_stats_t *stats);
+bool M3508_SetSpeedPid(uint8_t motor_id,
+                       const m3508_pid_cfg_t *cfg);
+bool M3508_SetOnlinePidEnabled(uint8_t motor_id, bool enabled);
+bool M3508_GetOnlinePidState(uint8_t motor_id,
+                             m3508_online_pid_state_t *state);
 
 #endif

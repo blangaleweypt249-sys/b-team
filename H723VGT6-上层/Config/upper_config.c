@@ -7,7 +7,8 @@ const motor_cfg_t upper_motor_cfg[UPPER_MOTOR_COUNT] =
     [UPPER_MOTOR_ARM_MG5010] =
     {
         "arm_mg5010", MOTOR_MODEL_MG5010,
-        CAN_BUS_ARM, NODE_ARM_MG5010, UPPER_CONTROL_PERIOD_MS, 0U, true
+        CAN_BUS_ARM, NODE_ARM_MG5010,
+        UPPER_MG5010_CONTROL_PERIOD_MS, 0U, true
     },
     [UPPER_MOTOR_ARM_J4310] =
     {

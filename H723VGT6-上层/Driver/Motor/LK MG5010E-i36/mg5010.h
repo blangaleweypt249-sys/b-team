@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "can_frame.h"
+#include "motor_online_tune.h"
 
 #define MG5010_MOTOR_ID_MIN  1U
 #define MG5010_MOTOR_ID_MAX  32U
@@ -27,6 +28,20 @@ typedef struct
     bool output_pos_valid;
 } mg5010_feedback_t;
 
+typedef struct
+{
+    bool enabled;
+    uint8_t strategy;
+    uint8_t active_rule;
+    float target_vel_rad_s;
+    float measured_vel_rad_s;
+    float speed_error_rad_s;
+    float current_command_a;
+    float current_limit_a;
+    motor_online_gains_t base_gains;
+    motor_online_gains_t applied_gains;
+} mg5010_online_pid_state_t;
+
 void Mg5010_Init(void);
 bool Mg5010_BuildRun(uint8_t motor_id, can_frame_t *frame);
 bool Mg5010_BuildStop(uint8_t motor_id, can_frame_t *frame);
@@ -38,6 +53,11 @@ bool Mg5010_BuildVelocity(uint8_t motor_id,
                           float output_vel_rad_s,
                           float current_limit_a,
                           can_frame_t *frame);
+bool Mg5010_BuildControlledVelocity(uint8_t motor_id,
+                                    float output_vel_rad_s,
+                                    float current_limit_a,
+                                    float dt_s,
+                                    can_frame_t *frame);
 bool Mg5010_BuildPosition(uint8_t motor_id,
                           float output_pos_rad,
                           float max_output_vel_rad_s,
@@ -47,5 +67,11 @@ bool Mg5010_OnFrame(uint8_t motor_id,
                      uint32_t tick_ms);
 bool Mg5010_PositionReady(uint8_t motor_id);
 bool Mg5010_GetFeedback(uint8_t motor_id, mg5010_feedback_t *feedback);
+bool Mg5010_SetOuterSpeedPid(uint8_t motor_id,
+                             motor_online_gains_t gains,
+                             float integral_limit);
+bool Mg5010_SetOnlinePidEnabled(uint8_t motor_id, bool enabled);
+bool Mg5010_GetOnlinePidState(uint8_t motor_id,
+                              mg5010_online_pid_state_t *state);
 
 #endif
