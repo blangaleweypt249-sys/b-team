@@ -51,6 +51,9 @@
 "b-up\fdcan_task.o"
 "b-up\up_main.o"
 "b-up\c610_2006.o"
+"b-up\vesc_can.o"
+"b-up\vesc_motor.o"
+"b-up\chassis_main.o"
 --strict --scatter "b-up\b-up.sct"
 --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers

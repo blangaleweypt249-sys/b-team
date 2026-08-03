@@ -25,6 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "chassis_main.h"
 #include "up_main.h"
 
 /* USER CODE END Includes */
@@ -157,10 +158,22 @@ void MX_FREERTOS_Init(void) {
 __weak void StartChassisTask(void *argument)
 {
   /* USER CODE BEGIN StartChassisTask */
+  uint32_t next_tick = osKernelGetTickCount();
+  HAL_StatusTypeDef chassis_result;
+
+  (void)argument;
+  chassis_result = Chassis_Init();
+
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    if (chassis_result == HAL_OK)
+    {
+      Chassis_Run1ms();
+    }
+
+    next_tick += 1U;
+    (void)osDelayUntil(next_tick);
   }
   /* USER CODE END StartChassisTask */
 }
