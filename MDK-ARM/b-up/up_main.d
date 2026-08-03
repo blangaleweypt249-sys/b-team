@@ -39,4 +39,5 @@ b-up/up_main.o: ..\user\up\up_main.c ..\user\up\up_main.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
   ..\user\up\dm_app.h ..\user\up\dm_motor.h ..\user\up\rs_app.h \
-  ..\user\up\rs00.h ..\user\up\rs_bus.h ..\user\up\fdcan_task.h
+  ..\user\up\rs00.h ..\user\up\rs_bus.h ..\user\up\fdcan_task.h \
+  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\float.h

@@ -5,8 +5,11 @@
 
 #define RS_BUS_RX_QUEUE_MASK (RS_BUS_RX_QUEUE_SIZE - 1U)
 
+#if ((RS_BUS_RX_QUEUE_SIZE & RS_BUS_RX_QUEUE_MASK) != 0U)
+#error "RS_BUS_RX_QUEUE_SIZE must be a power of two"
+#endif
 
-HAL_StatusTypeDef RS_BusInit(rs_bus_t *bus, FDCAN_HandleTypeDef *device,
+HAL_StatusTypeDef RsBus_Init(rs_bus_t *bus, FDCAN_HandleTypeDef *device,
                              uint8_t host_id)
 {
     FDCAN_FilterTypeDef filter = { 0 };
@@ -50,26 +53,26 @@ HAL_StatusTypeDef RS_BusInit(rs_bus_t *bus, FDCAN_HandleTypeDef *device,
         return status;
     }
 
-    bus->ready = 1U;
+    bus->ready = true;
     return HAL_OK;
 }
 
-void RS_BusStop(rs_bus_t *bus)
+void RsBus_Stop(rs_bus_t *bus)
 {
-    if ((bus == NULL) || (bus->ready == 0U))
+    if ((bus == NULL) || !bus->ready)
     {
         return;
     }
 
     (void)HAL_FDCAN_Stop(bus->device);
-    bus->ready = 0U;
+    bus->ready = false;
 }
 
-HAL_StatusTypeDef RS_BusSetRxHandler(rs_bus_t *bus,
-                                     rs_bus_rx_handler_t handler,
-                                     void *context)
+HAL_StatusTypeDef RsBus_SetHandler(rs_bus_t *bus,
+                                   rs_bus_rx_handler_t handler,
+                                   void *context)
 {
-    if ((bus == NULL) || (bus->ready == 0U) || (handler == NULL))
+    if ((bus == NULL) || !bus->ready || (handler == NULL))
     {
         return HAL_ERROR;
     }
@@ -79,12 +82,12 @@ HAL_StatusTypeDef RS_BusSetRxHandler(rs_bus_t *bus,
     return HAL_OK;
 }
 
-HAL_StatusTypeDef RS_BusSend(rs_bus_t *bus, uint32_t id,
+HAL_StatusTypeDef RsBus_Send(rs_bus_t *bus, uint32_t id,
                              const uint8_t data[8])
 {
     FDCAN_TxHeaderTypeDef header = { 0 };
 
-    if ((bus == NULL) || (bus->ready == 0U) || (data == NULL))
+    if ((bus == NULL) || !bus->ready || (data == NULL))
     {
         return HAL_ERROR;
     }
@@ -104,12 +107,12 @@ HAL_StatusTypeDef RS_BusSend(rs_bus_t *bus, uint32_t id,
     return HAL_FDCAN_AddMessageToTxFifoQ(bus->device, &header, data);
 }
 
-void RS_BusHandleRxInterrupt(rs_bus_t *bus, uint32_t interrupt_flags)
+void RsBus_HandleRxIsr(rs_bus_t *bus, uint32_t interrupt_flags)
 {
     FDCAN_RxHeaderTypeDef header;
     uint8_t data[8];
 
-    if ((bus == NULL) || (bus->ready == 0U) ||
+    if ((bus == NULL) || !bus->ready ||
         ((interrupt_flags & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) == 0U))
     {
         return;
@@ -147,9 +150,9 @@ void RS_BusHandleRxInterrupt(rs_bus_t *bus, uint32_t interrupt_flags)
     }
 }
 
-void RS_BusProcessRx(rs_bus_t *bus)
+void RsBus_ProcessRx(rs_bus_t *bus)
 {
-    if ((bus == NULL) || (bus->ready == 0U) || (bus->rx_handler == NULL))
+    if ((bus == NULL) || !bus->ready || (bus->rx_handler == NULL))
     {
         return;
     }

@@ -3,6 +3,8 @@
 
 #include "rs_bus.h"
 
+#include <stdbool.h>
+
 typedef enum
 {
     RS_MOTION = 0,
@@ -51,42 +53,41 @@ typedef struct
     float pp_acceleration_rad_s2;
     float limit_speed_rad_s;
     float limit_iq;
-    uint32_t transition_due_ms;
+    uint32_t transition_due_ms; // 非阻塞模式切换的下一步时间
     uint8_t id;
     uint8_t mode;
-    uint8_t active;
-    uint8_t pp_configured;
-    uint8_t limit_valid;
-    uint8_t start_step;
-    uint8_t requested_mode;
+    bool active;
+    bool pp_configured;
+    uint8_t limit_valid;        // 已写入电机的限幅参数位图
+    uint8_t start_step;         // 模式切换状态机步骤
+    uint8_t requested_mode;     // 当前状态机的目标模式
 } rs_motor_t;
 
-HAL_StatusTypeDef RS_MotorInit(rs_motor_t *motor, rs_bus_t *bus, uint8_t id);
+HAL_StatusTypeDef RsMotor_Init(rs_motor_t *motor, rs_bus_t *bus, uint8_t id);
 
-HAL_StatusTypeDef RS_MotorSetMechanicalZero(rs_motor_t *motor);
+/** @brief 写入当前位置为机械零点，不用于普通位置回零 */
+HAL_StatusTypeDef RsMotor_SetZero(rs_motor_t *motor);
 
-HAL_StatusTypeDef RS_MotorStart(rs_motor_t *motor, rs_mode_t mode,
+HAL_StatusTypeDef RsMotor_Start(rs_motor_t *motor, rs_mode_t mode,
                                 uint32_t now_ms);
-HAL_StatusTypeDef RS_MotorStop(rs_motor_t *motor);
-HAL_StatusTypeDef RS_MotorClearFault(rs_motor_t *motor);
+HAL_StatusTypeDef RsMotor_Stop(rs_motor_t *motor);
+HAL_StatusTypeDef RsMotor_ClearFault(rs_motor_t *motor);
 
-HAL_StatusTypeDef RS_MotorSetMotion(rs_motor_t *motor, float position_rad,
+HAL_StatusTypeDef RsMotor_SetMotion(rs_motor_t *motor, float position_rad,
                                     float velocity_rad_s, float torque_nm,
                                     float kp, float kd);
-HAL_StatusTypeDef RS_MotorSetIq(rs_motor_t *motor, float iq);
-HAL_StatusTypeDef RS_MotorSetSpeed(rs_motor_t *motor, float velocity_rad_s,
+HAL_StatusTypeDef RsMotor_SetIq(rs_motor_t *motor, float iq);
+HAL_StatusTypeDef RsMotor_SetSpeed(rs_motor_t *motor, float velocity_rad_s,
                                    float max_iq);
-HAL_StatusTypeDef RS_MotorSetCsp(rs_motor_t *motor, float position_rad,
+HAL_StatusTypeDef RsMotor_SetCsp(rs_motor_t *motor, float position_rad,
                                  float max_velocity_rad_s);
-HAL_StatusTypeDef RS_MotorSetPp(rs_motor_t *motor, float position_rad,
+HAL_StatusTypeDef RsMotor_SetPp(rs_motor_t *motor, float position_rad,
                                 float max_velocity_rad_s,
                                 float acceleration_rad_s2);
-HAL_StatusTypeDef RS_MotorHaltPp(rs_motor_t *motor);
+HAL_StatusTypeDef RsMotor_HaltPp(rs_motor_t *motor);
 
-HAL_StatusTypeDef RS_MotorGetFeedback(const rs_motor_t *motor,
+HAL_StatusTypeDef RsMotor_GetFeedback(const rs_motor_t *motor,
                                       rs_feedback_t *feedback);
-void RS_MotorParse(rs_motor_t *motor, uint32_t id, const uint8_t data[8],
+void RsMotor_Parse(rs_motor_t *motor, uint32_t id, const uint8_t data[8],
                    uint32_t tick_ms);
-
-
 #endif

@@ -5,7 +5,6 @@
 
 #include <stdbool.h>
 
-
 #define RS_APP_MAX_MOTORS          8U
 #define RS_APP_CONTROL_PERIOD_MS   1U
 #define RS_APP_FEEDBACK_TIMEOUT_MS 50U
@@ -71,8 +70,8 @@ typedef struct
     rs_command_t command;
     HAL_StatusTypeDef last_result;
     uint32_t period_ms;
-    uint32_t next_control_ms;
-    bool enable_requested;
+    uint32_t next_control_ms; // 此电机下一次允许发送控制帧的时间
+    bool enable_requested;    // 上层请求，实际 active 由驱动反馈决定
 } rs_app_motor_t;
 
 typedef struct
@@ -106,19 +105,17 @@ typedef struct
     bool active;
 } rs_app_status_t;
 
-HAL_StatusTypeDef RS_AppInit(rs_app_t *app, rs_bus_t *bus,
+HAL_StatusTypeDef RsApp_Init(rs_app_t *app, rs_bus_t *bus,
                              const rs_app_motor_config_t *config,
                              uint8_t count);
-void RS_AppUpdate(rs_app_t *app, uint32_t now_ms);
-HAL_StatusTypeDef RS_AppSetCommand(rs_app_t *app, uint8_t id,
-                                   const rs_command_t *command);
-HAL_StatusTypeDef RS_AppSetEnabled(rs_app_t *app, uint8_t id, bool enabled);
-HAL_StatusTypeDef RS_AppRestart(rs_app_t *app, uint8_t id);
-HAL_StatusTypeDef RS_AppSetMechanicalZero(rs_app_t *app, uint8_t id);
-HAL_StatusTypeDef RS_AppClearFault(rs_app_t *app, uint8_t id);
-void RS_AppDisableAll(rs_app_t *app);
-bool RS_AppGetStatus(const rs_app_t *app, uint8_t id, uint32_t now_ms,
+void RsApp_Run(rs_app_t *app, uint32_t now_ms);
+HAL_StatusTypeDef RsApp_SetCmd(rs_app_t *app, uint8_t id,
+                               const rs_command_t *command);
+HAL_StatusTypeDef RsApp_Enable(rs_app_t *app, uint8_t id, bool enabled);
+HAL_StatusTypeDef RsApp_Restart(rs_app_t *app, uint8_t id);
+HAL_StatusTypeDef RsApp_SetZero(rs_app_t *app, uint8_t id);
+HAL_StatusTypeDef RsApp_ClearFault(rs_app_t *app, uint8_t id);
+void RsApp_StopAll(rs_app_t *app);
+bool RsApp_GetStatus(const rs_app_t *app, uint8_t id, uint32_t now_ms,
                      rs_app_status_t *status);
-
-
 #endif

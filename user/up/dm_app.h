@@ -45,14 +45,14 @@ typedef struct
     dm_motor_t motor;
     dm_app_mit_command_t command;
     dm_result_t last_result;
-    uint32_t next_control_ms;
-    bool enable_requested;
-    bool active;
+    uint32_t next_control_ms; // 此电机下一次允许发送控制帧的时间
+    bool enable_requested;    // 上层期望的使能状态
+    bool active;              // 已成功发送的实际使能状态
 } dm_app_motor_t;
 
 typedef struct
 {
-    dm_2006_bus_t *bus;
+    std_can_t *bus;
     dm_app_motor_t motors[DM_APP_MAX_MOTORS];
     uint8_t motor_count;
     bool ready;
@@ -68,16 +68,16 @@ typedef struct
     bool active;
 } dm_app_status_t;
 
-dm_result_t DM_AppInit(dm_app_t *app, dm_2006_bus_t *bus,
+dm_result_t DmApp_Init(dm_app_t *app, std_can_t *bus,
                        const dm_app_motor_config_t *config, uint8_t count);
-void DM_AppUpdate(dm_app_t *app, uint32_t now_ms);
-dm_result_t DM_AppSetMitCommand(dm_app_t *app, uint16_t id,
-                                const dm_app_mit_command_t *command);
-dm_result_t DM_AppSetEnabled(dm_app_t *app, uint16_t id, bool enabled);
-dm_result_t DM_AppRestart(dm_app_t *app, uint16_t id);
-dm_result_t DM_AppSetMechanicalZero(dm_app_t *app, uint16_t id);
-void DM_AppDisableAll(dm_app_t *app);
-bool DM_AppGetStatus(const dm_app_t *app, uint16_t id, uint32_t now_ms,
+void DmApp_Run(dm_app_t *app, uint32_t now_ms);
+dm_result_t DmApp_SetMitCmd(dm_app_t *app, uint16_t id,
+                            const dm_app_mit_command_t *command);
+dm_result_t DmApp_Enable(dm_app_t *app, uint16_t id, bool enabled);
+dm_result_t DmApp_Restart(dm_app_t *app, uint16_t id);
+dm_result_t DmApp_SetZero(dm_app_t *app, uint16_t id);
+void DmApp_StopAll(dm_app_t *app);
+bool DmApp_GetStatus(const dm_app_t *app, uint16_t id, uint32_t now_ms,
                      dm_app_status_t *status);
 
 #endif

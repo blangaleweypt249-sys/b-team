@@ -91,7 +91,7 @@ static const dm_app_motor_t *find_const_motor(const dm_app_t *app, uint16_t id)
 static dm_result_t send_frame(dm_app_t *app, const dm_frame_t *frame)
 {
     HAL_StatusTypeDef status =
-        DM2006_BusSend(app->bus, frame->id, frame->data);
+        StdCan_Send(app->bus, frame->id, frame->data);
 
     if (status == HAL_OK)
     {
@@ -106,8 +106,8 @@ static dm_result_t send_mode(dm_app_t *app, dm_app_motor_t *motor)
     dm_result_t result;
 
     result = motor->enable_requested
-                 ? DM_MotorBuildEnable(&motor->motor, &frame)
-                 : DM_MotorBuildDisable(&motor->motor, &frame);
+                 ? DmMotor_BuildEnable(&motor->motor, &frame)
+                 : DmMotor_BuildDisable(&motor->motor, &frame);
     if (result == DM_OK)
     {
         result = send_frame(app, &frame);
@@ -125,7 +125,7 @@ static dm_result_t send_control(dm_app_t *app, dm_app_motor_t *motor)
     dm_mit_cmd_t driver_command = command_to_driver(&motor->command);
     dm_result_t result;
 
-    result = DM_MotorBuildMit(&motor->motor, &driver_command, &frame);
+    result = DmMotor_BuildMit(&motor->motor, &driver_command, &frame);
     if (result == DM_OK)
     {
         result = send_frame(app, &frame);
@@ -133,13 +133,13 @@ static dm_result_t send_control(dm_app_t *app, dm_app_motor_t *motor)
     return result;
 }
 
-dm_result_t DM_AppInit(dm_app_t *app, dm_2006_bus_t *bus,
+dm_result_t DmApp_Init(dm_app_t *app, std_can_t *bus,
                        const dm_app_motor_config_t *config, uint8_t count)
 {
     uint8_t i;
     uint8_t j;
 
-    if ((app == NULL) || (bus == NULL) || (bus->ready == 0U) ||
+    if ((app == NULL) || (bus == NULL) || !bus->ready ||
         (config == NULL) || (count == 0U) || (count > DM_APP_MAX_MOTORS))
     {
         return DM_BAD_ARG;
@@ -167,7 +167,7 @@ dm_result_t DM_AppInit(dm_app_t *app, dm_2006_bus_t *bus,
     for (i = 0U; i < count; i++)
     {
         dm_result_t result =
-            DM_MotorInit(&app->motors[i].motor, config[i].tx_id,
+            DmMotor_Init(&app->motors[i].motor, config[i].tx_id,
                          config[i].master_id, config[i].feedback_id);
         if (result != DM_OK)
         {
@@ -176,7 +176,7 @@ dm_result_t DM_AppInit(dm_app_t *app, dm_2006_bus_t *bus,
         app->motors[i].command = config[i].command;
     }
 
-    if (DM2006_BusAddRxHandler(bus, handle_rx, app) != HAL_OK)
+    if (StdCan_AddHandler(bus, handle_rx, app) != HAL_OK)
     {
         return DM_IO_ERROR;
     }
@@ -199,11 +199,11 @@ static void handle_rx(void *context, uint16_t id, const uint8_t data[8],
     {
         dm_app_motor_t *motor = &app->motors[i];
 
-        if (DM_MotorParseFeedback(&motor->motor, id, data, 8U, tick_ms))
+        if (DmMotor_Parse(&motor->motor, id, data, 8U, tick_ms))
         {
             dm_state_t state;
 
-            if (DM_MotorGetState(&motor->motor, &state) &&
+            if (DmMotor_GetState(&motor->motor, &state) &&
                 (state.fault != DM_FAULT_NONE))
             {
                 motor->enable_requested = false;
@@ -213,7 +213,7 @@ static void handle_rx(void *context, uint16_t id, const uint8_t data[8],
     }
 }
 
-void DM_AppUpdate(dm_app_t *app, uint32_t now_ms)
+void DmApp_Run(dm_app_t *app, uint32_t now_ms)
 {
     uint8_t i;
 
@@ -244,8 +244,8 @@ void DM_AppUpdate(dm_app_t *app, uint32_t now_ms)
     }
 }
 
-dm_result_t DM_AppSetMitCommand(dm_app_t *app, uint16_t id,
-                                const dm_app_mit_command_t *command)
+dm_result_t DmApp_SetMitCmd(dm_app_t *app, uint16_t id,
+                            const dm_app_mit_command_t *command)
 {
     dm_app_motor_t *motor;
     dm_frame_t frame;
@@ -263,7 +263,7 @@ dm_result_t DM_AppSetMitCommand(dm_app_t *app, uint16_t id,
     }
 
     driver_command = command_to_driver(command);
-    result = DM_MotorBuildMit(&motor->motor, &driver_command, &frame);
+    result = DmMotor_BuildMit(&motor->motor, &driver_command, &frame);
     if (result == DM_OK)
     {
         motor->command = *command;
@@ -272,7 +272,7 @@ dm_result_t DM_AppSetMitCommand(dm_app_t *app, uint16_t id,
     return result;
 }
 
-dm_result_t DM_AppSetEnabled(dm_app_t *app, uint16_t id, bool enabled)
+dm_result_t DmApp_Enable(dm_app_t *app, uint16_t id, bool enabled)
 {
     dm_app_motor_t *motor = find_motor(app, id);
 
@@ -285,7 +285,7 @@ dm_result_t DM_AppSetEnabled(dm_app_t *app, uint16_t id, bool enabled)
     return DM_OK;
 }
 
-dm_result_t DM_AppRestart(dm_app_t *app, uint16_t id)
+dm_result_t DmApp_Restart(dm_app_t *app, uint16_t id)
 {
     dm_app_motor_t *motor = find_motor(app, id);
 
@@ -300,7 +300,7 @@ dm_result_t DM_AppRestart(dm_app_t *app, uint16_t id)
     return DM_OK;
 }
 
-dm_result_t DM_AppSetMechanicalZero(dm_app_t *app, uint16_t id)
+dm_result_t DmApp_SetZero(dm_app_t *app, uint16_t id)
 {
     dm_app_motor_t *motor = find_motor(app, id);
     dm_frame_t frame;
@@ -315,7 +315,7 @@ dm_result_t DM_AppSetMechanicalZero(dm_app_t *app, uint16_t id)
         return DM_BUSY;
     }
 
-    result = DM_MotorBuildZero(&motor->motor, &frame);
+    result = DmMotor_BuildZero(&motor->motor, &frame);
     if (result == DM_OK)
     {
         result = send_frame(app, &frame);
@@ -324,7 +324,7 @@ dm_result_t DM_AppSetMechanicalZero(dm_app_t *app, uint16_t id)
     return result;
 }
 
-void DM_AppDisableAll(dm_app_t *app)
+void DmApp_StopAll(dm_app_t *app)
 {
     uint8_t i;
 
@@ -338,7 +338,7 @@ void DM_AppDisableAll(dm_app_t *app)
     }
 }
 
-bool DM_AppGetStatus(const dm_app_t *app, uint16_t id, uint32_t now_ms,
+bool DmApp_GetStatus(const dm_app_t *app, uint16_t id, uint32_t now_ms,
                      dm_app_status_t *status)
 {
     const dm_app_motor_t *motor;
@@ -355,7 +355,7 @@ bool DM_AppGetStatus(const dm_app_t *app, uint16_t id, uint32_t now_ms,
     }
 
     memset(status, 0, sizeof(*status));
-    status->has_feedback = DM_MotorGetState(&motor->motor, &driver_feedback);
+    status->has_feedback = DmMotor_GetState(&motor->motor, &driver_feedback);
     if (status->has_feedback)
     {
         feedback_from_driver(&driver_feedback, &status->feedback);

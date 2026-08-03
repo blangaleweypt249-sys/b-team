@@ -4,8 +4,12 @@
 #include <stddef.h>
 #include <string.h>
 
-#define DM_2006_BUS_RX_QUEUE_MASK (DM_2006_BUS_RX_QUEUE_SIZE - 1U)
-#define DM_2006_BUS_STD_ID_MAX    0x7FFU
+#define STD_CAN_RX_QUEUE_MASK (STD_CAN_RX_QUEUE_SIZE - 1U)
+#define STD_CAN_ID_MAX        0x7FFU
+
+#if ((STD_CAN_RX_QUEUE_SIZE & STD_CAN_RX_QUEUE_MASK) != 0U)
+#error "STD_CAN_RX_QUEUE_SIZE must be a power of two"
+#endif
 
 static HAL_StatusTypeDef configure_filters(FDCAN_HandleTypeDef *device,
                                             const uint16_t *rx_ids,
@@ -36,7 +40,7 @@ static HAL_StatusTypeDef configure_filters(FDCAN_HandleTypeDef *device,
         else
         {
             filter.FilterType = FDCAN_FILTER_MASK;
-            filter.FilterID2 = DM_2006_BUS_STD_ID_MAX;
+            filter.FilterID2 = STD_CAN_ID_MAX;
         }
 
         if (HAL_FDCAN_ConfigFilter(device, &filter) != HAL_OK)
@@ -60,7 +64,7 @@ static bool rx_ids_valid(const uint16_t *rx_ids, uint8_t rx_id_count)
 
     for (i = 0U; i < rx_id_count; i++)
     {
-        if (rx_ids[i] > DM_2006_BUS_STD_ID_MAX)
+        if (rx_ids[i] > STD_CAN_ID_MAX)
         {
             return false;
         }
@@ -76,10 +80,8 @@ static bool rx_ids_valid(const uint16_t *rx_ids, uint8_t rx_id_count)
     return true;
 }
 
-HAL_StatusTypeDef DM2006_BusInit(dm_2006_bus_t *bus,
-                                 FDCAN_HandleTypeDef *device,
-                                 const uint16_t *rx_ids,
-                                 uint8_t rx_id_count)
+HAL_StatusTypeDef StdCan_Init(std_can_t *bus, FDCAN_HandleTypeDef *device,
+                              const uint16_t *rx_ids, uint8_t rx_id_count)
 {
     HAL_StatusTypeDef status;
 
@@ -117,27 +119,28 @@ HAL_StatusTypeDef DM2006_BusInit(dm_2006_bus_t *bus,
         return status;
     }
 
-    bus->ready = 1U;
+    bus->ready = true;
     return HAL_OK;
 }
 
-void DM2006_BusStop(dm_2006_bus_t *bus)
+void StdCan_Stop(std_can_t *bus)
 {
-    if ((bus == NULL) || (bus->ready == 0U))
+    if ((bus == NULL) || !bus->ready)
     {
         return;
     }
 
     (void)HAL_FDCAN_Stop(bus->device);
-    bus->ready = 0U;
+    bus->ready = false;
 }
 
-HAL_StatusTypeDef DM2006_BusAddRxHandler(
-    dm_2006_bus_t *bus, dm_2006_bus_rx_handler_t callback, void *context)
+HAL_StatusTypeDef StdCan_AddHandler(std_can_t *bus,
+                                    std_can_rx_handler_t callback,
+                                    void *context)
 {
     uint8_t i;
 
-    if ((bus == NULL) || (bus->ready == 0U) || (callback == NULL))
+    if ((bus == NULL) || !bus->ready || (callback == NULL))
     {
         return HAL_ERROR;
     }
@@ -150,7 +153,7 @@ HAL_StatusTypeDef DM2006_BusAddRxHandler(
             return HAL_OK;
         }
     }
-    if (bus->handler_count >= DM_2006_BUS_MAX_HANDLERS)
+    if (bus->handler_count >= STD_CAN_MAX_HANDLERS)
     {
         return HAL_ERROR;
     }
@@ -161,14 +164,14 @@ HAL_StatusTypeDef DM2006_BusAddRxHandler(
     return HAL_OK;
 }
 
-HAL_StatusTypeDef DM2006_BusSend(dm_2006_bus_t *bus, uint16_t id,
-                                 const uint8_t data[8])
+HAL_StatusTypeDef StdCan_Send(std_can_t *bus, uint16_t id,
+                              const uint8_t data[8])
 {
     FDCAN_TxHeaderTypeDef header = {0};
     HAL_StatusTypeDef status;
 
-    if ((bus == NULL) || (bus->ready == 0U) || (data == NULL) ||
-        (id > DM_2006_BUS_STD_ID_MAX))
+    if ((bus == NULL) || !bus->ready || (data == NULL) ||
+        (id > STD_CAN_ID_MAX))
     {
         return HAL_ERROR;
     }
@@ -200,13 +203,12 @@ HAL_StatusTypeDef DM2006_BusSend(dm_2006_bus_t *bus, uint16_t id,
     return status;
 }
 
-void DM2006_BusHandleRxInterrupt(dm_2006_bus_t *bus,
-                                 uint32_t interrupt_flags)
+void StdCan_HandleRxIsr(std_can_t *bus, uint32_t interrupt_flags)
 {
     FDCAN_RxHeaderTypeDef header;
     uint8_t data[8];
 
-    if ((bus == NULL) || (bus->ready == 0U) ||
+    if ((bus == NULL) || !bus->ready ||
         ((interrupt_flags & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) == 0U))
     {
         return;
@@ -231,7 +233,7 @@ void DM2006_BusHandleRxInterrupt(dm_2006_bus_t *bus,
         }
 
         head = bus->rx_head;
-        next = (uint8_t)((head + 1U) & DM_2006_BUS_RX_QUEUE_MASK);
+        next = (uint8_t)((head + 1U) & STD_CAN_RX_QUEUE_MASK);
         if (next == bus->rx_tail)
         {
             bus->diag.rx_overflow_count++;
@@ -247,10 +249,9 @@ void DM2006_BusHandleRxInterrupt(dm_2006_bus_t *bus,
     }
 }
 
-void DM2006_BusHandleErrorInterrupt(dm_2006_bus_t *bus,
-                                    uint32_t interrupt_flags)
+void StdCan_HandleErrorIsr(std_can_t *bus, uint32_t interrupt_flags)
 {
-    if ((bus == NULL) || (bus->ready == 0U))
+    if ((bus == NULL) || !bus->ready)
     {
         return;
     }
@@ -268,22 +269,22 @@ void DM2006_BusHandleErrorInterrupt(dm_2006_bus_t *bus,
     }
 }
 
-void DM2006_BusProcessRx(dm_2006_bus_t *bus)
+void StdCan_ProcessRx(std_can_t *bus)
 {
-    if ((bus == NULL) || (bus->ready == 0U))
+    if ((bus == NULL) || !bus->ready)
     {
         return;
     }
 
     while (bus->rx_tail != bus->rx_head)
     {
-        dm_2006_bus_frame_t frame;
+        std_can_frame_t frame;
         uint8_t tail = bus->rx_tail;
         uint8_t i;
 
         frame = bus->rx_queue[tail];
         __DMB();
-        bus->rx_tail = (uint8_t)((tail + 1U) & DM_2006_BUS_RX_QUEUE_MASK);
+        bus->rx_tail = (uint8_t)((tail + 1U) & STD_CAN_RX_QUEUE_MASK);
 
         for (i = 0U; i < bus->handler_count; i++)
         {
@@ -293,8 +294,7 @@ void DM2006_BusProcessRx(dm_2006_bus_t *bus)
     }
 }
 
-void DM2006_BusGetDiag(const dm_2006_bus_t *bus,
-                       dm_2006_bus_diag_t *diag)
+void StdCan_GetDiag(const std_can_t *bus, std_can_diag_t *diag)
 {
     if ((bus != NULL) && (diag != NULL))
     {

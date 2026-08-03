@@ -5,31 +5,30 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-static rs_bus_t rs_bus;
-static dm_2006_bus_t dm_2006_bus;
+static rs_bus_t rs_bus; // FDCAN2：RS 扩展帧
+static std_can_t std_can; // FDCAN3：DM 与 M2006 标准帧
 static bool task_ready;
 
-HAL_StatusTypeDef FDCAN_TaskInit(const fdcan_task_config_t *config)
+HAL_StatusTypeDef Fdcan_Init(const fdcan_config_t *config)
 {
     if (task_ready)
     {
         return HAL_OK;
     }
-    if ((config == NULL) || (config->dm_2006_rx_ids == NULL) ||
-        (config->dm_2006_rx_id_count == 0U))
+    if ((config == NULL) || (config->std_rx_ids == NULL) ||
+        (config->std_rx_id_count == 0U))
     {
         return HAL_ERROR;
     }
 
-    if (RS_BusInit(&rs_bus, &hfdcan2, config->rs_host_id) != HAL_OK)
+    if (RsBus_Init(&rs_bus, &hfdcan2, config->rs_host_id) != HAL_OK)
     {
         return HAL_ERROR;
     }
-    if (DM2006_BusInit(&dm_2006_bus, &hfdcan3,
-                       config->dm_2006_rx_ids,
-                       config->dm_2006_rx_id_count) != HAL_OK)
+    if (StdCan_Init(&std_can, &hfdcan3, config->std_rx_ids,
+                    config->std_rx_id_count) != HAL_OK)
     {
-        RS_BusStop(&rs_bus);
+        RsBus_Stop(&rs_bus);
         return HAL_ERROR;
     }
 
@@ -37,57 +36,58 @@ HAL_StatusTypeDef FDCAN_TaskInit(const fdcan_task_config_t *config)
     return HAL_OK;
 }
 
-void FDCAN_TaskRun1ms(void)
+void Fdcan_Run1ms(void)
 {
     if (!task_ready)
     {
         return;
     }
 
-    RS_BusProcessRx(&rs_bus);
-    DM2006_BusProcessRx(&dm_2006_bus);
+    RsBus_ProcessRx(&rs_bus);
+    StdCan_ProcessRx(&std_can);
 }
 
-void FDCAN_TaskStop(void)
+void Fdcan_Stop(void)
 {
     if (!task_ready)
     {
         return;
     }
 
-    RS_BusStop(&rs_bus);
-    DM2006_BusStop(&dm_2006_bus);
+    RsBus_Stop(&rs_bus);
+    StdCan_Stop(&std_can);
     task_ready = false;
 }
 
-rs_bus_t *FDCAN_TaskGetRsBus(void)
+rs_bus_t *Fdcan_GetRsBus(void)
 {
     return task_ready ? &rs_bus : NULL;
 }
 
-dm_2006_bus_t *FDCAN_TaskGetDm2006Bus(void)
+std_can_t *Fdcan_GetStdBus(void)
 {
-    return task_ready ? &dm_2006_bus : NULL;
+    return task_ready ? &std_can : NULL;
 }
 
-void FDCAN_TaskHandleRxInterrupt(FDCAN_HandleTypeDef *hfdcan,
-                                 uint32_t interrupt_flags)
+void Fdcan_HandleRxIsr(FDCAN_HandleTypeDef *hfdcan,
+                       uint32_t interrupt_flags)
 {
+    // 中断只按总线取帧入队，协议解析留在 1 ms 调度中执行。
     if (hfdcan == &hfdcan2)
     {
-        RS_BusHandleRxInterrupt(&rs_bus, interrupt_flags);
+        RsBus_HandleRxIsr(&rs_bus, interrupt_flags);
     }
     else if (hfdcan == &hfdcan3)
     {
-        DM2006_BusHandleRxInterrupt(&dm_2006_bus, interrupt_flags);
+        StdCan_HandleRxIsr(&std_can, interrupt_flags);
     }
 }
 
-void FDCAN_TaskHandleErrorInterrupt(FDCAN_HandleTypeDef *hfdcan,
-                                    uint32_t interrupt_flags)
+void Fdcan_HandleErrorIsr(FDCAN_HandleTypeDef *hfdcan,
+                          uint32_t interrupt_flags)
 {
     if (hfdcan == &hfdcan3)
     {
-        DM2006_BusHandleErrorInterrupt(&dm_2006_bus, interrupt_flags);
+        StdCan_HandleErrorIsr(&std_can, interrupt_flags);
     }
 }

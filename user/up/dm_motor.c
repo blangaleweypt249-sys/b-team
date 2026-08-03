@@ -80,7 +80,7 @@ static dm_result_t build_special_frame(const dm_motor_t *motor, uint8_t command,
     return DM_OK;
 }
 
-dm_result_t DM_MotorInit(dm_motor_t *motor, uint16_t tx_id, uint16_t master_id,
+dm_result_t DmMotor_Init(dm_motor_t *motor, uint16_t tx_id, uint16_t master_id,
                          uint8_t feedback_id)
 {
     if ((motor == NULL) || (tx_id > DM_STD_ID_MAX) ||
@@ -99,7 +99,7 @@ dm_result_t DM_MotorInit(dm_motor_t *motor, uint16_t tx_id, uint16_t master_id,
     return DM_OK;
 }
 
-dm_result_t DM_MotorSetLimits(dm_motor_t *motor, float p_max, float v_max,
+dm_result_t DmMotor_SetLimits(dm_motor_t *motor, float p_max, float v_max,
                               float t_max)
 {
     if ((motor == NULL) || !valid_float(p_max) || !valid_float(v_max) ||
@@ -115,22 +115,22 @@ dm_result_t DM_MotorSetLimits(dm_motor_t *motor, float p_max, float v_max,
     return DM_OK;
 }
 
-dm_result_t DM_MotorBuildEnable(const dm_motor_t *motor, dm_frame_t *frame)
+dm_result_t DmMotor_BuildEnable(const dm_motor_t *motor, dm_frame_t *frame)
 {
     return build_special_frame(motor, DM_CMD_ENABLE, frame);
 }
 
-dm_result_t DM_MotorBuildDisable(const dm_motor_t *motor, dm_frame_t *frame)
+dm_result_t DmMotor_BuildDisable(const dm_motor_t *motor, dm_frame_t *frame)
 {
     return build_special_frame(motor, DM_CMD_DISABLE, frame);
 }
 
-dm_result_t DM_MotorBuildZero(const dm_motor_t *motor, dm_frame_t *frame)
+dm_result_t DmMotor_BuildZero(const dm_motor_t *motor, dm_frame_t *frame)
 {
     return build_special_frame(motor, DM_CMD_ZERO, frame);
 }
 
-dm_result_t DM_MotorBuildMit(const dm_motor_t *motor, const dm_mit_cmd_t *cmd,
+dm_result_t DmMotor_BuildMit(const dm_motor_t *motor, const dm_mit_cmd_t *cmd,
                              dm_frame_t *frame)
 {
     uint16_t position;
@@ -182,8 +182,8 @@ dm_result_t DM_MotorBuildMit(const dm_motor_t *motor, const dm_mit_cmd_t *cmd,
     return DM_OK;
 }
 
-bool DM_MotorParseFeedback(dm_motor_t *motor, uint16_t id, const uint8_t *data,
-                           uint8_t length, uint32_t tick_ms)
+bool DmMotor_Parse(dm_motor_t *motor, uint16_t id, const uint8_t *data,
+                   uint8_t length, uint32_t tick_ms)
 {
     uint16_t position;
     uint16_t velocity;
@@ -201,6 +201,7 @@ bool DM_MotorParseFeedback(dm_motor_t *motor, uint16_t id, const uint8_t *data,
     velocity = (uint16_t)(((uint16_t)data[3] << 4) | (data[4] >> 4));
     torque = (uint16_t)((((uint16_t)data[4] & 0x0FU) << 8) | data[5]);
 
+    // 奇数序号表示正在写入，偶数序号表示反馈完整。
     seq = motor->state_seq;
     motor->state_seq = seq + 1U;
     motor->state.position_rad =
@@ -221,7 +222,7 @@ bool DM_MotorParseFeedback(dm_motor_t *motor, uint16_t id, const uint8_t *data,
     return true;
 }
 
-bool DM_MotorGetState(const dm_motor_t *motor, dm_state_t *state)
+bool DmMotor_GetState(const dm_motor_t *motor, dm_state_t *state)
 {
     uint32_t before;
     uint32_t after;
@@ -231,6 +232,7 @@ bool DM_MotorGetState(const dm_motor_t *motor, dm_state_t *state)
         return false;
     }
 
+    // 若读取期间收到新反馈，则重新复制一次完整快照。
     for (;;)
     {
         before = motor->state_seq;

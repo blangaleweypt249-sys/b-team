@@ -37,5 +37,6 @@ b-up/rs00.o: ..\user\up\rs00.c ..\user\up\rs00.h ..\user\up\rs_bus.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
+  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\float.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\string.h

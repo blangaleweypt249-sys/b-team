@@ -107,7 +107,7 @@ static HAL_StatusTypeDef send_control(rs_app_motor_t *motor)
     switch (command->mode)
     {
     case RS_MOTION:
-        return RS_MotorSetMotion(
+        return RsMotor_SetMotion(
             &motor->motor,
             command->data.motion.angle_deg * RS_APP_RAD_PER_DEG,
             command->data.motion.speed_rad_s,
@@ -115,21 +115,21 @@ static HAL_StatusTypeDef send_control(rs_app_motor_t *motor)
             command->data.motion.kp, command->data.motion.kd);
 
     case RS_IQ:
-        return RS_MotorSetIq(&motor->motor, command->data.iq.iq);
+        return RsMotor_SetIq(&motor->motor, command->data.iq.iq);
 
     case RS_SPD:
-        return RS_MotorSetSpeed(&motor->motor,
+        return RsMotor_SetSpeed(&motor->motor,
                                 command->data.speed.speed_rad_s,
                                 command->data.speed.max_iq);
 
     case RS_CSP:
-        return RS_MotorSetCsp(
+        return RsMotor_SetCsp(
             &motor->motor,
             command->data.csp.angle_deg * RS_APP_RAD_PER_DEG,
             command->data.csp.max_speed_rad_s);
 
     case RS_PP:
-        return RS_MotorSetPp(
+        return RsMotor_SetPp(
             &motor->motor,
             command->data.pp.angle_deg * RS_APP_RAD_PER_DEG,
             command->data.pp.max_speed_rad_s,
@@ -156,7 +156,7 @@ static void handle_rx(void *context, uint32_t id, const uint8_t data[8],
         rs_app_motor_t *motor = &app->motors[i];
         uint32_t previous_sequence = motor->motor.feedback.sequence;
 
-        RS_MotorParse(&motor->motor, id, data, tick_ms);
+        RsMotor_Parse(&motor->motor, id, data, tick_ms);
         if ((motor->motor.feedback.sequence != previous_sequence) &&
             ((motor->motor.feedback.valid & RS_FDB_FAULT) != 0U) &&
             (motor->motor.feedback.fault != 0U))
@@ -167,14 +167,14 @@ static void handle_rx(void *context, uint32_t id, const uint8_t data[8],
     }
 }
 
-HAL_StatusTypeDef RS_AppInit(rs_app_t *app, rs_bus_t *bus,
+HAL_StatusTypeDef RsApp_Init(rs_app_t *app, rs_bus_t *bus,
                              const rs_app_motor_config_t *config,
                              uint8_t count)
 {
     uint8_t i;
     uint8_t j;
 
-    if ((app == NULL) || (bus == NULL) || (bus->ready == 0U) ||
+    if ((app == NULL) || (bus == NULL) || !bus->ready ||
         (config == NULL) || (count == 0U) || (count > RS_APP_MAX_MOTORS))
     {
         return HAL_ERROR;
@@ -204,7 +204,7 @@ HAL_StatusTypeDef RS_AppInit(rs_app_t *app, rs_bus_t *bus,
     {
         rs_app_motor_t *motor = &app->motors[i];
 
-        if (RS_MotorInit(&motor->motor, bus, config[i].id) != HAL_OK)
+        if (RsMotor_Init(&motor->motor, bus, config[i].id) != HAL_OK)
         {
             return HAL_ERROR;
         }
@@ -214,7 +214,7 @@ HAL_StatusTypeDef RS_AppInit(rs_app_t *app, rs_bus_t *bus,
                                : config[i].period_ms;
     }
 
-    if (RS_BusSetRxHandler(bus, handle_rx, app) != HAL_OK)
+    if (RsBus_SetHandler(bus, handle_rx, app) != HAL_OK)
     {
         return HAL_ERROR;
     }
@@ -223,7 +223,7 @@ HAL_StatusTypeDef RS_AppInit(rs_app_t *app, rs_bus_t *bus,
     return HAL_OK;
 }
 
-void RS_AppUpdate(rs_app_t *app, uint32_t now_ms)
+void RsApp_Run(rs_app_t *app, uint32_t now_ms)
 {
     uint8_t i;
 
@@ -240,7 +240,7 @@ void RS_AppUpdate(rs_app_t *app, uint32_t now_ms)
         {
             if (motor->motor.active || (motor->motor.start_step != 0U))
             {
-                motor->last_result = RS_MotorStop(&motor->motor);
+                motor->last_result = RsMotor_Stop(&motor->motor);
             }
             continue;
         }
@@ -254,7 +254,7 @@ void RS_AppUpdate(rs_app_t *app, uint32_t now_ms)
             (motor->motor.start_step != 0U))
         {
             motor->last_result =
-                RS_MotorStart(&motor->motor, motor->command.mode, now_ms);
+                RsMotor_Start(&motor->motor, motor->command.mode, now_ms);
             if (motor->last_result != HAL_OK)
             {
                 continue;
@@ -269,8 +269,8 @@ void RS_AppUpdate(rs_app_t *app, uint32_t now_ms)
     }
 }
 
-HAL_StatusTypeDef RS_AppSetCommand(rs_app_t *app, uint8_t id,
-                                   const rs_command_t *command)
+HAL_StatusTypeDef RsApp_SetCmd(rs_app_t *app, uint8_t id,
+                               const rs_command_t *command)
 {
     rs_app_motor_t *motor;
 
@@ -289,7 +289,7 @@ HAL_StatusTypeDef RS_AppSetCommand(rs_app_t *app, uint8_t id,
     return HAL_OK;
 }
 
-HAL_StatusTypeDef RS_AppSetEnabled(rs_app_t *app, uint8_t id, bool enabled)
+HAL_StatusTypeDef RsApp_Enable(rs_app_t *app, uint8_t id, bool enabled)
 {
     rs_app_motor_t *motor = find_motor(app, id);
 
@@ -302,7 +302,7 @@ HAL_StatusTypeDef RS_AppSetEnabled(rs_app_t *app, uint8_t id, bool enabled)
     return HAL_OK;
 }
 
-HAL_StatusTypeDef RS_AppRestart(rs_app_t *app, uint8_t id)
+HAL_StatusTypeDef RsApp_Restart(rs_app_t *app, uint8_t id)
 {
     rs_app_motor_t *motor = find_motor(app, id);
 
@@ -313,13 +313,13 @@ HAL_StatusTypeDef RS_AppRestart(rs_app_t *app, uint8_t id)
 
     motor->enable_requested = true;
     motor->next_control_ms = 0U;
-    motor->motor.active = 1U;
+    motor->motor.active = true;
     motor->motor.start_step = 0U;
     motor->motor.mode = UINT8_MAX;
     return HAL_OK;
 }
 
-HAL_StatusTypeDef RS_AppSetMechanicalZero(rs_app_t *app, uint8_t id)
+HAL_StatusTypeDef RsApp_SetZero(rs_app_t *app, uint8_t id)
 {
     rs_app_motor_t *motor = find_motor(app, id);
 
@@ -327,11 +327,11 @@ HAL_StatusTypeDef RS_AppSetMechanicalZero(rs_app_t *app, uint8_t id)
     {
         return HAL_ERROR;
     }
-    motor->last_result = RS_MotorSetMechanicalZero(&motor->motor);
+    motor->last_result = RsMotor_SetZero(&motor->motor);
     return motor->last_result;
 }
 
-HAL_StatusTypeDef RS_AppClearFault(rs_app_t *app, uint8_t id)
+HAL_StatusTypeDef RsApp_ClearFault(rs_app_t *app, uint8_t id)
 {
     rs_app_motor_t *motor = find_motor(app, id);
 
@@ -339,11 +339,11 @@ HAL_StatusTypeDef RS_AppClearFault(rs_app_t *app, uint8_t id)
     {
         return HAL_ERROR;
     }
-    motor->last_result = RS_MotorClearFault(&motor->motor);
+    motor->last_result = RsMotor_ClearFault(&motor->motor);
     return motor->last_result;
 }
 
-void RS_AppDisableAll(rs_app_t *app)
+void RsApp_StopAll(rs_app_t *app)
 {
     uint8_t i;
 
@@ -357,7 +357,7 @@ void RS_AppDisableAll(rs_app_t *app)
     }
 }
 
-bool RS_AppGetStatus(const rs_app_t *app, uint8_t id, uint32_t now_ms,
+bool RsApp_GetStatus(const rs_app_t *app, uint8_t id, uint32_t now_ms,
                      rs_app_status_t *status)
 {
     const rs_app_motor_t *motor;
@@ -374,7 +374,7 @@ bool RS_AppGetStatus(const rs_app_t *app, uint8_t id, uint32_t now_ms,
     }
 
     memset(status, 0, sizeof(*status));
-    (void)RS_MotorGetFeedback(&motor->motor, &driver_feedback);
+    (void)RsMotor_GetFeedback(&motor->motor, &driver_feedback);
     status->feedback.angle_deg =
         driver_feedback.position_rad / RS_APP_RAD_PER_DEG;
     status->feedback.speed_rad_s = driver_feedback.velocity_rad_s;
@@ -390,7 +390,7 @@ bool RS_AppGetStatus(const rs_app_t *app, uint8_t id, uint32_t now_ms,
                      ((uint32_t)(now_ms - motor->motor.last_rx_ms) <=
                       RS_APP_FEEDBACK_TIMEOUT_MS);
     status->enable_requested = motor->enable_requested;
-    status->active = motor->motor.active != 0U;
+    status->active = motor->motor.active;
     status->last_result = motor->last_result;
     return true;
 }

@@ -352,13 +352,13 @@ void HAL_FDCAN_MspDeInit(FDCAN_HandleTypeDef* fdcanHandle)
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan,
                                uint32_t interrupt_flags)
 {
-  FDCAN_TaskHandleRxInterrupt(hfdcan, interrupt_flags);
+  Fdcan_HandleRxIsr(hfdcan, interrupt_flags);
 }
 
 void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan,
                                    uint32_t interrupt_flags)
 {
-  FDCAN_TaskHandleErrorInterrupt(hfdcan, interrupt_flags);
+  Fdcan_HandleErrorIsr(hfdcan, interrupt_flags);
 }
 
 /* USER CODE END 1 */

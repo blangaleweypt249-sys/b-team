@@ -118,7 +118,7 @@ static bool attach_motor(c610_bus_t *bus, m2006_motor_t *motor,
     motor->pid.integral_limit = current_limit;
     motor->pid.output_limit = current_limit;
     motor->target_position_deg = config->target_position_deg;
-    motor->enabled = true;
+    motor->enabled = false;
 
     bus->motors[slot] = motor;
     bus->group_used[slot / 4U] = true;
@@ -134,6 +134,7 @@ static void update_feedback(m2006_motor_t *motor, const uint8_t data[8],
     {
         int32_t delta = (int32_t)angle - motor->rotor_angle;
 
+        // 对编码器回绕进行补偿，保留多圈累计位置。
         if (delta > C610_ENCODER_HALF)
         {
             delta -= C610_ENCODER_COUNTS;
@@ -190,6 +191,7 @@ static void update_motor(m2006_motor_t *motor, uint32_t now_ms)
                     ((uint32_t)(now_ms - motor->last_feedback_ms) <=
                      C610_FEEDBACK_TIMEOUT_MS);
 
+    // 未使能或反馈超时后立即清 PID，并在组控制帧中发送零电流。
     if (!motor->online || !motor->enabled)
     {
         pid_reset(&motor->pid);
@@ -221,6 +223,7 @@ static HAL_StatusTypeDef send_group(c610_bus_t *bus, uint8_t group)
     uint16_t tx_id = (group == 0U) ? C610_COMMAND_ID_1_TO_4
                                    : C610_COMMAND_ID_5_TO_8;
 
+    // C610 每帧同时控制连续的四个电机 ID，未使用槽位填零。
     for (i = 0U; i < 4U; i++)
     {
         m2006_motor_t *motor = bus->motors[group * 4U + i];
@@ -230,17 +233,17 @@ static HAL_StatusTypeDef send_group(c610_bus_t *bus, uint8_t group)
         data[i * 2U + 1U] = (uint8_t)current;
     }
 
-    return DM2006_BusSend(bus->can, tx_id, data);
+    return StdCan_Send(bus->can, tx_id, data);
 }
 
-HAL_StatusTypeDef C610_Init(c610_bus_t *bus, dm_2006_bus_t *can,
+HAL_StatusTypeDef C610_Init(c610_bus_t *bus, std_can_t *can,
                             m2006_motor_t *motors,
                             const m2006_config_t *configs,
                             uint8_t motor_count)
 {
     uint8_t i;
 
-    if ((bus == NULL) || (can == NULL) || (can->ready == 0U) ||
+    if ((bus == NULL) || (can == NULL) || !can->ready ||
         (motors == NULL) || (configs == NULL) || (motor_count == 0U) ||
         (motor_count > C610_MAX_MOTORS))
     {
@@ -252,7 +255,7 @@ HAL_StatusTypeDef C610_Init(c610_bus_t *bus, dm_2006_bus_t *can,
     bus->can = can;
     bus->motor_list = motors;
     bus->motor_count = motor_count;
-    bus->last_control_ms = HAL_GetTick();
+    bus->last_control_ms = 0U;
 
     for (i = 0U; i < motor_count; i++)
     {
@@ -263,7 +266,7 @@ HAL_StatusTypeDef C610_Init(c610_bus_t *bus, dm_2006_bus_t *can,
         }
     }
 
-    if (DM2006_BusAddRxHandler(can, handle_rx, bus) != HAL_OK)
+    if (StdCan_AddHandler(can, handle_rx, bus) != HAL_OK)
     {
         return HAL_ERROR;
     }
@@ -271,7 +274,7 @@ HAL_StatusTypeDef C610_Init(c610_bus_t *bus, dm_2006_bus_t *can,
     return HAL_OK;
 }
 
-void C610_Update(c610_bus_t *bus, uint32_t now_ms)
+void C610_Run(c610_bus_t *bus, uint32_t now_ms)
 {
     uint8_t i;
 
@@ -299,18 +302,19 @@ void C610_Update(c610_bus_t *bus, uint32_t now_ms)
     }
 }
 
-void C610_SetPosition(c610_bus_t *bus, uint8_t id,
-                      float target_position_deg)
+HAL_StatusTypeDef C610_SetPos(c610_bus_t *bus, uint8_t id,
+                              float target_position_deg)
 {
     m2006_motor_t *motor = find_motor(bus, id);
 
     if ((motor == NULL) || !finite_float(target_position_deg))
     {
-        return;
+        return HAL_ERROR;
     }
 
     motor->target_position_deg = target_position_deg;
     motor->enabled = true;
+    return HAL_OK;
 }
 
 HAL_StatusTypeDef C610_SetPid(c610_bus_t *bus, uint8_t id,
@@ -328,7 +332,7 @@ HAL_StatusTypeDef C610_SetPid(c610_bus_t *bus, uint8_t id,
     return HAL_OK;
 }
 
-void C610_SetEnabled(c610_bus_t *bus, uint8_t id, bool enabled)
+void C610_Enable(c610_bus_t *bus, uint8_t id, bool enabled)
 {
     m2006_motor_t *motor = find_motor(bus, id);
 
@@ -345,7 +349,7 @@ void C610_SetEnabled(c610_bus_t *bus, uint8_t id, bool enabled)
     motor->enabled = enabled;
 }
 
-void C610_DisableAll(c610_bus_t *bus)
+void C610_StopAll(c610_bus_t *bus)
 {
     uint8_t i;
 
@@ -355,7 +359,7 @@ void C610_DisableAll(c610_bus_t *bus)
     }
     for (i = 0U; i < bus->motor_count; i++)
     {
-        C610_SetEnabled(bus, bus->motor_list[i].id, false);
+        C610_Enable(bus, bus->motor_list[i].id, false);
     }
 }
 

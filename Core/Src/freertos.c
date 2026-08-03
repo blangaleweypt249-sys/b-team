@@ -179,14 +179,14 @@ __weak void StartLiftTask(void *argument)
   HAL_StatusTypeDef up_result;
 
   (void)argument;
-  up_result = Up_MainInit();
+  up_result = Up_Init();
 
   /* Infinite loop */
   for(;;)
   {
     if (up_result == HAL_OK)
     {
-      Up_MainRun1ms();
+      Up_Run1ms();
     }
 
     next_tick += 1U;
