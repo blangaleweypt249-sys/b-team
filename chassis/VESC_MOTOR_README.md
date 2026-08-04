@@ -1,62 +1,41 @@
-# STM32F405 + VESC + U12 KV120
+STM32F405 + VESC + U12 KV120
 
-## Hardware
+硬件信息
+CAN1 接收 / 发送引脚：PB8/PB9
+CAN 波特率：1 Mbit/s（1 兆比特每秒）
+VESC 控制器节点 ID：67
+电机：U12 KV120，36N42P（42 个磁极，21 对极）
+1000 转 / 分钟示例
 
-- CAN1 RX/TX: PB8/PB9
-- CAN bitrate: 1 Mbit/s
-- VESC controller ID: 67
-- Motor: U12 KV120, 36N42P (42 poles, 21 pole pairs)
+VESC 速度控制使用电转速 (eRPM)：
+电机实际转速 1000 RPM × 21 极对数 = 21000 电转速 (eRPM)
+示例每 20 毫秒发送一次控制指令：
+扩展帧 CAN ID：0x343（计算方式：CAN_PACKET_SET_RPM << 8 | 67）
+数据长度 DLC：4 字节
+报文数据：00 00 52 08（代表 21000，大端有符号 32 位整型）
+VESC 端配置：开启 FOC 磁场定向控制，设置电机磁极数 42，CAN 节点 ID 为 67，CAN 波特率 1Mbit/s。
+在 VESC Tool 软件中根据实际电池、驱动器散热条件、机械负载设置电压、电流限制；不要直接把电机 180 秒峰值电流参数直接复制到持续电流限制项。
 
-## 1000 RPM example
+USART1 串口指令桥接
 
-VESC speed control uses electrical RPM (eRPM):
+USART1 串口控制台，可以无需重新烧录单片机固件，通过串口下发指令间接控制 VESC‑CAN 电机：
+引脚：PA9 (发送 TX) / PA10 (接收 RX)，复用功能 AF7
+串口参数：115200 8N1（波特率分频值由运行时 APB2 时钟自动计算，不会修改芯片时钟配置）
+报文格式：ASCII 文本，逗号分隔，换行符\n作为一条指令结束
+表格
+指令	功能	底层 CAN 报文
 
-`1000 motor RPM * 21 pole pairs = 21000 eRPM`
+R,<id>,<erpm>	设置电转速	CAN_PACKET_SET_RPM (编号 3)
+C,<id>,<mA>	设置输出电流（单位毫安）	CAN_PACKET_SET_CURRENT (编号 1)
+D,<id>,<duty*1e5>	设置占空比（50000 代表 50% 占空比）	CAN_PACKET_SET_DUTY (编号 0)
+B,<id>,<mA>	设置制动电流（单位毫安）	CAN_PACKET_SET_CURRENT_BRAKE (编号 2)
+P,<id>,<kp>,<ki>,<kd>	设置速度环 PID 参数	预留占位，暂未实现（需要 VESC 多帧 COMM 协议）
 
-The example sends the command every 20 ms:
-
-- Extended CAN ID: `0x343` (`CAN_PACKET_SET_RPM << 8 | 67`)
-- DLC: `4`
-- Data: `00 00 52 08` (21000, signed big-endian int32)
-
-Configure the VESC for FOC, 42 motor poles, CAN ID 67, and 1 Mbit/s.
-Set voltage and current limits in VESC Tool for the actual battery, controller,
-cooling, and mechanical load; do not copy the motor's 180-second peak rating
-directly into the continuous-current limit.
-
-## USART1 command bridge
-
-A serial console on **USART1** lets you drive the VESC over CAN without
-re-flashing:
-
-- Pins: **PA9 (TX) / PA10 (RX)**, AF7
-- Format: **115200 8N1** (divider computed from the configured APB2 clock at
-  runtime — the clock configuration is not modified)
-- Line format: ASCII, comma separated, terminated by `\n`
-
-| Command | Meaning | Wire payload |
-|---------|---------|--------------|
-| `R,<id>,<erpm>` | set electrical RPM | CAN_PACKET_SET_RPM (3) |
-| `C,<id>,<mA>` | set current (mA) | CAN_PACKET_SET_CURRENT (1) |
-| `D,<id>,<duty*1e5>` | set duty (50000 = 0.50) | CAN_PACKET_SET_DUTY (0) |
-| `B,<id>,<mA>` | set brake current (mA) | CAN_PACKET_SET_CURRENT_BRAKE (2) |
-| `P,<id>,<kp>,<ki>,<kd>` | set speed PID | **stub / reserved** (multi-frame COMM) |
-
-Examples (controller id 67):
-
-    R,67,21000        # 21000 eRPM  (1000 motor RPM * 21 pole pairs)
-    C,67,2000         # 2 A
-    C,67,-2000        # 2 A reverse
-    D,67,50000        # 50% duty
-    B,67,1500         # 1.5 A braking
-
-Each line is answered over USART1 with `OK` or `ERR ...`.
-
-Notes:
-- The existing VESC/CAN code (`vesc_can_start`, `vesc_can_set_erpm`, CAN config)
-  is unchanged; only new send helpers and the USART layer were added.
-- `P` (PID) is a placeholder. Setting PID over CAN needs the VESC multi-frame
-  COMM protocol and is not implemented yet; the function
-  `vesc_can_set_speed_pid()` is stubbed for future use.
-- The `.ioc` was intentionally not edited; if you regenerate with CubeMX, enable
-  USART1 (PA9/PA10) there as well.
+示例（控制器 CAN ID=67）：
+plaintext
+R,67,21000        # 设置21000电转速（电机实际1000RPM = 1000转每分钟）
+C,67,2000         # 设置输出电流2A
+C,67,-2000        # 反向输出电流2A
+D,67,50000        # 设置50%占空比输出
+B,67,1500         # 设置制动电流1.5A
+每一条指令执行完成后，USART1 串口会回传应答：OK 代表成功，ERR xxx 代表出错。
