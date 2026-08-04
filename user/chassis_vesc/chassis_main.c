@@ -114,12 +114,12 @@ static HAL_StatusTypeDef update_targets(int16_t vx, int16_t vy, int16_t z)
     int32_t target_rpm[CHASSIS_WHEEL_COUNT];
     uint8_t i;
 
-    // X 型全向轮顺序：左前、右前、左后、右后
+    // 机器人坐标系：X 向右、Y 向前、Z 逆时针为正
     rotation = (int32_t)((float)z * CHASSIS_ROTATION_SCALE);
-    target_rpm[CHASSIS_WHEEL_LF] = vy + vx + rotation;
-    target_rpm[CHASSIS_WHEEL_RF] = vy - vx - rotation;
-    target_rpm[CHASSIS_WHEEL_LR] = vy - vx + rotation;
-    target_rpm[CHASSIS_WHEEL_RR] = vy + vx - rotation;
+    target_rpm[CHASSIS_WHEEL_LF] =  vx + vy - rotation;
+    target_rpm[CHASSIS_WHEEL_RF] =  vx - vy - rotation;
+    target_rpm[CHASSIS_WHEEL_LR] =  vx - vy + rotation;
+    target_rpm[CHASSIS_WHEEL_RR] =  vx + vy + rotation;
 
     for (i = 0U; i < ARRAY_SIZE(motors); i++)
     {

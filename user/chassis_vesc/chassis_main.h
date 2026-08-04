@@ -27,8 +27,8 @@ HAL_StatusTypeDef Chassis_Init(void);
 
 /**
  * @brief 解算并设置四个车轮的目标转速
- * @param vx X 方向目标速度，正方向向前
- * @param vy Y 方向目标速度，正方向向左
+ * @param vx X 方向目标速度，正方向向右
+ * @param vy Y 方向目标速度，正方向向前
  * @param z Z 轴目标旋转速度，正方向为逆时针
  * @retval HAL 状态
  */

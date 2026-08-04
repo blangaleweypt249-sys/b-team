@@ -144,7 +144,7 @@ I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim_ex.h)(0x69B90C3B)
 I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h)(0x69B90C3B)
 I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h)(0x69B90C3B)
 I (..\Drivers\CMSIS\RTOS2\Include\cmsis_os2.h)(0x69B90C3A)
-I (..\user\chassis_vesc\chassis_main.h)(0x6A7189A5)
+I (..\user\chassis_vesc\chassis_main.h)(0x6A71B0FE)
 I (..\user\chassis_vesc\vesc_motor.h)(0x6A701418)
 I (..\user\chassis_vesc\vesc_can.h)(0x6A701418)
 I (..\Core\Inc\fdcan.h)(0x6A6C5815)
@@ -1903,8 +1903,8 @@ I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h)(0x69B90C3B)
 I (D:\keil5\core\ARM\ARMCLANG\include\stdbool.h)(0x625260D6)
 I (D:\keil5\core\ARM\ARMCLANG\include\limits.h)(0x625260D6)
 F (../user/chassis_vesc/vesc_motor.h)(0x6A701418)()
-F (../user/chassis_vesc/chassis_main.c)(0x6A718A4A)(-xc -std=c11 --target=arm-arm-none-eabi -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -c-fno-rtti -funsigned-char -fshort-enums -fshort-wchar-gdwarf-4 -O3 -ffunction-sections -Wno-packed -Wno-missing-variable-declarations -Wno-missing-prototypes -Wno-missing-noreturn -Wno-sign-conversion -Wno-nonportable-include-path -Wno-reserved-id-macro -Wno-unused-macros -Wno-documentation-unknown-command -Wno-documentation -Wno-license-management -Wno-parentheses-equality -Wno-reserved-identifier -I ../Core/Inc -I ../user/up -I ../user/2006 -I ../user/chassis_vesc -I ../user/imu -I ../user/com_link -I ../Drivers/STM32H7xx_HAL_Driver/Inc -I ../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32H7xx/Include -I ../Drivers/CMSIS/Include -I ../Middlewares/Third_Party/FreeRTOS/Source/include -I ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2 -I ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F -I ../Drivers/CMSIS/RTOS2/Include-I./RTE/_b-up-ID:/keil5/pack/ARM/CMSIS/5.9.0/CMSIS/Core/Include-D__UVISION_VERSION="537" -D_RTE_ -DSTM32H723xx -D_RTE_ -DUSE_PWR_LDO_SUPPLY -DUSE_HAL_DRIVER -DSTM32H723xx-o b-up/chassis_main.o -MD)
-I (..\user\chassis_vesc\chassis_main.h)(0x6A7189A5)
+F (../user/chassis_vesc/chassis_main.c)(0x6A71B0BD)(-xc -std=c11 --target=arm-arm-none-eabi -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -c-fno-rtti -funsigned-char -fshort-enums -fshort-wchar-gdwarf-4 -O3 -ffunction-sections -Wno-packed -Wno-missing-variable-declarations -Wno-missing-prototypes -Wno-missing-noreturn -Wno-sign-conversion -Wno-nonportable-include-path -Wno-reserved-id-macro -Wno-unused-macros -Wno-documentation-unknown-command -Wno-documentation -Wno-license-management -Wno-parentheses-equality -Wno-reserved-identifier -I ../Core/Inc -I ../user/up -I ../user/2006 -I ../user/chassis_vesc -I ../user/imu -I ../user/com_link -I ../Drivers/STM32H7xx_HAL_Driver/Inc -I ../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32H7xx/Include -I ../Drivers/CMSIS/Include -I ../Middlewares/Third_Party/FreeRTOS/Source/include -I ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2 -I ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F -I ../Drivers/CMSIS/RTOS2/Include-I./RTE/_b-up-ID:/keil5/pack/ARM/CMSIS/5.9.0/CMSIS/Core/Include-D__UVISION_VERSION="537" -D_RTE_ -DSTM32H723xx -D_RTE_ -DUSE_PWR_LDO_SUPPLY -DUSE_HAL_DRIVER -DSTM32H723xx-o b-up/chassis_main.o -MD)
+I (..\user\chassis_vesc\chassis_main.h)(0x6A71B0FE)
 I (..\user\chassis_vesc\vesc_motor.h)(0x6A701418)
 I (..\user\chassis_vesc\vesc_can.h)(0x6A701418)
 I (..\Core\Inc\fdcan.h)(0x6A6C5815)
@@ -1948,7 +1948,7 @@ I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h)(0x69B90C3B)
 I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h)(0x69B90C3B)
 I (D:\keil5\core\ARM\ARMCLANG\include\stdbool.h)(0x625260D6)
 I (..\user\imu\imu_main.h)(0x6A70A8AE)
-F (../user/chassis_vesc/chassis_main.h)(0x6A7189A5)()
+F (../user/chassis_vesc/chassis_main.h)(0x6A71B0FE)()
 F (../user/com_link/computer_link.c)(0x6A7189A5)(-xc -std=c11 --target=arm-arm-none-eabi -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -c-fno-rtti -funsigned-char -fshort-enums -fshort-wchar-gdwarf-4 -O3 -ffunction-sections -Wno-packed -Wno-missing-variable-declarations -Wno-missing-prototypes -Wno-missing-noreturn -Wno-sign-conversion -Wno-nonportable-include-path -Wno-reserved-id-macro -Wno-unused-macros -Wno-documentation-unknown-command -Wno-documentation -Wno-license-management -Wno-parentheses-equality -Wno-reserved-identifier -I ../Core/Inc -I ../user/up -I ../user/2006 -I ../user/chassis_vesc -I ../user/imu -I ../user/com_link -I ../Drivers/STM32H7xx_HAL_Driver/Inc -I ../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32H7xx/Include -I ../Drivers/CMSIS/Include -I ../Middlewares/Third_Party/FreeRTOS/Source/include -I ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2 -I ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F -I ../Drivers/CMSIS/RTOS2/Include-I./RTE/_b-up-ID:/keil5/pack/ARM/CMSIS/5.9.0/CMSIS/Core/Include-D__UVISION_VERSION="537" -D_RTE_ -DSTM32H723xx -D_RTE_ -DUSE_PWR_LDO_SUPPLY -DUSE_HAL_DRIVER -DSTM32H723xx-o b-up/computer_link.o -MD)
 I (..\user\com_link\computer_link.h)(0x6A71873A)
 I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h)(0x69B90C3B)
@@ -1988,7 +1988,7 @@ I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim.h)(0x69B90C3B)
 I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim_ex.h)(0x69B90C3B)
 I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h)(0x69B90C3B)
 I (..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h)(0x69B90C3B)
-I (..\user\chassis_vesc\chassis_main.h)(0x6A7189A5)
+I (..\user\chassis_vesc\chassis_main.h)(0x6A71B0FE)
 I (..\user\chassis_vesc\vesc_motor.h)(0x6A701418)
 I (..\user\chassis_vesc\vesc_can.h)(0x6A701418)
 I (..\Core\Inc\fdcan.h)(0x6A6C5815)
