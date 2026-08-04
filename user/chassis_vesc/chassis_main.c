@@ -1,6 +1,7 @@
 #include "chassis_main.h"
 
 #include "fdcan.h"
+#include "imu_main.h"
 
 #include <stddef.h>
 
@@ -57,9 +58,9 @@ static vesc_motor_t motors[ARRAY_SIZE(motor_config)];
 static uint32_t last_command_ms;
 static bool chassis_ready;
 
-volatile int16_t chassis_target_vx=50;
-volatile int16_t chassis_target_vy;
-volatile int16_t chassis_target_z;
+volatile int16_t chassis_target_vx=0;
+volatile int16_t chassis_target_vy=0;
+volatile int16_t chassis_target_z=0;
 
 static void process_feedback(uint32_t now_ms)
 {
@@ -113,7 +114,7 @@ static HAL_StatusTypeDef update_targets(int16_t vx, int16_t vy, int16_t z)
     int32_t target_rpm[CHASSIS_WHEEL_COUNT];
     uint8_t i;
 
-    // 轮序和正负方向保持旧底盘定义：左前、右前、左后、右后。
+    // X 型全向轮顺序：左前、右前、左后、右后
     rotation = (int32_t)((float)z * CHASSIS_ROTATION_SCALE);
     target_rpm[CHASSIS_WHEEL_LF] = vy + vx + rotation;
     target_rpm[CHASSIS_WHEEL_RF] = vy - vx - rotation;
@@ -189,7 +190,7 @@ void Chassis_Run1ms(void)
     process_feedback(now_ms);
     vx = chassis_target_vx;
     vy = chassis_target_vy;
-    z = chassis_target_z;
+    z = ImuMain_CalcOmega(vx, vy, chassis_target_z);
     (void)update_targets(vx, vy, z);
     if ((now_ms - last_command_ms) >= CHASSIS_COMMAND_PERIOD_MS)
     {

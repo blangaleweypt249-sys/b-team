@@ -38,4 +38,5 @@ b-up/chassis_main.o: ..\user\chassis_vesc\chassis_main.c \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h
+  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
+  ..\user\imu\imu_main.h

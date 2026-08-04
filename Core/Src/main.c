@@ -27,6 +27,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "computer_link.h"
+#include "imu_main.h"
 
 /* USER CODE END Includes */
 
@@ -111,6 +113,7 @@ int main(void)
   MX_FDCAN3_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
+  MX_UART4_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -203,7 +206,8 @@ void PeriphCommonClock_Config(void)
 
   /** Initializes the peripherals clock
   */
-  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_FDCAN|RCC_PERIPHCLK_USART2;
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_FDCAN|RCC_PERIPHCLK_UART4
+                              |RCC_PERIPHCLK_USART2;
   PeriphClkInitStruct.PLL2.PLL2M = 2;
   PeriphClkInitStruct.PLL2.PLL2N = 16;
   PeriphClkInitStruct.PLL2.PLL2P = 2;
@@ -221,6 +225,21 @@ void PeriphCommonClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  ComputerLink_RxCplt(huart);
+}
+
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
+{
+  ImuMain_HandleRxEvent(huart, size);
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+  ComputerLink_Error(huart);
+  ImuMain_HandleUartError(huart);
+}
 
 /* USER CODE END 4 */
 

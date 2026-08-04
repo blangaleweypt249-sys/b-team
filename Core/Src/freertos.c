@@ -21,12 +21,16 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "main.h"
+#include "FreeRTOS.h"
 #include "cmsis_os2.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "chassis_main.h"
+#include "computer_link.h"
+#include "imu_main.h"
 #include "up_main.h"
+#include "usart.h"
 
 /* USER CODE END Includes */
 
@@ -160,13 +164,19 @@ __weak void StartChassisTask(void *argument)
   /* USER CODE BEGIN StartChassisTask */
   uint32_t next_tick = osKernelGetTickCount();
   HAL_StatusTypeDef chassis_result;
+  HAL_StatusTypeDef imu_result;
 
   (void)argument;
+  imu_result = ImuMain_Init();
   chassis_result = Chassis_Init();
 
   /* Infinite loop */
   for(;;)
   {
+    if (imu_result == HAL_OK)
+    {
+      ImuMain_Run1ms();
+    }
     if (chassis_result == HAL_OK)
     {
       Chassis_Run1ms();
@@ -218,9 +228,13 @@ __weak void StartLiftTask(void *argument)
 __weak void StartCommTask(void *argument)
 {
   /* USER CODE BEGIN StartCommTask */
+  (void)argument;
+  (void)ComputerLink_Init(&huart4);
+
   /* Infinite loop */
   for(;;)
   {
+    ComputerLink_Run();
     osDelay(1);
   }
   /* USER CODE END StartCommTask */
