@@ -19,7 +19,6 @@ from PyQt6.QtCore import (
     pyqtSlot,
 )
 from PyQt6.QtGui import (
-    QBrush,
     QCloseEvent,
     QColor,
     QFont,
@@ -30,17 +29,16 @@ from PyQt6.QtGui import (
     QTextCursor,
 )
 from PyQt6.QtWidgets import (
-    QAbstractItemView,
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QPlainTextEdit,
     QPushButton,
@@ -348,17 +346,15 @@ class TabButton(QFrame):
 
 
 class FieldMapView(QFrame):
-    """场地地图视图 - 支持坐标拾取、原点标记、B样条轨迹"""
+    """场地地图视图 - 支持原点标记、B样条轨迹"""
 
     coordinate_changed = pyqtSignal(float, float)
     origin_set = pyqtSignal(float, float)
     trajectory_changed = pyqtSignal(int)
-    point_picked = pyqtSignal(float, float, float, float)  # x_m, y_m, px_x, px_y
 
     MODE_VIEW = 0
     MODE_SET_ORIGIN = 1
     MODE_ADD_POINT = 2
-    MODE_PICK_POINT = 3
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -382,13 +378,10 @@ class FieldMapView(QFrame):
 
         self._mode = self.MODE_VIEW
 
-        # B 样条轨迹控制点
+        # B 样条轨迹控制点（像素坐标）
         self._control_points: list[QPointF] = []
         self._curve_points: list[QPointF] = []
         self._bspline_degree = 3
-
-        # 拾取的坐标点
-        self._pick_points: list[QPointF] = []
 
         self.setMouseTracking(True)
         self._label.setCursor(Qt.CursorShape.CrossCursor)
@@ -416,10 +409,6 @@ class FieldMapView(QFrame):
         self._mode = self.MODE_ADD_POINT
         self._label.setCursor(Qt.CursorShape.CrossCursor)
 
-    def start_pick_point(self) -> None:
-        self._mode = self.MODE_PICK_POINT
-        self._label.setCursor(Qt.CursorShape.CrossCursor)
-
     def set_view_mode(self) -> None:
         self._mode = self.MODE_VIEW
         self._label.setCursor(Qt.CursorShape.ArrowCursor)
@@ -430,9 +419,6 @@ class FieldMapView(QFrame):
     def is_adding_point(self) -> bool:
         return self._mode == self.MODE_ADD_POINT
 
-    def is_picking_point(self) -> bool:
-        return self._mode == self.MODE_PICK_POINT
-
     def set_origin_px(self, pos: QPointF) -> None:
         self._origin_px = pos
         self._update_display()
@@ -441,6 +427,7 @@ class FieldMapView(QFrame):
         return self._pixel_to_meter(self._origin_px)
 
     def get_control_points_m(self) -> list[tuple[float, float]]:
+        """获取控制点的实际坐标（米）"""
         return [self._pixel_to_meter(p) for p in self._control_points]
 
     def set_control_points_px(self, points: list[QPointF]) -> None:
@@ -448,24 +435,11 @@ class FieldMapView(QFrame):
         self._update_curve()
         self._update_display()
 
-    def set_pick_points_px(self, points: list[QPointF]) -> None:
-        self._pick_points = list(points)
-        self._update_display()
-
     def clear_trajectory(self) -> None:
         self._control_points.clear()
         self._curve_points.clear()
         self.trajectory_changed.emit(0)
         self._update_display()
-
-    def clear_pick_points(self) -> None:
-        self._pick_points.clear()
-        self._update_display()
-
-    def remove_pick_point(self, index: int) -> None:
-        if 0 <= index < len(self._pick_points):
-            self._pick_points.pop(index)
-            self._update_display()
 
     def _pixel_to_meter(self, px_pos: QPointF) -> tuple[float, float]:
         if self._original_pixmap is None:
@@ -524,39 +498,24 @@ class FieldMapView(QFrame):
 
         # 绘制控制点
         for i, pt in enumerate(self._control_points):
+            # 外圈白边
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor("#ffffff"))
-            painter.drawEllipse(pt, 7, 7)
+            painter.drawEllipse(pt, 8, 8)
+            # 内圈蓝色
             painter.setBrush(QColor("#007aff"))
-            painter.drawEllipse(pt, 5, 5)
-            painter.setPen(QColor("#1d1d1f"))
-            font = painter.font()
-            font.setBold(True)
-            font.setPointSize(9)
-            painter.setFont(font)
-            painter.drawText(int(pt.x() + 10), int(pt.y() - 8), str(i + 1))
-
-        # 绘制拾取的坐标点（绿色十字 + 序号）
-        for i, pt in enumerate(self._pick_points):
-            # 十字标记
-            pen = QPen(QColor("#34c759"))
-            pen.setWidth(2)
-            painter.setPen(pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            size = 8
-            painter.drawLine(int(pt.x() - size), int(pt.y()), int(pt.x() + size), int(pt.y()))
-            painter.drawLine(int(pt.x()), int(pt.y() - size), int(pt.x()), int(pt.y() + size))
-            # 外圈
-            painter.setBrush(QColor("#34c759"))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawEllipse(pt, 4, 4)
+            painter.drawEllipse(pt, 6, 6)
             # 序号
-            painter.setPen(QColor("#34c759"))
+            painter.setPen(QColor("#ffffff"))
             font = painter.font()
             font.setBold(True)
-            font.setPointSize(9)
+            font.setPointSize(8)
             painter.setFont(font)
-            painter.drawText(int(pt.x() + 10), int(pt.y() - 10), f"P{i + 1}")
+            painter.drawText(
+                int(pt.x() - 4),
+                int(pt.y() + 3),
+                str(i + 1),
+            )
 
         # 绘制原点标记
         pen = QPen(QColor("#ff3b30"))
@@ -669,11 +628,148 @@ class FieldMapView(QFrame):
             self.trajectory_changed.emit(len(self._control_points))
             self._update_display()
 
-        elif self._mode == self.MODE_PICK_POINT:
-            self._pick_points.append(img_pos)
-            x_m, y_m = self._pixel_to_meter(img_pos)
-            self.point_picked.emit(x_m, y_m, img_pos.x(), img_pos.y())
-            self._update_display()
+
+class ExportCDialog(QDialog):
+    """导出 C 数组对话框"""
+
+    def __init__(self, points: list[tuple[float, float]], parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("导出 C 语言数组")
+        self.setMinimumSize(560, 420)
+        self.resize(620, 480)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(12)
+
+        # 标题
+        title = QLabel("B 样条轨迹控制点")
+        title.setStyleSheet(
+            "font-size: 16px; font-weight: 600; color: #1d1d1f;"
+        )
+        layout.addWidget(title)
+
+        # 信息行
+        info = QLabel(f"共 {len(points)} 个控制点，单位：米")
+        info.setStyleSheet("color: #86868b; font-size: 12px;")
+        layout.addWidget(info)
+
+        # 代码文本框
+        self.text_edit = QPlainTextEdit()
+        self.text_edit.setReadOnly(False)
+        self.text_edit.setFont(QFont("Menlo", 11))
+        self.text_edit.setStyleSheet(
+            """
+            QPlainTextEdit {
+                background: #1d1d1f;
+                color: #f5f5f7;
+                border: 1px solid #e5e5ea;
+                border-radius: 8px;
+                padding: 12px;
+                font-family: "SF Mono", Menlo, Consolas, monospace;
+                selection-background-color: #007aff;
+            }
+            """
+        )
+
+        # 生成 C 代码
+        code = self._generate_c_array(points)
+        self.text_edit.setPlainText(code)
+        layout.addWidget(self.text_edit, 1)
+
+        # 按钮
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
+
+        copy_btn = QPushButton("复制到剪贴板")
+        copy_btn.setObjectName("PrimaryButton")
+        copy_btn.setStyleSheet(
+            """
+            QPushButton {
+                color: white;
+                background: #007aff;
+                border: 1px solid #007aff;
+                border-radius: 8px;
+                padding: 8px 20px;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: #0a84ff;
+            }
+            """
+        )
+        copy_btn.clicked.connect(self._copy_to_clipboard)
+        btn_layout.addWidget(copy_btn)
+
+        btn_layout.addStretch(1)
+
+        close_btn = QPushButton("关闭")
+        close_btn.setStyleSheet(
+            """
+            QPushButton {
+                background: #f2f2f7;
+                border: 1px solid #e5e5ea;
+                border-radius: 8px;
+                padding: 8px 20px;
+                font-weight: 500;
+                font-size: 13px;
+                color: #1d1d1f;
+            }
+            QPushButton:hover {
+                background: #e8e8ed;
+            }
+            """
+        )
+        close_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(close_btn)
+
+        layout.addLayout(btn_layout)
+
+    def _generate_c_array(self, points: list[tuple[float, float]]) -> str:
+        lines = []
+        lines.append("/* ============================================================")
+        lines.append(" * B 样条轨迹控制点")
+        lines.append(f" * 点数: {len(points)}")
+        lines.append(" * 单位: 米 (m)")
+        lines.append(" * 坐标系: X 向右为正, Y 向上为正")
+        lines.append(" * 生成时间: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        lines.append(" * ============================================================ */")
+        lines.append("")
+        lines.append("#ifndef TRAJECTORY_POINTS_H")
+        lines.append("#define TRAJECTORY_POINTS_H")
+        lines.append("")
+        lines.append("#include <stdint.h>")
+        lines.append("")
+        lines.append(f"/* 控制点数量 */")
+        lines.append(f"#define TRAJECTORY_POINT_COUNT  {len(points)}")
+        lines.append("")
+        lines.append("/* B 样条轨迹控制点数组 [x, y] */")
+        lines.append("static const float trajectory_points[TRAJECTORY_POINT_COUNT][2] = {")
+
+        for i, (x, y) in enumerate(points):
+            comma = "," if i < len(points) - 1 else ""
+            lines.append(f"    {{ {x:+.4f}f, {y:+.4f}f }}{comma}  /* P{i + 1} */")
+
+        lines.append("};")
+        lines.append("")
+        lines.append("/* B 样条次数 (3 = 三次 B 样条) */")
+        lines.append("#define BSPLINE_DEGREE  3")
+        lines.append("")
+        lines.append("#endif /* TRAJECTORY_POINTS_H */")
+
+        return "\n".join(lines)
+
+    def _copy_to_clipboard(self) -> None:
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self.text_edit.toPlainText())
+
+        # 短暂提示
+        btn = self.sender()
+        if btn:
+            original_text = btn.text()
+            btn.setText("✓ 已复制")
+            QTimer.singleShot(1500, lambda: btn.setText(original_text))
 
 
 class MainWindow(QMainWindow):
@@ -700,8 +796,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("机器人运动控制")
-        self.setMinimumSize(960, 700)
-        self.resize(1100, 760)
+        self.setMinimumSize(900, 680)
+        self.resize(1020, 720)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         self.setFont(QFont(".AppleSystemUIFont", 13))
@@ -725,8 +821,7 @@ class MainWindow(QMainWindow):
         self._field_height_m = 2.0
         self._origin_px_x = 0.0
         self._origin_px_y = 0.0
-        self._trajectory_points: list[dict] = []
-        self._pick_points: list[dict] = []  # [{x, y}]
+        self._trajectory_points: list[dict] = []  # [{x, y}] 像素坐标
 
         self._load_config()
 
@@ -764,7 +859,7 @@ class MainWindow(QMainWindow):
         self.scan_ports()
         self._update_command(send_now=False)
 
-        # 加载保存的场地照片和配置
+        # 加载保存的场地照片和轨迹
         if self._field_image_path and os.path.exists(self._field_image_path):
             self.field_map.set_field_image(self._field_image_path)
             self.field_map.set_field_size(self._field_width_m, self._field_height_m)
@@ -774,11 +869,6 @@ class MainWindow(QMainWindow):
                 points = [QPointF(p["x"], p["y"]) for p in self._trajectory_points]
                 self.field_map.set_control_points_px(points)
                 self.traj_count_label.setText(f"{len(points)} 个点")
-
-            if self._pick_points:
-                points = [QPointF(p["x"], p["y"]) for p in self._pick_points]
-                self.field_map.set_pick_points_px(points)
-                self._refresh_pick_list()
 
     def _build_ui(self) -> None:
         central = QWidget(self)
@@ -1189,7 +1279,7 @@ class MainWindow(QMainWindow):
 
         page_layout.addWidget(toolbar1)
 
-        # 工具栏第二行：轨迹标定 + 坐标拾取
+        # 工具栏第二行：B 样条轨迹
         toolbar2 = QFrame()
         toolbar2.setObjectName("CardPanel")
         tool2_layout = QHBoxLayout(toolbar2)
@@ -1204,6 +1294,16 @@ class MainWindow(QMainWindow):
         self.traj_count_label.setObjectName("MetricBadge")
         tool2_layout.addWidget(self.traj_count_label)
 
+        tool2_layout.addStretch(1)
+
+        self.export_btn = QPushButton("导出 C 数组")
+        self.export_btn.setObjectName("GhostButton")
+        self.export_btn.setStyleSheet(
+            "color: #34c759; border-color: #b8e6c5;"
+        )
+        self.export_btn.clicked.connect(self._export_c_array)
+        tool2_layout.addWidget(self.export_btn)
+
         self.add_point_btn = QPushButton("添加轨迹点")
         self.add_point_btn.setObjectName("PrimaryButton")
         self.add_point_btn.clicked.connect(self._toggle_add_point)
@@ -1214,42 +1314,9 @@ class MainWindow(QMainWindow):
         self.clear_traj_btn.clicked.connect(self._clear_trajectory)
         tool2_layout.addWidget(self.clear_traj_btn)
 
-        tool2_layout.addStretch(1)
-
-        # 分隔线
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setObjectName("Divider")
-        tool2_layout.addWidget(sep)
-
-        pick_label = QLabel("坐标拾取")
-        pick_label.setObjectName("FieldLabel")
-        tool2_layout.addWidget(pick_label)
-
-        self.pick_count_label = QLabel("0 个点")
-        self.pick_count_label.setObjectName("MetricBadge")
-        tool2_layout.addWidget(self.pick_count_label)
-
-        self.pick_btn = QPushButton("拾取坐标")
-        self.pick_btn.setObjectName("PrimaryButton")
-        self.pick_btn.setStyleSheet(
-            "background: #34c759; border-color: #34c759; color: white;"
-        )
-        self.pick_btn.clicked.connect(self._toggle_pick_point)
-        tool2_layout.addWidget(self.pick_btn)
-
-        self.clear_pick_btn = QPushButton("清空")
-        self.clear_pick_btn.setObjectName("GhostButton")
-        self.clear_pick_btn.clicked.connect(self._clear_pick_points)
-        tool2_layout.addWidget(self.clear_pick_btn)
-
         page_layout.addWidget(toolbar2)
 
-        # 主区域：左侧地图 + 右侧坐标列表
-        main_area = QHBoxLayout()
-        main_area.setSpacing(16)
-
-        # 左侧：场地地图
+        # 场地地图
         map_container = QFrame()
         map_container.setObjectName("CardPanel")
         map_layout = QVBoxLayout(map_container)
@@ -1257,107 +1324,46 @@ class MainWindow(QMainWindow):
         map_layout.setSpacing(0)
 
         self.field_map = FieldMapView()
-        self.field_map.setMinimumHeight(400)
+        self.field_map.setMinimumHeight(420)
         self.field_map.coordinate_changed.connect(self._on_mouse_coordinate)
         self.field_map.origin_set.connect(self._on_origin_set)
         self.field_map.trajectory_changed.connect(self._on_trajectory_changed)
-        self.field_map.point_picked.connect(self._on_point_picked)
         map_layout.addWidget(self.field_map, 1)
 
-        main_area.addWidget(map_container, 3)
+        page_layout.addWidget(map_container, 1)
 
-        # 右侧：坐标点列表
-        side_panel = QVBoxLayout()
-        side_panel.setSpacing(12)
+        # 底部坐标栏
+        coord_bar = QFrame()
+        coord_bar.setObjectName("CommandBar")
+        coord_layout = QHBoxLayout(coord_bar)
+        coord_layout.setContentsMargins(20, 12, 20, 12)
+        coord_layout.setSpacing(24)
 
-        # 坐标点列表卡片
-        list_card = QFrame()
-        list_card.setObjectName("CardPanel")
-        list_layout = QVBoxLayout(list_card)
-        list_layout.setContentsMargins(16, 14, 16, 16)
-        list_layout.setSpacing(10)
-
-        list_title_row = QHBoxLayout()
-        list_title_row.setSpacing(8)
-        list_title = QLabel("坐标点列表")
-        list_title.setObjectName("CardTitle")
-        list_title_row.addWidget(list_title)
-        list_title_row.addStretch(1)
-        self.pick_total_label = QLabel("0 个点")
-        self.pick_total_label.setObjectName("MetricBadge")
-        list_title_row.addWidget(self.pick_total_label)
-        list_layout.addLayout(list_title_row)
-
-        self.pick_list = QListWidget()
-        self.pick_list.setObjectName("PickList")
-        self.pick_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.pick_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.pick_list.setMinimumWidth(220)
-        list_layout.addWidget(self.pick_list, 1)
-
-        # 操作按钮行
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-
-        self.copy_btn = QPushButton("复制坐标")
-        self.copy_btn.setObjectName("GhostButton")
-        self.copy_btn.clicked.connect(self._copy_selected_coord)
-        btn_row.addWidget(self.copy_btn)
-
-        self.delete_pick_btn = QPushButton("删除")
-        self.delete_pick_btn.setObjectName("GhostButton")
-        self.delete_pick_btn.setStyleSheet("color: #ff3b30; border-color: #ffb3b0;")
-        self.delete_pick_btn.clicked.connect(self._delete_selected_pick)
-        btn_row.addWidget(self.delete_pick_btn)
-
-        list_layout.addLayout(btn_row)
-
-        side_panel.addWidget(list_card, 1)
-
-        # 底部坐标栏（放在右侧面板底部）
-        coord_card = QFrame()
-        coord_card.setObjectName("CardPanel")
-        coord_layout = QVBoxLayout(coord_card)
-        coord_layout.setContentsMargins(16, 14, 16, 16)
-        coord_layout.setSpacing(10)
-
-        coord_title = QLabel("实时坐标")
-        coord_title.setObjectName("CardTitle")
+        coord_title = QLabel("鼠标坐标")
+        coord_title.setObjectName("SectionLabel")
         coord_layout.addWidget(coord_title)
 
-        mouse_row = QHBoxLayout()
-        mouse_row.setSpacing(8)
-        mouse_label = QLabel("鼠标")
-        mouse_label.setObjectName("FieldLabel")
-        mouse_label.setMinimumWidth(36)
-        mouse_row.addWidget(mouse_label)
-        self.mouse_x_label = QLabel("X: 0.000")
-        self.mouse_y_label = QLabel("Y: 0.000")
+        self.mouse_x_label = QLabel("X: 0.000 m")
+        self.mouse_y_label = QLabel("Y: 0.000 m")
         for label in (self.mouse_x_label, self.mouse_y_label):
             label.setObjectName("CoordValue")
-            label.setMinimumWidth(80)
-            mouse_row.addWidget(label)
-        coord_layout.addLayout(mouse_row)
+            label.setMinimumWidth(130)
+            coord_layout.addWidget(label)
 
-        origin_row = QHBoxLayout()
-        origin_row.setSpacing(8)
-        origin_label = QLabel("原点")
-        origin_label.setObjectName("FieldLabel")
-        origin_label.setMinimumWidth(36)
-        origin_row.addWidget(origin_label)
-        self.origin_x_label = QLabel("X: 0.000")
-        self.origin_y_label = QLabel("Y: 0.000")
+        coord_layout.addStretch(1)
+
+        origin_title = QLabel("原点")
+        origin_title.setObjectName("SectionLabel")
+        coord_layout.addWidget(origin_title)
+
+        self.origin_x_label = QLabel("X: 0.000 m")
+        self.origin_y_label = QLabel("Y: 0.000 m")
         for label in (self.origin_x_label, self.origin_y_label):
             label.setObjectName("OriginValue")
-            label.setMinimumWidth(80)
-            origin_row.addWidget(label)
-        coord_layout.addLayout(origin_row)
+            label.setMinimumWidth(130)
+            coord_layout.addWidget(label)
 
-        side_panel.addWidget(coord_card)
-
-        main_area.addLayout(side_panel, 2)
-
-        page_layout.addLayout(main_area, 1)
+        page_layout.addWidget(coord_bar)
 
         self._stack.addWidget(page)
 
@@ -1746,13 +1752,13 @@ class MainWindow(QMainWindow):
             QLabel#CoordValue {
                 color: #007aff;
                 font-family: "SF Mono", "Menlo", "Consolas", monospace;
-                font-size: 13px;
+                font-size: 14px;
                 font-weight: 600;
             }
             QLabel#OriginValue {
                 color: #ff3b30;
                 font-family: "SF Mono", "Menlo", "Consolas", monospace;
-                font-size: 13px;
+                font-size: 14px;
                 font-weight: 600;
             }
 
@@ -1794,38 +1800,10 @@ class MainWindow(QMainWindow):
                 border-radius: 8px;
             }
 
-            /* ========== 坐标点列表 ========== */
-            QListWidget#PickList {
-                background: #f2f2f7;
-                border: 1px solid #e5e5ea;
-                border-radius: 8px;
-                padding: 4px;
-                font-family: "SF Mono", Menlo, Consolas, monospace;
-                font-size: 12px;
-                outline: none;
-            }
-            QListWidget#PickList::item {
-                background: #ffffff;
-                border: 1px solid #e5e5ea;
-                border-radius: 6px;
-                padding: 8px 10px;
-                margin: 3px 2px;
-                color: #1d1d1f;
-            }
-            QListWidget#PickList::item:selected {
-                background: #e8f0fe;
-                border: 1px solid #007aff;
-                color: #007aff;
-            }
-            QListWidget#PickList::item:hover {
-                background: #f0f7ff;
-            }
-
             /* ========== 分隔线 ========== */
             QFrame#Divider {
                 background: #e5e5ea;
                 max-height: 1px;
-                max-width: 1px;
                 border: none;
             }
 
@@ -2203,8 +2181,8 @@ class MainWindow(QMainWindow):
     def _on_origin_set(self, x_m: float, y_m: float) -> None:
         self.origin_btn.setText("标记原点")
         self.origin_btn.setStyleSheet("")
-        self.origin_x_label.setText(f"X: {x_m:+.3f}")
-        self.origin_y_label.setText(f"Y: {y_m:+.3f}")
+        self.origin_x_label.setText(f"X: {x_m:+.3f} m")
+        self.origin_y_label.setText(f"Y: {y_m:+.3f} m")
 
         origin_px = self.field_map._origin_px
         self._origin_px_x = origin_px.x()
@@ -2212,8 +2190,8 @@ class MainWindow(QMainWindow):
         self._save_config()
 
     def _on_mouse_coordinate(self, x_m: float, y_m: float) -> None:
-        self.mouse_x_label.setText(f"X: {x_m:+.3f}")
-        self.mouse_y_label.setText(f"Y: {y_m:+.3f}")
+        self.mouse_x_label.setText(f"X: {x_m:+.3f} m")
+        self.mouse_y_label.setText(f"Y: {y_m:+.3f} m")
 
     # ── B 样条轨迹 ──
 
@@ -2231,6 +2209,7 @@ class MainWindow(QMainWindow):
 
     def _on_trajectory_changed(self, count: int) -> None:
         self.traj_count_label.setText(f"{count} 个点")
+        # 自动保存控制点像素坐标
         self._trajectory_points = [
             {"x": p.x(), "y": p.y()}
             for p in self.field_map._control_points
@@ -2242,76 +2221,15 @@ class MainWindow(QMainWindow):
         self._trajectory_points.clear()
         self._save_config()
 
-    # ── 坐标拾取 ──
-
-    def _toggle_pick_point(self) -> None:
-        if self.field_map.is_picking_point():
-            self.field_map.set_view_mode()
-            self.pick_btn.setText("拾取坐标")
-            self.pick_btn.setStyleSheet(
-                "background: #34c759; border-color: #34c759; color: white;"
-            )
-        else:
-            self.field_map.start_pick_point()
-            self.pick_btn.setText("完成拾取")
-            self.pick_btn.setStyleSheet(
-                "background: #ff9500; border-color: #ff9500; color: white;"
-            )
-
-    def _on_point_picked(self, x_m: float, y_m: float, px_x: float, px_y: float) -> None:
-        self._pick_points.append({"x": px_x, "y": px_y})
-        self._refresh_pick_list()
-        self._save_config()
-
-    def _refresh_pick_list(self) -> None:
-        self.pick_list.clear()
-        for i, p in enumerate(self._pick_points):
-            # 计算实际坐标
-            px_pos = QPointF(p["x"], p["y"])
-            x_m, y_m = self.field_map._pixel_to_meter(px_pos)
-            item_text = f"P{i + 1}   X: {x_m:+.3f} m   Y: {y_m:+.3f} m"
-            item = QListWidgetItem(item_text)
-            item.setData(Qt.ItemDataRole.UserRole, i)
-            self.pick_list.addItem(item)
-
-        count = len(self._pick_points)
-        self.pick_count_label.setText(f"{count} 个点")
-        self.pick_total_label.setText(f"{count} 个点")
-
-    def _copy_selected_coord(self) -> None:
-        current = self.pick_list.currentItem()
-        if current is None:
+    def _export_c_array(self) -> None:
+        """导出 C 语言数组"""
+        points_m = self.field_map.get_control_points_m()
+        if not points_m:
+            self._append_log("SYS", "没有轨迹点可导出", "#ff9500")
             return
 
-        index = current.data(Qt.ItemDataRole.UserRole)
-        if index is None or index >= len(self._pick_points):
-            return
-
-        p = self._pick_points[index]
-        px_pos = QPointF(p["x"], p["y"])
-        x_m, y_m = self.field_map._pixel_to_meter(px_pos)
-        text = f"{x_m:.3f}, {y_m:.3f}"
-
-        clipboard = QApplication.clipboard()
-        clipboard.setText(text)
-
-        self._append_log("SYS", f"已复制坐标 P{index + 1}: {text}", "#34c759")
-
-    def _delete_selected_pick(self) -> None:
-        current_row = self.pick_list.currentRow()
-        if current_row < 0 or current_row >= len(self._pick_points):
-            return
-
-        self._pick_points.pop(current_row)
-        self.field_map.remove_pick_point(current_row)
-        self._refresh_pick_list()
-        self._save_config()
-
-    def _clear_pick_points(self) -> None:
-        self._pick_points.clear()
-        self.field_map.clear_pick_points()
-        self._refresh_pick_list()
-        self._save_config()
+        dialog = ExportCDialog(points_m, self)
+        dialog.exec()
 
     # ── 配置持久化 ──
 
@@ -2326,7 +2244,6 @@ class MainWindow(QMainWindow):
                 self._origin_px_x = config.get("origin_px_x", 0.0)
                 self._origin_px_y = config.get("origin_px_y", 0.0)
                 self._trajectory_points = config.get("trajectory_points", [])
-                self._pick_points = config.get("pick_points", [])
         except Exception:
             pass
 
@@ -2339,7 +2256,6 @@ class MainWindow(QMainWindow):
                 "origin_px_x": self._origin_px_x,
                 "origin_px_y": self._origin_px_y,
                 "trajectory_points": self._trajectory_points,
-                "pick_points": self._pick_points,
             }
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
