@@ -9,7 +9,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-#define PC_PROTOCOL_VERSION       1U
+#define PC_PROTOCOL_VERSION       2U
 #define PC_PROTOCOL_MAX_PAYLOAD   128U
 #define PC_PROTOCOL_FRAME_OVERHEAD 10U
 

@@ -517,6 +517,14 @@ bool M2006_CalcCurrentRaw(uint8_t can_bus,
     current_a = 0.0f;
     feedback_valid = M2006_GetFeedback(can_bus, motor_id, &feedback);
     M2006_UpdateTimeoutStats(context, feedback_valid, &feedback, tick_ms);
+    if ((context->mode != M2006_MODE_STOP) &&
+        (!feedback_valid || context->timeout_stats.command_timed_out ||
+         context->timeout_stats.feedback_timed_out))
+    {
+        M2006_ResetControl(context);
+        *current_raw = 0;
+        return true;
+    }
     if (context->mode != M2006_MODE_STOP)
     {
         switch (context->mode)

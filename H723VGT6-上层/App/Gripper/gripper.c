@@ -1,11 +1,11 @@
-#include "conveyor.h"
+#include "gripper.h"
 
 #include <math.h>
 
 #include "upper_config.h"
 
-bool Conveyor_Calc(const conveyor_target_t *target,
-                   conveyor_output_t *output)
+bool Gripper_Calc(const gripper_target_t *target,
+                  gripper_output_t *output)
 {
     if ((target == NULL) || (output == NULL) ||
         !isfinite(target->m2006_vel_rad_s) ||
@@ -16,7 +16,6 @@ bool Conveyor_Calc(const conveyor_target_t *target,
     {
         return false;
     }
-
     output->enabled = target->enabled;
     output->m2006 = (motor_cmd_t)
     {
@@ -26,8 +25,8 @@ bool Conveyor_Calc(const conveyor_target_t *target,
     return true;
 }
 
-bool Conveyor_Apply(motor_manager_t *manager,
-                    const conveyor_output_t *output)
+bool Gripper_Apply(motor_manager_t *manager,
+                   const gripper_output_t *output)
 {
     bool success;
 
@@ -36,10 +35,10 @@ bool Conveyor_Apply(motor_manager_t *manager,
         return false;
     }
     success = MotorManager_SetCmd(manager,
-                                  UPPER_MOTOR_CONVEYOR_M2006,
+                                  UPPER_MOTOR_GRIPPER_M2006,
                                   &output->m2006);
     success = MotorManager_SetEnabled(manager,
-                                      UPPER_MOTOR_CONVEYOR_M2006,
+                                      UPPER_MOTOR_GRIPPER_M2006,
                                       output->enabled) && success;
     return success;
 }

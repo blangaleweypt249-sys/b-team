@@ -43,6 +43,8 @@ bool J4310_AddMotor(uint8_t motor_id,
                     const j4310_limits_t *limits);
 bool J4310_BuildEnable(uint8_t motor_id, can_frame_t *frame);
 bool J4310_BuildDisable(uint8_t motor_id, can_frame_t *frame);
+bool J4310_BuildClearFault(uint8_t motor_id, can_frame_t *frame);
+bool J4310_BuildSaveZero(uint8_t motor_id, can_frame_t *frame);
 bool J4310_BuildMit(uint8_t motor_id,
                     float position_rad,
                     float velocity_rad_s,

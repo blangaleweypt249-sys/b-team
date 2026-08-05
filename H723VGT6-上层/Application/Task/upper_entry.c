@@ -2,6 +2,7 @@
 
 #include "cmsis_os2.h"
 #include "comm_runtime.h"
+#include "flash_tool.h"
 #include "upper_config.h"
 #include "upper_motor_port.h"
 #include "upper_pc_link.h"
@@ -40,7 +41,10 @@ static void UpperEntry_OnUart(comm_uart_channel_t channel,
     (void)user_data;
     if (channel == COMM_UART_PC)
     {
-        UpperEntry_OnPcData(data, size, CommRuntime_GetTickMs());
+        if (!FlashTool_Receive(data, size))
+        {
+            UpperEntry_OnPcData(data, size, CommRuntime_GetTickMs());
+        }
     }
 }
 
@@ -97,6 +101,10 @@ static void UpperEntry_SendState(uint32_t tick_ms)
 {
     size_t frame_size;
 
+    if (FlashTool_IsActive())
+    {
+        return;
+    }
     if ((tick_ms % UPPER_STATE_PERIOD_MS) != 0U)
     {
         return;

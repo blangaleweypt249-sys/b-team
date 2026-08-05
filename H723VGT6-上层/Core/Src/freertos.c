@@ -27,6 +27,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "comm_runtime.h"
+#include "flash_tool.h"
 #include "freertos_app.h"
 #include "upper_entry.h"
 /* USER CODE END Includes */
@@ -116,6 +117,11 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
   if (!UpperEntry_Init())
   {
+    static const uint8_t init_error[] = "FLASH BOOT ERROR UPPER_INIT\r\n";
+
+    (void)CommRuntime_PcTransmitBlocking(init_error,
+                                         sizeof(init_error) - 1U,
+                                         500U);
     Error_Handler();
   }
   /* USER CODE END Init */
@@ -203,9 +209,13 @@ void StartCommRxTask(void *argument)
 {
   /* USER CODE BEGIN StartCommRxTask */
   uint32_t flags;
+  HAL_StatusTypeDef comm_status;
 
   (void)argument;
-  if (CommRuntime_Init(commRxTaskHandle) != HAL_OK)
+  FlashTool_Init();
+  comm_status = CommRuntime_Init(commRxTaskHandle);
+  FlashTool_SendReady(comm_status == HAL_OK);
+  if (comm_status != HAL_OK)
   {
     Error_Handler();
   }

@@ -9,8 +9,10 @@
 #define J4310_FEEDBACK_ID_MAX 0x0FU
 #define J4310_KP_MAX          500.0f
 #define J4310_KD_MAX          5.0f
+#define J4310_CMD_CLEAR_FAULT 0xFBU
 #define J4310_CMD_ENABLE      0xFCU
 #define J4310_CMD_DISABLE     0xFDU
+#define J4310_CMD_SAVE_ZERO   0xFEU
 
 typedef struct
 {
@@ -202,6 +204,16 @@ bool J4310_BuildDisable(uint8_t motor_id, can_frame_t *frame)
     return J4310_BuildSpecial(motor_id, J4310_CMD_DISABLE, frame);
 }
 
+bool J4310_BuildClearFault(uint8_t motor_id, can_frame_t *frame)
+{
+    return J4310_BuildSpecial(motor_id, J4310_CMD_CLEAR_FAULT, frame);
+}
+
+bool J4310_BuildSaveZero(uint8_t motor_id, can_frame_t *frame)
+{
+    return J4310_BuildSpecial(motor_id, J4310_CMD_SAVE_ZERO, frame);
+}
+
 bool J4310_BuildMit(uint8_t motor_id,
                     float position_rad,
                     float velocity_rad_s,
@@ -255,13 +267,13 @@ bool J4310_BuildMit(uint8_t motor_id,
     {
         float dt_s;
 
-        dt_s = 0.01f;
+        dt_s = 0.001f;
         if (context->online_last_feedback_ms != 0U)
         {
             dt_s = (float)(uint32_t)(feedback.updated_at_ms -
                                      context->online_last_feedback_ms) /
                    1000.0f;
-            dt_s = J4310_Clamp(dt_s, 0.005f, 0.10f);
+            dt_s = J4310_Clamp(dt_s, 0.001f, 0.10f);
         }
         MotorOnlineMit_Update(
             &context->mit_tuner,

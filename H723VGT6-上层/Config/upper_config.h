@@ -9,14 +9,6 @@
 #define UPPER_PC_TIMEOUT_MS     200U
 #define UPPER_MOTOR_FEEDBACK_TIMEOUT_MS       50U
 
-#define UPPER_MG5010_CONTROL_PERIOD_MS         5U
-#define UPPER_MG5010_CURRENT_LIMIT_A           3.0f
-/* Outer-loop gains use output-shaft rad/s and produce current in A. */
-#define UPPER_MG5010_SPEED_KP                  2.291831181f
-#define UPPER_MG5010_SPEED_KI                  5.729577951f
-#define UPPER_MG5010_SPEED_KD                  0.028647890f
-#define UPPER_MG5010_SPEED_I_LIMIT             0.139626340f
-
 /* These MIT mapping limits must match the values stored in the J4310. */
 #define UPPER_J4310_POSITION_MAX_RAD           12.5f
 #define UPPER_J4310_VELOCITY_MAX_RAD_S         30.0f
@@ -46,18 +38,18 @@
 #define UPPER_M2006_POSITION_KD                 0.0f
 #define UPPER_M2006_POSITION_I_LIMIT            0.0f
 
+#define UPPER_J4310_KP_MAX                      500.0f
+#define UPPER_J4310_KD_MAX                      5.0f
+
 typedef enum
 {
-    UPPER_MOTOR_ARM_MG5010,
+    UPPER_MOTOR_ARM_M3508_1,
+    UPPER_MOTOR_ARM_M3508_2,
+    UPPER_MOTOR_ARM_M3508_3,
+    UPPER_MOTOR_ARM_M3508_4,
     UPPER_MOTOR_ARM_J4310,
-    UPPER_MOTOR_MOVE_M3508_L,
-    UPPER_MOTOR_MOVE_M3508_R,
-    UPPER_MOTOR_MOVE_M2006_L,
-    UPPER_MOTOR_MOVE_M2006_R,
-    UPPER_MOTOR_ORE_M2006,
-    UPPER_MOTOR_GATE_M2006,
-    UPPER_MOTOR_CONVEYOR_L,
-    UPPER_MOTOR_CONVEYOR_R,
+    UPPER_MOTOR_CONVEYOR_M2006,
+    UPPER_MOTOR_GRIPPER_M2006,
     UPPER_MOTOR_COUNT
 } upper_motor_id_t;
 

@@ -6,18 +6,14 @@
 
 #include "arm.h"
 #include "conveyor.h"
-#include "gate.h"
-#include "move.h"
-#include "ore.h"
+#include "gripper.h"
 #include "robot_state.h"
 
 typedef struct
 {
     arm_target_t arm;
-    move_target_t move;
-    ore_target_t ore;
-    gate_target_t gate;
     conveyor_target_t conveyor;
+    gripper_target_t gripper;
 } upper_target_t;
 
 typedef struct

@@ -138,7 +138,7 @@
           </Flash1>
           <bUseTDR>1</bUseTDR>
           <Flash2>BIN\UL2V8M.DLL</Flash2>
-          <Flash3></Flash3>
+          <Flash3>"" ()</Flash3>
           <Flash4></Flash4>
           <pFcarmOut></pFcarmOut>
           <pFcarmGrp></pFcarmGrp>
@@ -207,7 +207,7 @@
             <Ro2Chk>0</Ro2Chk>
             <Ro3Chk>0</Ro3Chk>
             <Ir1Chk>1</Ir1Chk>
-            <Ir2Chk>1</Ir2Chk>
+            <Ir2Chk>0</Ir2Chk>
             <Ra1Chk>0</Ra1Chk>
             <Ra2Chk>0</Ra2Chk>
             <Ra3Chk>0</Ra3Chk>
@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H723xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../BSP/Can;../BSP/Communication;../Driver/Can;../Driver/Motor;../Driver/PcLink;../Algorithm/Pid;../Algorithm/MotorOnlineTune;../App/Arm;../App/Move;../App/Ore;../App/Gate;../App/Conveyor;../App/Gripper;../Application/Communication;../Application/Robot;../Application/Task;../Config;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include</IncludePath>
+              <IncludePath>../Core/Inc;../BSP/Can;../BSP/Communication;../Driver/Can;../Driver/Motor;../Driver/PcLink;../Driver/Flash;../Algorithm/Pid;../Algorithm/MotorOnlineTune;../App/Arm;../App/Conveyor;../App/Gripper;../Application/Communication;../Application/Robot;../Application/Task;../Application/Flash;../Config;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -866,24 +866,14 @@
               <FilePath>../App/Arm/arm.c</FilePath>
             </File>
             <File>
-              <FileName>move.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../App/Move/move.c</FilePath>
-            </File>
-            <File>
-              <FileName>ore.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../App/Ore/ore.c</FilePath>
-            </File>
-            <File>
-              <FileName>gate.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../App/Gate/gate.c</FilePath>
-            </File>
-            <File>
               <FileName>conveyor.c</FileName>
               <FileType>1</FileType>
               <FilePath>../App/Conveyor/conveyor.c</FilePath>
+            </File>
+            <File>
+              <FileName>gripper.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../App/Gripper/gripper.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -904,6 +894,26 @@
               <FileName>upper_entry.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Application/Task/upper_entry.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User/Application/Flash</GroupName>
+          <Files>
+            <File>
+              <FileName>flash_tool.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Application/Flash/flash_tool.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Driver/Flash</GroupName>
+          <Files>
+            <File>
+              <FileName>W25Qxx.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Driver/Flash/W25Qxx.c</FilePath>
             </File>
           </Files>
         </Group>

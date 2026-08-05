@@ -6,7 +6,6 @@
 #include "can_id.h"
 #include "DJI/dji_group.h"
 #include "DM J4310/j4310.h"
-#include "LK MG5010E-i36/mg5010.h"
 #include "M2006/m2006.h"
 #include "M3508/m3508.h"
 #include "upper_config.h"
@@ -19,32 +18,105 @@ static const motor_cfg_t *upper_motor_cfg_ref;
 static size_t upper_motor_count;
 static uint32_t upper_motor_tick_ms;
 static bool upper_motor_initialized;
-static bool mg5010_enabled[MG5010_MOTOR_ID_MAX + 1U];
 static bool j4310_enabled[UPPER_MOTOR_PORT_MAX_NODE_ID + 1U];
+static uint32_t j4310_enabled_at_ms[UPPER_MOTOR_PORT_MAX_NODE_ID + 1U];
 static bool dji_group_dirty[UPPER_CAN_BUS_COUNT][UPPER_DJI_GROUP_COUNT];
+static bool upper_motor_active[MOTOR_MANAGER_MAX_COUNT];
+static uint32_t upper_motor_active_since_ms[MOTOR_MANAGER_MAX_COUNT];
 
-static float UpperMotorPort_Abs(float value)
+static bool UpperMotorPort_IsDjiModel(motor_model_t model)
 {
-    return (value < 0.0f) ? -value : value;
+    return (model == MOTOR_MODEL_M3508) ||
+           (model == MOTOR_MODEL_M2006);
 }
 
-static float UpperMotorPort_Clamp(float value, float min, float max)
+static bool UpperMotorPort_CheckCfg(const motor_cfg_t *cfg,
+                                    size_t motor_count)
 {
-    if (value < min)
+    size_t index;
+
+    if ((cfg == NULL) || (motor_count == 0U) ||
+        (motor_count > MOTOR_MANAGER_MAX_COUNT))
     {
-        return min;
+        return false;
     }
-    if (value > max)
+
+    for (index = 0U; index < motor_count; index++)
     {
-        return max;
+        size_t previous;
+
+        if ((cfg[index].can_bus == 0U) ||
+            (cfg[index].can_bus > UPPER_CAN_BUS_COUNT) ||
+            (cfg[index].period_ms != UPPER_CONTROL_PERIOD_MS) ||
+            (cfg[index].phase_ms != 0U) || !cfg[index].protocol_ready)
+        {
+            return false;
+        }
+
+        if (UpperMotorPort_IsDjiModel(cfg[index].model))
+        {
+            if ((cfg[index].node_id == 0U) || (cfg[index].node_id > 8U))
+            {
+                return false;
+            }
+        }
+        else if (cfg[index].model == MOTOR_MODEL_J4310)
+        {
+            if ((cfg[index].node_id == 0U) ||
+                (cfg[index].node_id > 0x0FU))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+
+        for (previous = 0U; previous < index; previous++)
+        {
+            if ((cfg[previous].can_bus == cfg[index].can_bus) &&
+                (cfg[previous].node_id == cfg[index].node_id) &&
+                ((cfg[previous].model == cfg[index].model) ||
+                 (UpperMotorPort_IsDjiModel(cfg[previous].model) &&
+                  UpperMotorPort_IsDjiModel(cfg[index].model))))
+            {
+                return false;
+            }
+        }
     }
-    return value;
+
+    return true;
 }
 
 static bool UpperMotorPort_SendFrame(uint8_t can_bus,
                                      const can_frame_t *frame)
 {
     return BspCan_Send(can_bus, frame);
+}
+
+static size_t UpperMotorPort_FindCfg(const motor_cfg_t *cfg)
+{
+    size_t index;
+
+    if ((cfg == NULL) || (upper_motor_cfg_ref == NULL))
+    {
+        return upper_motor_count;
+    }
+    for (index = 0U; index < upper_motor_count; index++)
+    {
+        if (&upper_motor_cfg_ref[index] == cfg)
+        {
+            return index;
+        }
+    }
+    return upper_motor_count;
+}
+
+static bool UpperMotorPort_FeedbackFresh(uint32_t updated_at_ms,
+                                         uint32_t tick_ms)
+{
+    return (tick_ms - updated_at_ms) <= UPPER_MOTOR_FEEDBACK_TIMEOUT_MS;
 }
 
 static bool UpperMotorPort_MarkDjiGroup(uint8_t can_bus, uint8_t node_id)
@@ -62,81 +134,75 @@ static bool UpperMotorPort_MarkDjiGroup(uint8_t can_bus, uint8_t node_id)
     return true;
 }
 
-static bool UpperMotorPort_SendMg5010(const motor_cfg_t *cfg,
-                                      const motor_cmd_t *cmd)
+static bool UpperMotorPort_FlushDjiGroup(uint8_t can_bus,
+                                         uint32_t group_index)
 {
-    can_frame_t command_frame;
-    can_frame_t state_frame;
-    bool built;
+    can_frame_t frame;
+    int16_t current_raw[DJI_GROUP_MOTOR_COUNT] = {0};
+    uint8_t start_motor_id;
+    size_t motor_index;
+    bool group_valid;
 
-    if ((cfg->node_id < MG5010_MOTOR_ID_MIN) ||
-        (cfg->node_id > MG5010_MOTOR_ID_MAX))
+    if ((can_bus == 0U) || (can_bus > UPPER_CAN_BUS_COUNT) ||
+        (group_index >= UPPER_DJI_GROUP_COUNT))
     {
         return false;
     }
-
-    if (cmd->mode == MOTOR_CMD_STOP)
+    if (!dji_group_dirty[can_bus - 1U][group_index])
     {
-        built = Mg5010_BuildStop(cfg->node_id, &state_frame);
-        if (built && UpperMotorPort_SendFrame(cfg->can_bus, &state_frame))
+        return true;
+    }
+
+    start_motor_id =
+        (uint8_t)(group_index * DJI_GROUP_MOTOR_COUNT + 1U);
+    group_valid = true;
+    for (motor_index = 0U;
+         motor_index < upper_motor_count;
+         motor_index++)
+    {
+        const motor_cfg_t *cfg;
+        uint32_t slot;
+
+        cfg = &upper_motor_cfg_ref[motor_index];
+        if ((cfg->can_bus != can_bus) ||
+            (cfg->node_id < start_motor_id) ||
+            (cfg->node_id >=
+             (uint8_t)(start_motor_id + DJI_GROUP_MOTOR_COUNT)))
         {
-            mg5010_enabled[cfg->node_id] = false;
-            return true;
+            continue;
         }
+
+        slot = (uint32_t)(cfg->node_id - start_motor_id);
+        if (cfg->model == MOTOR_MODEL_M3508)
+        {
+            if (!M3508_CalcCurrentRaw(can_bus,
+                                      cfg->node_id,
+                                      upper_motor_tick_ms,
+                                      &current_raw[slot]))
+            {
+                group_valid = false;
+            }
+        }
+        else if (cfg->model == MOTOR_MODEL_M2006)
+        {
+            if (!M2006_CalcCurrentRaw(can_bus,
+                                      cfg->node_id,
+                                      upper_motor_tick_ms,
+                                      &current_raw[slot]))
+            {
+                group_valid = false;
+            }
+        }
+    }
+
+    if (!group_valid ||
+        !DjiGroup_BuildFrame(start_motor_id, current_raw, &frame) ||
+        !UpperMotorPort_SendFrame(can_bus, &frame))
+    {
         return false;
     }
-
-    switch (cmd->mode)
-    {
-    case MOTOR_CMD_CURRENT:
-        built = Mg5010_BuildCurrent(
-            cfg->node_id,
-            UpperMotorPort_Clamp(cmd->current_a,
-                                 -UPPER_MG5010_CURRENT_LIMIT_A,
-                                 UPPER_MG5010_CURRENT_LIMIT_A),
-            &command_frame);
-        break;
-
-    case MOTOR_CMD_VELOCITY:
-        built = Mg5010_BuildControlledVelocity(
-            cfg->node_id,
-            cmd->vel_rad_s,
-            UPPER_MG5010_CURRENT_LIMIT_A,
-            (float)cfg->period_ms / 1000.0f,
-            &command_frame);
-        break;
-
-    case MOTOR_CMD_POSITION:
-        if (!Mg5010_PositionReady(cfg->node_id))
-        {
-            return Mg5010_BuildReadPosition(cfg->node_id, &state_frame) &&
-                   UpperMotorPort_SendFrame(cfg->can_bus, &state_frame);
-        }
-        built = Mg5010_BuildPosition(cfg->node_id,
-                                     cmd->pos_rad,
-                                     UpperMotorPort_Abs(cmd->vel_rad_s),
-                                     &command_frame);
-        break;
-
-    default:
-        built = false;
-        break;
-    }
-
-    if (!built)
-    {
-        return false;
-    }
-    if (!mg5010_enabled[cfg->node_id])
-    {
-        if (!Mg5010_BuildRun(cfg->node_id, &state_frame) ||
-            !UpperMotorPort_SendFrame(cfg->can_bus, &state_frame))
-        {
-            return false;
-        }
-        mg5010_enabled[cfg->node_id] = true;
-    }
-    return UpperMotorPort_SendFrame(cfg->can_bus, &command_frame);
+    dji_group_dirty[can_bus - 1U][group_index] = false;
+    return true;
 }
 
 static bool UpperMotorPort_SendJ4310(const motor_cfg_t *cfg,
@@ -144,6 +210,19 @@ static bool UpperMotorPort_SendJ4310(const motor_cfg_t *cfg,
 {
     can_frame_t command_frame;
     can_frame_t state_frame;
+    j4310_feedback_t feedback;
+    uint32_t group_index;
+    bool feedback_fresh;
+
+    for (group_index = 0U;
+         group_index < UPPER_DJI_GROUP_COUNT;
+         group_index++)
+    {
+        if (!UpperMotorPort_FlushDjiGroup(cfg->can_bus, group_index))
+        {
+            return false;
+        }
+    }
 
     if (cmd->mode == MOTOR_CMD_STOP)
     {
@@ -161,14 +240,21 @@ static bool UpperMotorPort_SendJ4310(const motor_cfg_t *cfg,
         return false;
     }
 
-    if (!J4310_BuildMit(cfg->node_id,
-                        cmd->pos_rad,
-                        cmd->vel_rad_s,
-                        cmd->kp,
-                        cmd->kd,
-                        cmd->torque_nm,
-                        &command_frame))
+    feedback_fresh = J4310_GetFeedback(cfg->node_id, &feedback) &&
+                     UpperMotorPort_FeedbackFresh(feedback.updated_at_ms,
+                                                  upper_motor_tick_ms);
+    if (feedback_fresh && (feedback.fault != 0U))
     {
+        if (!j4310_enabled[cfg->node_id])
+        {
+            return true;
+        }
+        if (J4310_BuildDisable(cfg->node_id, &state_frame) &&
+            UpperMotorPort_SendFrame(cfg->can_bus, &state_frame))
+        {
+            j4310_enabled[cfg->node_id] = false;
+            return true;
+        }
         return false;
     }
 
@@ -180,6 +266,32 @@ static bool UpperMotorPort_SendJ4310(const motor_cfg_t *cfg,
             return false;
         }
         j4310_enabled[cfg->node_id] = true;
+        j4310_enabled_at_ms[cfg->node_id] = upper_motor_tick_ms;
+        return true;
+    }
+
+    if (!feedback_fresh &&
+        ((upper_motor_tick_ms - j4310_enabled_at_ms[cfg->node_id]) >
+         UPPER_MOTOR_FEEDBACK_TIMEOUT_MS))
+    {
+        if (J4310_BuildDisable(cfg->node_id, &state_frame) &&
+            UpperMotorPort_SendFrame(cfg->can_bus, &state_frame))
+        {
+            j4310_enabled[cfg->node_id] = false;
+            return true;
+        }
+        return false;
+    }
+
+    if (!J4310_BuildMit(cfg->node_id,
+                        cmd->pos_rad,
+                        cmd->vel_rad_s,
+                        cmd->kp,
+                        cmd->kd,
+                        cmd->torque_nm,
+                        &command_frame))
+    {
+        return false;
     }
 
     return UpperMotorPort_SendFrame(cfg->can_bus, &command_frame);
@@ -217,7 +329,11 @@ static bool UpperMotorPort_SendM3508(const motor_cfg_t *cfg,
         return false;
     }
 
-    if (!M3508_SetTarget(cfg->node_id, mode, target, upper_motor_tick_ms))
+    if (!M3508_SetTarget(cfg->can_bus,
+                         cfg->node_id,
+                         mode,
+                         target,
+                         upper_motor_tick_ms))
     {
         return false;
     }
@@ -270,7 +386,6 @@ static bool UpperMotorPort_SendM2006(const motor_cfg_t *cfg,
 bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
 {
     j4310_limits_t j4310_limits;
-    motor_online_gains_t mg5010_speed_gains;
     m2006_cfg_t m2006_driver_cfg;
     m3508_cfg_t m3508_driver_cfg;
     size_t index;
@@ -278,20 +393,19 @@ bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
     upper_motor_initialized = false;
     upper_motor_cfg_ref = NULL;
     upper_motor_count = 0U;
-    if ((cfg == NULL) || (motor_count == 0U))
+    if (!UpperMotorPort_CheckCfg(cfg, motor_count))
     {
         return false;
     }
 
-    (void)memset(mg5010_enabled, 0, sizeof(mg5010_enabled));
     (void)memset(j4310_enabled, 0, sizeof(j4310_enabled));
+    (void)memset(j4310_enabled_at_ms, 0, sizeof(j4310_enabled_at_ms));
     (void)memset(dji_group_dirty, 0, sizeof(dji_group_dirty));
-    Mg5010_Init();
+    (void)memset(upper_motor_active, 0, sizeof(upper_motor_active));
+    (void)memset(upper_motor_active_since_ms,
+                 0,
+                 sizeof(upper_motor_active_since_ms));
     J4310_Init();
-
-    mg5010_speed_gains.kp = UPPER_MG5010_SPEED_KP;
-    mg5010_speed_gains.ki = UPPER_MG5010_SPEED_KI;
-    mg5010_speed_gains.kd = UPPER_MG5010_SPEED_KD;
 
     j4310_limits = (j4310_limits_t)
     {
@@ -301,22 +415,12 @@ bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
     };
     for (index = 0U; index < motor_count; index++)
     {
-        if (cfg[index].model == MOTOR_MODEL_MG5010)
-        {
-            if (!Mg5010_SetOuterSpeedPid(cfg[index].node_id,
-                                         mg5010_speed_gains,
-                                         UPPER_MG5010_SPEED_I_LIMIT) ||
-                !Mg5010_SetOnlinePidEnabled(cfg[index].node_id, true))
-            {
-                return false;
-            }
-        }
-        else if ((cfg[index].model == MOTOR_MODEL_J4310) &&
-                 (!J4310_AddMotor(cfg[index].node_id,
-                                  CAN_J4310_MASTER_ID,
-                                  cfg[index].node_id & 0x0FU,
-                                  &j4310_limits) ||
-                  !J4310_SetOnlineMitEnabled(cfg[index].node_id, true)))
+        if ((cfg[index].model == MOTOR_MODEL_J4310) &&
+            (!J4310_AddMotor(cfg[index].node_id,
+                             CAN_J4310_MASTER_ID,
+                             cfg[index].node_id & 0x0FU,
+                             &j4310_limits) ||
+             !J4310_SetOnlineMitEnabled(cfg[index].node_id, true)))
         {
             return false;
         }
@@ -394,17 +498,29 @@ bool UpperMotorPort_Send(const motor_cfg_t *cfg,
                          const motor_cmd_t *cmd,
                          void *user_data)
 {
+    size_t motor_index;
+    bool active;
+
     (void)user_data;
     if (!upper_motor_initialized || (cfg == NULL) || (cmd == NULL))
     {
         return false;
     }
 
+    motor_index = UpperMotorPort_FindCfg(cfg);
+    if (motor_index >= upper_motor_count)
+    {
+        return false;
+    }
+    active = cmd->mode != MOTOR_CMD_STOP;
+    if (active && !upper_motor_active[motor_index])
+    {
+        upper_motor_active_since_ms[motor_index] = upper_motor_tick_ms;
+    }
+    upper_motor_active[motor_index] = active;
+
     switch (cfg->model)
     {
-    case MOTOR_MODEL_MG5010:
-        return UpperMotorPort_SendMg5010(cfg, cmd);
-
     case MOTOR_MODEL_J4310:
         return UpperMotorPort_SendJ4310(cfg, cmd);
 
@@ -432,70 +548,11 @@ bool UpperMotorPort_Flush(void)
              group_index < UPPER_DJI_GROUP_COUNT;
              group_index++)
         {
-            can_frame_t frame;
-            int16_t current_raw[DJI_GROUP_MOTOR_COUNT] = {0};
-            uint8_t can_bus;
-            uint8_t start_motor_id;
-            size_t motor_index;
-            bool group_valid;
-
-            if (!dji_group_dirty[bus_index][group_index])
-            {
-                continue;
-            }
-
-            can_bus = (uint8_t)(bus_index + 1U);
-            start_motor_id =
-                (uint8_t)(group_index * DJI_GROUP_MOTOR_COUNT + 1U);
-            group_valid = true;
-            for (motor_index = 0U;
-                 motor_index < upper_motor_count;
-                 motor_index++)
-            {
-                const motor_cfg_t *cfg;
-                uint32_t slot;
-
-                cfg = &upper_motor_cfg_ref[motor_index];
-                if ((cfg->can_bus != can_bus) ||
-                    (cfg->node_id < start_motor_id) ||
-                    (cfg->node_id >=
-                     (uint8_t)(start_motor_id + DJI_GROUP_MOTOR_COUNT)))
-                {
-                    continue;
-                }
-
-                slot = (uint32_t)(cfg->node_id - start_motor_id);
-                if (cfg->model == MOTOR_MODEL_M3508)
-                {
-                    if (!M3508_CalcCurrentRaw(cfg->node_id,
-                                              upper_motor_tick_ms,
-                                              &current_raw[slot]))
-                    {
-                        group_valid = false;
-                    }
-                }
-                else if (cfg->model == MOTOR_MODEL_M2006)
-                {
-                    if (!M2006_CalcCurrentRaw(can_bus,
-                                              cfg->node_id,
-                                              upper_motor_tick_ms,
-                                              &current_raw[slot]))
-                    {
-                        group_valid = false;
-                    }
-                }
-            }
-
-            if (!group_valid ||
-                !DjiGroup_BuildFrame(start_motor_id,
-                                     current_raw,
-                                     &frame) ||
-                !UpperMotorPort_SendFrame(can_bus, &frame))
+            if (!UpperMotorPort_FlushDjiGroup(
+                    (uint8_t)(bus_index + 1U), group_index))
             {
                 success = false;
-                continue;
             }
-            dji_group_dirty[bus_index][group_index] = false;
         }
     }
     return success;
@@ -524,13 +581,6 @@ void UpperMotorPort_OnFrame(uint8_t can_bus,
 
         switch (cfg->model)
         {
-        case MOTOR_MODEL_MG5010:
-            if (Mg5010_OnFrame(cfg->node_id, frame, tick_ms))
-            {
-                return;
-            }
-            break;
-
         case MOTOR_MODEL_J4310:
             if (J4310_OnFrame(frame, tick_ms))
             {
@@ -539,7 +589,10 @@ void UpperMotorPort_OnFrame(uint8_t can_bus,
             break;
 
         case MOTOR_MODEL_M3508:
-            if (M3508_OnFrame(cfg->node_id, frame, tick_ms))
+            if (M3508_OnFrame(can_bus,
+                              cfg->node_id,
+                              frame,
+                              tick_ms))
             {
                 return;
             }
@@ -556,4 +609,94 @@ void UpperMotorPort_OnFrame(uint8_t can_bus,
             break;
         }
     }
+}
+
+bool UpperMotorPort_GetHealth(uint32_t tick_ms,
+                              upper_motor_health_t *health)
+{
+    size_t index;
+
+    if (!upper_motor_initialized || (health == NULL))
+    {
+        return false;
+    }
+
+    (void)memset(health, 0, sizeof(*health));
+    for (index = 0U; index < upper_motor_count; index++)
+    {
+        const motor_cfg_t *cfg;
+        uint32_t mask;
+        bool feedback_valid;
+        uint32_t updated_at_ms;
+        bool faulted;
+
+        if (!upper_motor_active[index])
+        {
+            continue;
+        }
+        cfg = &upper_motor_cfg_ref[index];
+        mask = 1UL << index;
+        health->active_mask |= mask;
+        if (!cfg->protocol_ready)
+        {
+            health->protocol_block_mask |= mask;
+            continue;
+        }
+
+        feedback_valid = false;
+        updated_at_ms = 0U;
+        faulted = false;
+        switch (cfg->model)
+        {
+        case MOTOR_MODEL_J4310:
+        {
+            j4310_feedback_t feedback;
+
+            feedback_valid = J4310_GetFeedback(cfg->node_id, &feedback);
+            updated_at_ms = feedback.updated_at_ms;
+            faulted = feedback.fault != 0U;
+            break;
+        }
+
+        case MOTOR_MODEL_M3508:
+        {
+            m3508_feedback_t feedback;
+
+            feedback_valid = M3508_GetFeedback(cfg->can_bus,
+                                               cfg->node_id,
+                                               &feedback);
+            updated_at_ms = feedback.updated_at_ms;
+            break;
+        }
+
+        case MOTOR_MODEL_M2006:
+        {
+            m2006_feedback_t feedback;
+
+            feedback_valid = M2006_GetFeedback(cfg->can_bus,
+                                               cfg->node_id,
+                                               &feedback);
+            updated_at_ms = feedback.updated_at_ms;
+            break;
+        }
+
+        default:
+            health->protocol_block_mask |= mask;
+            continue;
+        }
+
+        if (faulted)
+        {
+            health->fault_mask |= mask;
+        }
+        if ((!feedback_valid &&
+             ((tick_ms - upper_motor_active_since_ms[index]) >
+              UPPER_MOTOR_FEEDBACK_TIMEOUT_MS)) ||
+            (feedback_valid &&
+             !UpperMotorPort_FeedbackFresh(updated_at_ms, tick_ms)))
+        {
+            health->offline_mask |= mask;
+        }
+    }
+    return true;
 }

@@ -8,10 +8,18 @@
 typedef struct
 {
     bool enabled;
-    float vel_rad_s[2];
+    float m2006_vel_rad_s;
 } conveyor_target_t;
 
-void Conveyor_Update(motor_manager_t *manager,
-                     const conveyor_target_t *target);
+typedef struct
+{
+    bool enabled;
+    motor_cmd_t m2006;
+} conveyor_output_t;
+
+bool Conveyor_Calc(const conveyor_target_t *target,
+                   conveyor_output_t *output);
+bool Conveyor_Apply(motor_manager_t *manager,
+                    const conveyor_output_t *output);
 
 #endif

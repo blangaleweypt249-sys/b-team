@@ -5,10 +5,8 @@
 #include "upper_config.h"
 
 #define UPPER_ENABLE_ARM       (1U << 0)
-#define UPPER_ENABLE_MOVE      (1U << 1)
-#define UPPER_ENABLE_ORE       (1U << 2)
-#define UPPER_ENABLE_GATE      (1U << 3)
-#define UPPER_ENABLE_CONVEYOR  (1U << 4)
+#define UPPER_ENABLE_CONVEYOR  (1U << 1)
+#define UPPER_ENABLE_GRIPPER   (1U << 2)
 #define UPPER_STATE_PAYLOAD_SIZE 20U
 
 static uint16_t UpperPcLink_ReadU16(const uint8_t *data)
@@ -65,25 +63,19 @@ static bool UpperPcLink_DecodeTarget(const pc_frame_t *frame,
     value = &frame->payload[2];
 
     target->arm.enabled = (enable_mask & UPPER_ENABLE_ARM) != 0U;
-    target->move.enabled = (enable_mask & UPPER_ENABLE_MOVE) != 0U;
-    target->ore.enabled = (enable_mask & UPPER_ENABLE_ORE) != 0U;
-    target->gate.enabled = (enable_mask & UPPER_ENABLE_GATE) != 0U;
     target->conveyor.enabled = (enable_mask & UPPER_ENABLE_CONVEYOR) != 0U;
+    target->gripper.enabled = (enable_mask & UPPER_ENABLE_GRIPPER) != 0U;
 
-    target->arm.joint_pos_rad = UpperPcLink_ReadFloat(value + 0U);
-    target->arm.joint_vel_rad_s = UpperPcLink_ReadFloat(value + 4U);
-    target->arm.grip_pos_rad = UpperPcLink_ReadFloat(value + 8U);
-    target->arm.grip_vel_rad_s = UpperPcLink_ReadFloat(value + 12U);
-    target->arm.grip_kp = UpperPcLink_ReadFloat(value + 16U);
-    target->arm.grip_kd = UpperPcLink_ReadFloat(value + 20U);
-    target->move.m3508_vel_rad_s[0] = UpperPcLink_ReadFloat(value + 24U);
-    target->move.m3508_vel_rad_s[1] = UpperPcLink_ReadFloat(value + 28U);
-    target->move.m2006_vel_rad_s[0] = UpperPcLink_ReadFloat(value + 32U);
-    target->move.m2006_vel_rad_s[1] = UpperPcLink_ReadFloat(value + 36U);
-    target->ore.vel_rad_s = UpperPcLink_ReadFloat(value + 40U);
-    target->gate.vel_rad_s = UpperPcLink_ReadFloat(value + 44U);
-    target->conveyor.vel_rad_s[0] = UpperPcLink_ReadFloat(value + 48U);
-    target->conveyor.vel_rad_s[1] = UpperPcLink_ReadFloat(value + 52U);
+    target->arm.grip_pos_rad = UpperPcLink_ReadFloat(value + 0U);
+    target->arm.grip_vel_rad_s = UpperPcLink_ReadFloat(value + 4U);
+    target->arm.grip_kp = UpperPcLink_ReadFloat(value + 8U);
+    target->arm.grip_kd = UpperPcLink_ReadFloat(value + 12U);
+    target->arm.m3508_vel_rad_s[0] = UpperPcLink_ReadFloat(value + 16U);
+    target->arm.m3508_vel_rad_s[1] = UpperPcLink_ReadFloat(value + 20U);
+    target->arm.m3508_vel_rad_s[2] = UpperPcLink_ReadFloat(value + 24U);
+    target->arm.m3508_vel_rad_s[3] = UpperPcLink_ReadFloat(value + 28U);
+    target->conveyor.m2006_vel_rad_s = UpperPcLink_ReadFloat(value + 32U);
+    target->gripper.m2006_vel_rad_s = UpperPcLink_ReadFloat(value + 36U);
     return true;
 }
 

@@ -6,7 +6,8 @@
 
 #include "can_frame.h"
 
-#define M3508_MOTOR_COUNT  8U
+#define M3508_CAN_BUS_COUNT  3U
+#define M3508_MOTOR_COUNT    8U
 
 typedef enum
 {
@@ -47,6 +48,7 @@ typedef struct
 
 typedef struct
 {
+    uint8_t can_bus;
     uint8_t motor_id;
     uint16_t rotor_encoder;
     int16_t rotor_speed_rpm;
@@ -69,23 +71,33 @@ typedef struct
 } m3508_timeout_stats_t;
 
 bool M3508_Init(const m3508_cfg_t *cfg);
-bool M3508_SetTarget(uint8_t motor_id,
+bool M3508_SetTarget(uint8_t can_bus,
+                     uint8_t motor_id,
                      m3508_mode_t mode,
                      float target,
                      uint32_t tick_ms);
-bool M3508_CalcCurrentRaw(uint8_t motor_id,
+bool M3508_CalcCurrentRaw(uint8_t can_bus,
+                          uint8_t motor_id,
                           uint32_t tick_ms,
                           int16_t *current_raw);
-bool M3508_OnFrame(uint8_t motor_id,
+bool M3508_OnFrame(uint8_t can_bus,
+                    uint8_t motor_id,
                     const can_frame_t *frame,
                     uint32_t tick_ms);
-bool M3508_GetFeedback(uint8_t motor_id, m3508_feedback_t *feedback);
-bool M3508_GetTimeoutStats(uint8_t motor_id,
+bool M3508_GetFeedback(uint8_t can_bus,
+                       uint8_t motor_id,
+                       m3508_feedback_t *feedback);
+bool M3508_GetTimeoutStats(uint8_t can_bus,
+                           uint8_t motor_id,
                            m3508_timeout_stats_t *stats);
-bool M3508_SetSpeedPid(uint8_t motor_id,
+bool M3508_SetSpeedPid(uint8_t can_bus,
+                       uint8_t motor_id,
                        const m3508_pid_cfg_t *cfg);
-bool M3508_SetOnlinePidEnabled(uint8_t motor_id, bool enabled);
-bool M3508_GetOnlinePidState(uint8_t motor_id,
+bool M3508_SetOnlinePidEnabled(uint8_t can_bus,
+                               uint8_t motor_id,
+                               bool enabled);
+bool M3508_GetOnlinePidState(uint8_t can_bus,
+                             uint8_t motor_id,
                              m3508_online_pid_state_t *state);
 
 #endif

@@ -40,16 +40,18 @@ typedef struct
 } m3508_context_t;
 
 static m3508_cfg_t m3508_cfg;
-static m3508_context_t m3508_context[M3508_MOTOR_COUNT];
+static m3508_context_t
+    m3508_context[M3508_CAN_BUS_COUNT][M3508_MOTOR_COUNT];
 
 static bool M3508_IsFinite(float value)
 {
     return (value == value) && (value <= FLT_MAX) && (value >= -FLT_MAX);
 }
 
-static bool M3508_IsValidId(uint8_t motor_id)
+static bool M3508_IsValidAddress(uint8_t can_bus, uint8_t motor_id)
 {
-    return (motor_id >= 1U) && (motor_id <= M3508_MOTOR_COUNT);
+    return (can_bus >= 1U) && (can_bus <= M3508_CAN_BUS_COUNT) &&
+           (motor_id >= 1U) && (motor_id <= M3508_MOTOR_COUNT);
 }
 
 static bool M3508_IsValidPid(const m3508_pid_cfg_t *cfg)
@@ -60,6 +62,16 @@ static bool M3508_IsValidPid(const m3508_pid_cfg_t *cfg)
            M3508_IsFinite(cfg->output_limit) && (cfg->kp >= 0.0f) &&
            (cfg->ki >= 0.0f) && (cfg->kd >= 0.0f) &&
            (cfg->integral_limit >= 0.0f) && (cfg->output_limit > 0.0f);
+}
+
+static m3508_context_t *M3508_GetContext(uint8_t can_bus,
+                                         uint8_t motor_id)
+{
+    if (!M3508_IsValidAddress(can_bus, motor_id))
+    {
+        return NULL;
+    }
+    return &m3508_context[can_bus - 1U][motor_id - 1U];
 }
 
 static float M3508_Clamp(float value, float min, float max)
@@ -282,7 +294,8 @@ static void M3508_UpdateTimeoutStats(m3508_context_t *context,
 
 bool M3508_Init(const m3508_cfg_t *cfg)
 {
-    uint32_t index;
+    uint32_t bus_index;
+    uint32_t motor_index;
 
     if ((cfg == NULL) || !M3508_IsFinite(cfg->current_limit_a) ||
         !M3508_IsFinite(cfg->position_vel_limit_rad_s) ||
@@ -299,40 +312,48 @@ bool M3508_Init(const m3508_cfg_t *cfg)
 
     m3508_cfg = *cfg;
     (void)memset(m3508_context, 0, sizeof(m3508_context));
-    for (index = 0U; index < M3508_MOTOR_COUNT; index++)
+    for (bus_index = 0U; bus_index < M3508_CAN_BUS_COUNT; bus_index++)
     {
-        m3508_context[index].mode = M3508_MODE_STOP;
-        m3508_context[index].speed_pid.cfg = cfg->speed_pid;
-        m3508_context[index].speed_pid.full_integral_error = 0.314159f;
-        m3508_context[index].speed_pid.integral_separation_error =
-            4.712389f;
-        m3508_context[index].speed_pid_base = cfg->speed_pid;
-        if (!M3508_ConfigureOnlinePid(&m3508_context[index], true))
+        for (motor_index = 0U; motor_index < M3508_MOTOR_COUNT;
+             motor_index++)
         {
-            return false;
+            m3508_context_t *context;
+
+            context = &m3508_context[bus_index][motor_index];
+            context->mode = M3508_MODE_STOP;
+            context->speed_pid.cfg = cfg->speed_pid;
+            context->speed_pid.full_integral_error = 0.314159f;
+            context->speed_pid.integral_separation_error = 4.712389f;
+            context->speed_pid_base = cfg->speed_pid;
+            if (!M3508_ConfigureOnlinePid(context, true))
+            {
+                return false;
+            }
+            context->position_pid.cfg = cfg->position_pid;
+            context->position_pid.full_integral_error = 0.01f;
+            context->position_pid.integral_separation_error = 0.25f;
+            context->feedback.can_bus = (uint8_t)(bus_index + 1U);
+            context->feedback.motor_id = (uint8_t)(motor_index + 1U);
         }
-        m3508_context[index].position_pid.cfg = cfg->position_pid;
-        m3508_context[index].position_pid.full_integral_error = 0.01f;
-        m3508_context[index].position_pid.integral_separation_error = 0.25f;
-        m3508_context[index].feedback.motor_id = (uint8_t)(index + 1U);
     }
     return true;
 }
 
-bool M3508_SetTarget(uint8_t motor_id,
+bool M3508_SetTarget(uint8_t can_bus,
+                     uint8_t motor_id,
                      m3508_mode_t mode,
                      float target,
                      uint32_t tick_ms)
 {
     m3508_context_t *context;
 
-    if (!M3508_IsValidId(motor_id) || !M3508_IsFinite(target) ||
-        (mode < M3508_MODE_STOP) || (mode > M3508_MODE_POSITION))
+    context = M3508_GetContext(can_bus, motor_id);
+    if ((context == NULL) || !M3508_IsFinite(target) ||
+        (mode > M3508_MODE_POSITION))
     {
         return false;
     }
 
-    context = &m3508_context[motor_id - 1U];
     if ((context->mode == M3508_MODE_STOP) &&
         (mode != M3508_MODE_STOP))
     {
@@ -348,19 +369,21 @@ bool M3508_SetTarget(uint8_t motor_id,
     return true;
 }
 
-bool M3508_GetFeedback(uint8_t motor_id, m3508_feedback_t *feedback)
+bool M3508_GetFeedback(uint8_t can_bus,
+                       uint8_t motor_id,
+                       m3508_feedback_t *feedback)
 {
     const m3508_context_t *context;
     uint32_t before;
     uint32_t after;
     bool valid;
 
-    if (!M3508_IsValidId(motor_id) || (feedback == NULL))
+    context = M3508_GetContext(can_bus, motor_id);
+    if ((context == NULL) || (feedback == NULL))
     {
         return false;
     }
 
-    context = &m3508_context[motor_id - 1U];
     for (;;)
     {
         before = context->feedback_sequence;
@@ -379,17 +402,18 @@ bool M3508_GetFeedback(uint8_t motor_id, m3508_feedback_t *feedback)
     return valid;
 }
 
-bool M3508_GetTimeoutStats(uint8_t motor_id,
+bool M3508_GetTimeoutStats(uint8_t can_bus,
+                           uint8_t motor_id,
                            m3508_timeout_stats_t *stats)
 {
     const m3508_context_t *context;
 
-    if (!M3508_IsValidId(motor_id) || (stats == NULL))
+    context = M3508_GetContext(can_bus, motor_id);
+    if ((context == NULL) || (stats == NULL))
     {
         return false;
     }
 
-    context = &m3508_context[motor_id - 1U];
     stats->command_timed_out = context->timeout_stats.command_timed_out;
     stats->feedback_timed_out = context->timeout_stats.feedback_timed_out;
     stats->command_timeout_count =
@@ -399,7 +423,8 @@ bool M3508_GetTimeoutStats(uint8_t motor_id,
     return true;
 }
 
-bool M3508_OnFrame(uint8_t motor_id,
+bool M3508_OnFrame(uint8_t can_bus,
+                    uint8_t motor_id,
                     const can_frame_t *frame,
                     uint32_t tick_ms)
 {
@@ -411,8 +436,9 @@ bool M3508_OnFrame(uint8_t motor_id,
     int64_t relative_counts;
     uint32_t sequence;
 
-    if (!M3508_IsValidId(motor_id) || (frame == NULL) ||
-        frame->extended || (frame->dlc != 8U) ||
+    context = M3508_GetContext(can_bus, motor_id);
+    if ((context == NULL) || (frame == NULL) || frame->extended ||
+        (frame->dlc != 8U) ||
         (frame->id != (0x200U + motor_id)))
     {
         return false;
@@ -424,7 +450,6 @@ bool M3508_OnFrame(uint8_t motor_id,
         return false;
     }
 
-    context = &m3508_context[motor_id - 1U];
     feedback = &context->feedback;
     sequence = context->feedback_sequence;
     context->feedback_sequence = sequence + 1U;
@@ -450,6 +475,7 @@ bool M3508_OnFrame(uint8_t motor_id,
     context->previous_encoder = encoder;
     relative_counts = total_counts - context->zero_encoder_counts;
 
+    feedback->can_bus = can_bus;
     feedback->motor_id = motor_id;
     feedback->rotor_encoder = encoder;
     feedback->rotor_speed_rpm = (int16_t)M3508_ReadU16Be(&frame->data[2]);
@@ -473,7 +499,8 @@ bool M3508_OnFrame(uint8_t motor_id,
     return true;
 }
 
-bool M3508_CalcCurrentRaw(uint8_t motor_id,
+bool M3508_CalcCurrentRaw(uint8_t can_bus,
+                          uint8_t motor_id,
                           uint32_t tick_ms,
                           int16_t *current_raw)
 {
@@ -482,15 +509,23 @@ bool M3508_CalcCurrentRaw(uint8_t motor_id,
     float current_a;
     bool feedback_valid;
 
-    if (!M3508_IsValidId(motor_id) || (current_raw == NULL))
+    context = M3508_GetContext(can_bus, motor_id);
+    if ((context == NULL) || (current_raw == NULL))
     {
         return false;
     }
 
-    context = &m3508_context[motor_id - 1U];
     current_a = 0.0f;
-    feedback_valid = M3508_GetFeedback(motor_id, &feedback);
+    feedback_valid = M3508_GetFeedback(can_bus, motor_id, &feedback);
     M3508_UpdateTimeoutStats(context, feedback_valid, &feedback, tick_ms);
+    if ((context->mode != M3508_MODE_STOP) &&
+        (!feedback_valid || context->timeout_stats.command_timed_out ||
+         context->timeout_stats.feedback_timed_out))
+    {
+        M3508_ResetControl(context);
+        *current_raw = 0;
+        return true;
+    }
     if (context->mode != M3508_MODE_STOP)
     {
         switch (context->mode)
@@ -539,17 +574,18 @@ bool M3508_CalcCurrentRaw(uint8_t motor_id,
     return true;
 }
 
-bool M3508_SetSpeedPid(uint8_t motor_id,
+bool M3508_SetSpeedPid(uint8_t can_bus,
+                       uint8_t motor_id,
                        const m3508_pid_cfg_t *cfg)
 {
     m3508_context_t *context;
     bool enabled;
 
-    if (!M3508_IsValidId(motor_id) || !M3508_IsValidPid(cfg))
+    context = M3508_GetContext(can_bus, motor_id);
+    if ((context == NULL) || !M3508_IsValidPid(cfg))
     {
         return false;
     }
-    context = &m3508_context[motor_id - 1U];
     enabled = context->speed_online_pid.enabled != 0U;
     context->speed_pid_base = *cfg;
     context->speed_pid.cfg = *cfg;
@@ -561,31 +597,34 @@ bool M3508_SetSpeedPid(uint8_t motor_id,
     return true;
 }
 
-bool M3508_SetOnlinePidEnabled(uint8_t motor_id, bool enabled)
+bool M3508_SetOnlinePidEnabled(uint8_t can_bus,
+                               uint8_t motor_id,
+                               bool enabled)
 {
     m3508_context_t *context;
 
-    if (!M3508_IsValidId(motor_id))
+    context = M3508_GetContext(can_bus, motor_id);
+    if (context == NULL)
     {
         return false;
     }
-    context = &m3508_context[motor_id - 1U];
     MotorOnlinePid_SetEnabled(&context->speed_online_pid, enabled);
     context->speed_pid.cfg = context->speed_pid_base;
     M3508_ResetPid(&context->speed_pid);
     return true;
 }
 
-bool M3508_GetOnlinePidState(uint8_t motor_id,
+bool M3508_GetOnlinePidState(uint8_t can_bus,
+                             uint8_t motor_id,
                              m3508_online_pid_state_t *state)
 {
     const m3508_context_t *context;
 
-    if (!M3508_IsValidId(motor_id) || (state == NULL))
+    context = M3508_GetContext(can_bus, motor_id);
+    if ((context == NULL) || (state == NULL))
     {
         return false;
     }
-    context = &m3508_context[motor_id - 1U];
     state->enabled = context->speed_online_pid.enabled != 0U;
     state->strategy = state->enabled ?
                       (uint8_t)MOTOR_ONLINE_STRATEGY_HYBRID : 0U;

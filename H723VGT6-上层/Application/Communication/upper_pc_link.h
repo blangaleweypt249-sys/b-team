@@ -8,7 +8,7 @@
 #include "pc_protocol.h"
 #include "upper_robot.h"
 
-#define UPPER_PC_CMD_PAYLOAD_SIZE 58U
+#define UPPER_PC_CMD_PAYLOAD_SIZE 42U
 
 typedef void (*upper_pc_cmd_handler_t)(const upper_target_t *target,
                                        void *user_data);

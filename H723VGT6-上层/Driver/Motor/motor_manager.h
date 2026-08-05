@@ -13,11 +13,9 @@ extern "C" {
 
 typedef enum
 {
-    MOTOR_MODEL_MG5010,
     MOTOR_MODEL_J4310,
     MOTOR_MODEL_M3508,
     MOTOR_MODEL_M2006,
-    MOTOR_MODEL_DJM4216,
     MOTOR_MODEL_U12,
     MOTOR_MODEL_RS00
 } motor_model_t;

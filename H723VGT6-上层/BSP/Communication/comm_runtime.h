@@ -45,6 +45,9 @@ void CommRuntime_SetHandlers(comm_uart_handler_t uart_handler,
                              void *user_data);
 bool CommRuntime_PcTxReady(void);
 bool CommRuntime_PcTransmit(const uint8_t *data, uint16_t size);
+bool CommRuntime_PcTransmitBlocking(const uint8_t *data,
+                                    uint16_t size,
+                                    uint32_t timeout_ms);
 uint32_t CommRuntime_GetTickMs(void);
 
 void DmaCache_PrepareTx(const void *buffer, size_t size);

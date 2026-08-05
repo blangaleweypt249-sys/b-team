@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "can_id.h"
 #include "fdcan.h"
 #include "usart.h"
 
@@ -158,13 +159,61 @@ static HAL_StatusTypeDef StartUartReception(UartDmaChannel *channel)
   return status;
 }
 
+static HAL_StatusTypeDef ConfigureFdcanFilter(FDCAN_HandleTypeDef *hfdcan)
+{
+  FDCAN_FilterTypeDef filter = {0};
+
+  filter.IdType = FDCAN_STANDARD_ID;
+  filter.FilterIndex = 0U;
+  filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+
+  if (hfdcan == &hfdcan1)
+  {
+    filter.FilterType = FDCAN_FILTER_DUAL;
+    filter.FilterID1 = CAN_FILTER_DJI_NODE_1_ID;
+    filter.FilterID2 = CAN_FILTER_DJI_NODE_2_ID;
+    if (HAL_FDCAN_ConfigFilter(hfdcan, &filter) != HAL_OK)
+    {
+      return HAL_ERROR;
+    }
+
+    filter.FilterIndex = 1U;
+    filter.FilterType = FDCAN_FILTER_MASK;
+    filter.FilterID1 = CAN_FILTER_ARM_J4310_ID;
+    filter.FilterID2 = 0x7FFU;
+  }
+  else if (hfdcan == &hfdcan2)
+  {
+    filter.FilterType = FDCAN_FILTER_DUAL;
+    filter.FilterID1 = CAN_FILTER_DJI_NODE_1_ID;
+    filter.FilterID2 = CAN_FILTER_DJI_NODE_2_ID;
+  }
+  else if (hfdcan == &hfdcan3)
+  {
+    filter.FilterType = FDCAN_FILTER_DUAL;
+    filter.FilterID1 = CAN_FILTER_AUX_CONVEYOR_ID;
+    filter.FilterID2 = CAN_FILTER_AUX_GRIPPER_ID;
+  }
+  else
+  {
+    return HAL_ERROR;
+  }
+
+  if (HAL_FDCAN_ConfigFilter(hfdcan, &filter) != HAL_OK)
+  {
+    return HAL_ERROR;
+  }
+
+  return HAL_FDCAN_ConfigGlobalFilter(hfdcan,
+                                      FDCAN_REJECT,
+                                      FDCAN_REJECT,
+                                      FDCAN_REJECT_REMOTE,
+                                      FDCAN_REJECT_REMOTE);
+}
+
 static HAL_StatusTypeDef StartFdcan(FDCAN_HandleTypeDef *hfdcan)
 {
-  if (HAL_FDCAN_ConfigGlobalFilter(hfdcan,
-                                   FDCAN_ACCEPT_IN_RX_FIFO0,
-                                   FDCAN_ACCEPT_IN_RX_FIFO0,
-                                   FDCAN_REJECT_REMOTE,
-                                   FDCAN_REJECT_REMOTE) != HAL_OK)
+  if (ConfigureFdcanFilter(hfdcan) != HAL_OK)
   {
     return HAL_ERROR;
   }
@@ -352,6 +401,44 @@ bool CommRuntime_PcTransmit(const uint8_t *data, uint16_t size)
   return CommRuntime_UartTransmitDma(&huart4, data, size) == HAL_OK;
 }
 
+bool CommRuntime_PcTransmitBlocking(const uint8_t *data,
+                                    uint16_t size,
+                                    uint32_t timeout_ms)
+{
+  uint32_t start_tick;
+
+  if ((data == NULL) || (size == 0U) || (timeout_ms == 0U))
+  {
+    return false;
+  }
+
+  start_tick = HAL_GetTick();
+  while ((HAL_GetTick() - start_tick) < timeout_ms)
+  {
+    uint32_t elapsed;
+    uint32_t remaining;
+
+    if (huart4.gState != HAL_UART_STATE_READY)
+    {
+      (void)osDelay(1U);
+      continue;
+    }
+
+    elapsed = HAL_GetTick() - start_tick;
+    remaining = timeout_ms - elapsed;
+    if (HAL_UART_Transmit(&huart4,
+                          (const uint8_t *)data,
+                          size,
+                          remaining) == HAL_OK)
+    {
+      return true;
+    }
+    (void)osDelay(1U);
+  }
+
+  return false;
+}
+
 uint32_t CommRuntime_GetTickMs(void)
 {
   return HAL_GetTick();
@@ -397,8 +484,8 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
   {
     position = size;
     delta = (position >= previous) ?
-            (position - previous) :
-            (UART_DMA_RX_BUFFER_SIZE - previous + position);
+            (uint16_t)(position - previous) :
+            (uint16_t)(UART_DMA_RX_BUFFER_SIZE - previous + position);
   }
   channel->isr_position = position;
   channel->produced += delta;

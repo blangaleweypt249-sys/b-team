@@ -78,17 +78,27 @@ void UpperRobot_ClearError(upper_robot_t *robot)
 
 void UpperRobot_Control1ms(upper_robot_t *robot, uint32_t tick_ms)
 {
+    arm_output_t arm_output;
+    conveyor_output_t conveyor_output;
+    gripper_output_t gripper_output;
+
     if ((robot == NULL) || (robot->state != ROBOT_RUN))
     {
         return;
     }
 
     /* Fixed order: state/targets -> module control -> CAN scheduling. */
-    Arm_Update(&robot->motor_manager, &robot->target.arm);
-    Move_Update(&robot->motor_manager, &robot->target.move);
-    Ore_Update(&robot->motor_manager, &robot->target.ore);
-    Gate_Update(&robot->motor_manager, &robot->target.gate);
-    Conveyor_Update(&robot->motor_manager, &robot->target.conveyor);
+    if (!Arm_Calc(&robot->target.arm, &arm_output) ||
+        !Conveyor_Calc(&robot->target.conveyor, &conveyor_output) ||
+        !Gripper_Calc(&robot->target.gripper, &gripper_output) ||
+        !Arm_Apply(&robot->motor_manager, &arm_output) ||
+        !Conveyor_Apply(&robot->motor_manager, &conveyor_output) ||
+        !Gripper_Apply(&robot->motor_manager, &gripper_output))
+    {
+        UpperRobot_EStop(robot);
+        return;
+    }
+
     MotorManager_Process(&robot->motor_manager, tick_ms);
     robot->control_count++;
 }
