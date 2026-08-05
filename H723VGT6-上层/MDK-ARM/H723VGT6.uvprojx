@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H723xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../BSP/Can;../BSP/Communication;../Driver/Can;../Driver/Motor;../Driver/PcLink;../Driver/Flash;../Algorithm/Pid;../Algorithm/MotorOnlineTune;../App/Arm;../App/Conveyor;../App/Gripper;../Application/Communication;../Application/Robot;../Application/Task;../Application/Flash;../Config;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include</IncludePath>
+              <IncludePath>../Core/Inc;../User/BSP/Can;../User/BSP/Communication;../User/Driver/Can;../User/Driver/Motor;../User/Driver/PcLink;../User/Driver/Flash;../User/Algorithm/Pid;../User/Algorithm/MotorOnlineTune;../User/App/Arm;../User/App/Conveyor;../User/App/Gripper;../User/Application/Communication;../User/Application/Robot;../User/Application/Task;../User/Application/Flash;../User/Config;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -758,12 +758,12 @@
             <File>
               <FileName>bsp_can.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../BSP/Can/bsp_can.c</FilePath>
+              <FilePath>../User/BSP/Can/bsp_can.c</FilePath>
             </File>
             <File>
               <FileName>comm_runtime.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../BSP/Communication/comm_runtime.c</FilePath>
+              <FilePath>../User/BSP/Communication/comm_runtime.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -773,12 +773,12 @@
             <File>
               <FileName>motor_manager.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Driver/Motor/motor_manager.c</FilePath>
+              <FilePath>../User/Driver/Motor/motor_manager.c</FilePath>
             </File>
             <File>
               <FileName>upper_motor_port.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Driver/Motor/upper_motor_port.c</FilePath>
+              <FilePath>../User/Driver/Motor/upper_motor_port.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -788,7 +788,7 @@
             <File>
               <FileName>dji_group.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Driver/Motor/DJI/dji_group.c</FilePath>
+              <FilePath>../User/Driver/Motor/DJI/dji_group.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -798,7 +798,7 @@
             <File>
               <FileName>mg5010.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Driver/Motor/LK MG5010E-i36/mg5010.c</FilePath>
+              <FilePath>../User/Driver/Motor/LK MG5010E-i36/mg5010.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -808,7 +808,7 @@
             <File>
               <FileName>j4310.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Driver/Motor/DM J4310/j4310.c</FilePath>
+              <FilePath>../User/Driver/Motor/DM J4310/j4310.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -818,7 +818,7 @@
             <File>
               <FileName>m3508.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Driver/Motor/M3508/m3508.c</FilePath>
+              <FilePath>../User/Driver/Motor/M3508/m3508.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -828,7 +828,7 @@
             <File>
               <FileName>m2006.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Driver/Motor/M2006/m2006.c</FilePath>
+              <FilePath>../User/Driver/Motor/M2006/m2006.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -838,7 +838,7 @@
             <File>
               <FileName>pc_protocol.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Driver/PcLink/pc_protocol.c</FilePath>
+              <FilePath>../User/Driver/PcLink/pc_protocol.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -848,12 +848,12 @@
             <File>
               <FileName>pid.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Algorithm/Pid/pid.c</FilePath>
+              <FilePath>../User/Algorithm/Pid/pid.c</FilePath>
             </File>
             <File>
               <FileName>motor_online_tune.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Algorithm/MotorOnlineTune/motor_online_tune.c</FilePath>
+              <FilePath>../User/Algorithm/MotorOnlineTune/motor_online_tune.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -863,17 +863,17 @@
             <File>
               <FileName>arm.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../App/Arm/arm.c</FilePath>
+              <FilePath>../User/App/Arm/arm.c</FilePath>
             </File>
             <File>
               <FileName>conveyor.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../App/Conveyor/conveyor.c</FilePath>
+              <FilePath>../User/App/Conveyor/conveyor.c</FilePath>
             </File>
             <File>
               <FileName>gripper.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../App/Gripper/gripper.c</FilePath>
+              <FilePath>../User/App/Gripper/gripper.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -883,17 +883,17 @@
             <File>
               <FileName>upper_pc_link.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Application/Communication/upper_pc_link.c</FilePath>
+              <FilePath>../User/Application/Communication/upper_pc_link.c</FilePath>
             </File>
             <File>
               <FileName>upper_robot.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Application/Robot/upper_robot.c</FilePath>
+              <FilePath>../User/Application/Robot/upper_robot.c</FilePath>
             </File>
             <File>
               <FileName>upper_entry.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Application/Task/upper_entry.c</FilePath>
+              <FilePath>../User/Application/Task/upper_entry.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -903,17 +903,17 @@
             <File>
               <FileName>flash_tool.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Application/Flash/flash_tool.c</FilePath>
+              <FilePath>../User/Application/Flash/flash_tool.c</FilePath>
             </File>
           </Files>
         </Group>
         <Group>
-          <GroupName>Driver/Flash</GroupName>
+          <GroupName>User/Driver/Flash</GroupName>
           <Files>
             <File>
               <FileName>W25Qxx.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Driver/Flash/W25Qxx.c</FilePath>
+              <FilePath>../User/Driver/Flash/W25Qxx.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -923,7 +923,7 @@
             <File>
               <FileName>upper_config.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Config/upper_config.c</FilePath>
+              <FilePath>../User/Config/upper_config.c</FilePath>
             </File>
           </Files>
         </Group>

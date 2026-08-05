@@ -84,7 +84,7 @@ USB 虚拟串口，H723 不启用原生 USB CDC。帧格式、超时策略、电
 
 ## W25Q128 与 VOFA 串口工具
 
-W25Qxx 的 C 驱动已放在工程内 `Driver/Flash`，其端口配置与本板一致：`hspi1`、
+W25Qxx 的 C 驱动已放在工程内 `User/Driver/Flash`，其端口配置与本板一致：`hspi1`、
 `FLASH_CS_GPIO_Port` 和 `FLASH_CS_Pin`。Flash 在 `commRxTask` 启动后初始化，
 因此驱动可以使用 CMSIS-RTOS2 延时，擦除或自动擦除写入不会阻塞 1 ms 控制任务。
 
@@ -127,7 +127,7 @@ SPI DMA 使用应用提供的缓冲区时，按以下顺序调用：
 
 ## 工程可移植性
 
-工程使用本地 `Middlewares/Third_Party/FreeRTOS` 和 `Driver/Flash/W25Qxx.c`，没有指向
+工程使用本地 `Middlewares/Third_Party/FreeRTOS` 和 `User/Driver/Flash/W25Qxx.c`，没有指向
 上级 `Common` 或工程目录外的 W25Qxx 源码。ST 的 H7 V1.13.0 配置明确对 H7 使用
 `GCC/ARM_CM4F` FreeRTOS portable layer；这是该固件包的官方配置，不是 MCU 被识别成
 Cortex-M4。
