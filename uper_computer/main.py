@@ -3,10 +3,17 @@ from __future__ import annotations
 import json
 import math
 import os
-import struct
 import sys
 from dataclasses import dataclass
 from datetime import datetime
+
+from action_control import ActionControlPanel
+from robot_protocol import (
+    VelocityCommand,
+    YawFrameParser,
+    build_action_frame,
+    build_velocity_frame,
+)
 
 from PyQt6.QtCore import (
     QEvent,
@@ -62,7 +69,6 @@ COMMON_BAUDRATES = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
 DEFAULT_BAUDRATE = 115200
 SEND_PERIOD_MS = 100
 STOP_REPEAT_COUNT = 3
-FRAME_HEADER = bytes((0xA5, 0x5A))
 MIN_LINEAR_SPEED_M_S = 0.05
 MAX_LINEAR_SPEED_M_S = 5.0
 DEFAULT_LINEAR_SPEED_M_S = 0.05
@@ -78,13 +84,6 @@ CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "robot_co
 
 
 @dataclass(frozen=True)
-class VelocityCommand:
-    vx_mm_s: int = 0
-    vy_mm_s: int = 0
-    wz_mrad_s: int = 0
-
-
-@dataclass(frozen=True)
 class MotionState:
     forward: bool = False
     backward: bool = False
@@ -92,23 +91,6 @@ class MotionState:
     right: bool = False
     counterclockwise: bool = False
     clockwise: bool = False
-
-
-def calculate_checksum(payload: bytes) -> int:
-    checksum = 0
-    for byte in payload:
-        checksum ^= byte
-    return checksum
-
-
-def build_velocity_frame(command: VelocityCommand) -> bytes:
-    payload = struct.pack(
-        "<hhh",
-        command.vx_mm_s,
-        command.vy_mm_s,
-        command.wz_mrad_s,
-    )
-    return FRAME_HEADER + payload + bytes((calculate_checksum(payload),))
 
 
 def calculate_velocity(
@@ -346,7 +328,7 @@ class TabButton(QFrame):
 
 
 class FieldMapView(QFrame):
-    """场地地图视图 - 支持原点标记、B样条轨迹"""
+    """场地地图视图 - 支持原点标记、B 样条轨迹"""
 
     coordinate_changed = pyqtSignal(float, float)
     origin_set = pyqtSignal(float, float)
@@ -364,9 +346,13 @@ class FieldMapView(QFrame):
         self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._label.setMouseTracking(True)
         self._label.installEventFilter(self)
+        # =========修复关键点=========
+        self._label.setScaledContents(False)
+        self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(2, 2, 2, 2)   # 大幅缩小内部边距！原来0,0,0,0也可以，2防止贴边框
+        layout.setSpacing(0)
         layout.addWidget(self._label)
 
         self._original_pixmap: QPixmap | None = None
@@ -810,6 +796,7 @@ class MainWindow(QMainWindow):
         self._tx_count = 0
         self._auto_scroll = True
         self._show_hex = True
+        self._yaw_parser = YawFrameParser()
 
         self._filter_tx = True
         self._filter_rx = True
@@ -1056,12 +1043,22 @@ class MainWindow(QMainWindow):
         self.vx_label = QLabel()
         self.vy_label = QLabel()
         self.wz_label = QLabel()
-        for label in (self.vx_label, self.vy_label, self.wz_label):
+        self.yaw_label = QLabel("Yaw  --.-- deg")
+        for label in (
+            self.vx_label,
+            self.vy_label,
+            self.wz_label,
+            self.yaw_label,
+        ):
             label.setObjectName("CommandValueLarge")
             label.setMinimumHeight(36)
             cmd_layout.addWidget(label)
 
         right_panel.addWidget(cmd_card)
+
+        self.action_control = ActionControlPanel()
+        self.action_control.action_requested.connect(self._send_action)
+        right_panel.addWidget(self.action_control)
 
         key_card = QFrame()
         key_card.setObjectName("CardPanel")
@@ -1231,13 +1228,13 @@ class MainWindow(QMainWindow):
         page = QWidget()
         page_layout = QVBoxLayout(page)
         page_layout.setContentsMargins(0, 0, 0, 0)
-        page_layout.setSpacing(16)
+        page_layout.setSpacing(8)   # 原来16，减小间距
 
         # 工具栏第一行：场地尺寸 + 上传 + 原点
         toolbar1 = QFrame()
         toolbar1.setObjectName("CardPanel")
         tool1_layout = QHBoxLayout(toolbar1)
-        tool1_layout.setContentsMargins(16, 12, 16, 12)
+        tool1_layout.setContentsMargins(12,8,12,8)  # 缩小上下边距，原来16,12,16,12
         tool1_layout.setSpacing(12)
 
         size_label = QLabel("场地尺寸")
@@ -1283,7 +1280,7 @@ class MainWindow(QMainWindow):
         toolbar2 = QFrame()
         toolbar2.setObjectName("CardPanel")
         tool2_layout = QHBoxLayout(toolbar2)
-        tool2_layout.setContentsMargins(16, 12, 16, 12)
+        tool2_layout.setContentsMargins(12,8,12,8) # 缩小上下边距
         tool2_layout.setSpacing(12)
 
         traj_label = QLabel("B 样条轨迹")
@@ -1316,27 +1313,27 @@ class MainWindow(QMainWindow):
 
         page_layout.addWidget(toolbar2)
 
-        # 场地地图
+        # 场地地图 【关键：stretch=10，地图优先抢占剩余窗口高度】
         map_container = QFrame()
         map_container.setObjectName("CardPanel")
         map_layout = QVBoxLayout(map_container)
-        map_layout.setContentsMargins(12, 12, 12, 12)
+        map_layout.setContentsMargins(4,4,4,4) # 大幅缩小容器内边距，防止遮挡图片
         map_layout.setSpacing(0)
 
         self.field_map = FieldMapView()
-        self.field_map.setMinimumHeight(420)
+        self.field_map.setMinimumHeight(300) # 降低最小高度，原来420，窗口小也不会卡死
         self.field_map.coordinate_changed.connect(self._on_mouse_coordinate)
         self.field_map.origin_set.connect(self._on_origin_set)
         self.field_map.trajectory_changed.connect(self._on_trajectory_changed)
-        map_layout.addWidget(self.field_map, 1)
+        map_layout.addWidget(self.field_map, stretch=1)
 
-        page_layout.addWidget(map_container, 1)
+        page_layout.addWidget(map_container, stretch=10) # 最重要！地图最大权重
 
         # 底部坐标栏
         coord_bar = QFrame()
         coord_bar.setObjectName("CommandBar")
         coord_layout = QHBoxLayout(coord_bar)
-        coord_layout.setContentsMargins(20, 12, 20, 12)
+        coord_layout.setContentsMargins(16,8,16,8) # 缩小上下padding
         coord_layout.setSpacing(24)
 
         coord_title = QLabel("鼠标坐标")
@@ -1914,6 +1911,7 @@ class MainWindow(QMainWindow):
 
     def _on_serial_status(self, connected: bool, detail: str) -> None:
         self._connected = connected
+        self.action_control.set_connected(connected)
         self.status_label.setStyleSheet("")
         self.status_dot.setProperty("connected", connected)
         self.status_dot.style().unpolish(self.status_dot)
@@ -1944,6 +1942,8 @@ class MainWindow(QMainWindow):
             icon = QStyle.StandardPixmap.SP_DialogApplyButton
             self.debug_status_text.setText("未连接")
             self.debug_status_text.setStyleSheet("color: #86868b;")
+            self._yaw_parser.reset()
+            self.yaw_label.setText("Yaw  --.-- deg")
 
         self.connect_button.setIcon(self.style().standardIcon(icon))
         self.debug_connect_btn.setIcon(self.style().standardIcon(icon))
@@ -2002,6 +2002,13 @@ class MainWindow(QMainWindow):
         if not self._connected:
             return
         self.send_requested.emit(build_velocity_frame(self._command))
+
+    def _send_action(self, action: int, name: str) -> None:
+        if not self._connected:
+            return
+
+        self.send_requested.emit(build_action_frame(action))
+        self._append_log("SYS", f"已发送{name}指令", "#86868b")
 
     def _send_active_command(self) -> None:
         if self._command == VelocityCommand():
@@ -2110,6 +2117,10 @@ class MainWindow(QMainWindow):
                 self.log_text.setTextCursor(cursor)
 
     def _on_rx_bytes(self, payload: bytes) -> None:
+        yaw_values = self._yaw_parser.feed(payload)
+        if yaw_values:
+            self.yaw_label.setText(f"Yaw  {yaw_values[-1]:+.2f} deg")
+
         self._rx_count += len(payload)
         self.rx_count_label.setText(f"RX {self._rx_count}")
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]

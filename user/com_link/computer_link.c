@@ -1,16 +1,21 @@
 #include "computer_link.h"
 
+#include "action_api.h"
 #include "chassis_main.h"
+#include "imu_main.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
-#define COMPUTER_FRAME_HEADER_0  0xA5U
-#define COMPUTER_FRAME_HEADER_1  0x5AU
-#define COMPUTER_FRAME_LENGTH    9U
-#define COMPUTER_LINK_TIMEOUT_MS 500U
+#define COMPUTER_FRAME_HEADER_0    0xA5U
+#define COMPUTER_VELOCITY_HEADER   0x5AU
+#define COMPUTER_ACTION_HEADER     0x5BU
+#define COMPUTER_VELOCITY_LENGTH   9U
+#define COMPUTER_ACTION_LENGTH     3U
+#define COMPUTER_MAX_FRAME_LENGTH  COMPUTER_VELOCITY_LENGTH
+#define COMPUTER_LINK_TIMEOUT_MS   500U
 
 typedef enum
 {
@@ -28,18 +33,22 @@ typedef struct
 
 static UART_HandleTypeDef *computer_uart;
 static uint8_t rx_byte;
-static uint8_t rx_frame[COMPUTER_FRAME_LENGTH];
+static uint8_t rx_frame[COMPUTER_MAX_FRAME_LENGTH];
 static uint8_t rx_index;
+static uint8_t rx_length;
 static computer_rx_state_t rx_state;
 static volatile computer_cmd_t pending_cmd;
+static volatile uint8_t pending_action;
 static volatile uint32_t last_rx_ms;
 static volatile bool cmd_pending;
+static volatile bool action_frame_pending;
 static volatile bool link_online;
 static volatile bool restart_requested;
 
 static void reset_parser(void)
 {
     rx_index = 0U;
+    rx_length = 0U;
     rx_state = COMPUTER_RX_HEADER_0;
 }
 
@@ -74,6 +83,17 @@ static void store_command(void)
     link_online = true;
 }
 
+static void store_action(void)
+{
+    if (rx_frame[2] > ACTION_CMD_REAR_DOWN)
+    {
+        return;
+    }
+
+    pending_action = rx_frame[2];
+    action_frame_pending = true;
+}
+
 static void parse_byte(uint8_t data)
 {
     switch (rx_state)
@@ -87,10 +107,14 @@ static void parse_byte(uint8_t data)
         break;
 
     case COMPUTER_RX_HEADER_1:
-        if (data == COMPUTER_FRAME_HEADER_1)
+        if ((data == COMPUTER_VELOCITY_HEADER) ||
+            (data == COMPUTER_ACTION_HEADER))
         {
             rx_frame[1] = data;
             rx_index = 2U;
+            rx_length = (data == COMPUTER_VELOCITY_HEADER)
+                            ? COMPUTER_VELOCITY_LENGTH
+                            : COMPUTER_ACTION_LENGTH;
             rx_state = COMPUTER_RX_FRAME;
         }
         else if (data != COMPUTER_FRAME_HEADER_0)
@@ -102,11 +126,16 @@ static void parse_byte(uint8_t data)
     case COMPUTER_RX_FRAME:
         rx_frame[rx_index] = data;
         rx_index++;
-        if (rx_index >= COMPUTER_FRAME_LENGTH)
+        if (rx_index >= rx_length)
         {
-            if (rx_frame[8] == calculate_checksum(&rx_frame[2], 6U))
+            if ((rx_frame[1] == COMPUTER_VELOCITY_HEADER) &&
+                (rx_frame[8] == calculate_checksum(&rx_frame[2], 6U)))
             {
                 store_command();
+            }
+            else if (rx_frame[1] == COMPUTER_ACTION_HEADER)
+            {
+                store_action();
             }
             reset_parser();
         }
@@ -153,8 +182,10 @@ HAL_StatusTypeDef ComputerLink_Init(UART_HandleTypeDef *uart)
     pending_cmd.vx = 0;
     pending_cmd.vy = 0;
     pending_cmd.z = 0;
+    pending_action = ACTION_CMD_NONE;
     last_rx_ms = 0U;
     cmd_pending = false;
+    action_frame_pending = false;
     link_online = false;
     restart_requested = false;
     reset_parser();
@@ -171,9 +202,11 @@ HAL_StatusTypeDef ComputerLink_Init(UART_HandleTypeDef *uart)
 void ComputerLink_Run(void)
 {
     computer_cmd_t cmd;
+    uint8_t action = ACTION_CMD_NONE;
     uint32_t now_ms;
     uint32_t primask;
     bool has_command = false;
+    bool has_action = false;
 
     if (computer_uart == NULL)
     {
@@ -196,6 +229,12 @@ void ComputerLink_Run(void)
         cmd_pending = false;
         has_command = true;
     }
+    if (action_frame_pending)
+    {
+        action = pending_action;
+        action_frame_pending = false;
+        has_action = true;
+    }
     if (primask == 0U)
     {
         __enable_irq();
@@ -205,6 +244,12 @@ void ComputerLink_Run(void)
     {
         (void)Chassis_SetVelocity(cmd.vx, cmd.vy, cmd.z);
     }
+    if (has_action)
+    {
+        (void)Action_Request((action_cmd_t)action);
+    }
+
+    (void)ImuMain_SendYaw(computer_uart);
 
     now_ms = HAL_GetTick();
     if (link_online && ((now_ms - last_rx_ms) > COMPUTER_LINK_TIMEOUT_MS))

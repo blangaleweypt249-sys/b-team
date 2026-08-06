@@ -19,6 +19,11 @@
 #define IMU_YAW_KALMAN_R           3.0f
 #define IMU_ANGLE_HALF_RANGE_DEG   180.0f
 #define IMU_ANGLE_RANGE_DEG        360.0f
+#define IMU_YAW_TX_PERIOD_MS       50U
+#define IMU_YAW_TX_SCALE           100.0f
+#define IMU_YAW_FRAME_HEADER_0     0xA5U
+#define IMU_YAW_FRAME_HEADER_1     0x5CU
+#define IMU_YAW_FRAME_LENGTH       5U
 
 #define IMU_YAW_PERIOD_MS          5U
 #define IMU_YAW_CMD_THRESHOLD      5
@@ -30,7 +35,7 @@
 #define IMU_GYRO_FILTER_Q          0.1f
 #define IMU_GYRO_FILTER_R          2.0f
 
-// 以下参数沿用旧工程的 5 ms 航向环，实车调参前不要改变调用周期
+//航向环
 #define IMU_YAW_MOVE_KP            1.8f
 #define IMU_YAW_MOVE_KI            0.25f
 #define IMU_YAW_MOVE_KD            1.8f
@@ -137,6 +142,7 @@ static imu_yaw_pid_t yaw_stop_pid = {
 };
 static imu_gyro_filter_t gyro_filter;
 static uint32_t last_yaw_control_ms;
+static uint32_t last_yaw_tx_ms;
 static bool yaw_target_valid;
 
 static bool time_reached(uint32_t now_ms, uint32_t target_ms)
@@ -254,7 +260,7 @@ static float filter_yaw(float measured_yaw_deg)
     float innovation_deg;
     float kalman_gain;
 
-    // 保留旧工程的标量卡尔曼参数，并对跨越正负 180 度的误差归一化
+    // 标量卡尔曼参数，并对跨越正负 180 度的误差归一化
     if (!yaw_kalman_valid)
     {
         yaw_kalman_estimate_deg = normalize_angle(measured_yaw_deg);
@@ -658,6 +664,43 @@ bool ImuMain_GetData(imu_data_t *data)
 
     *data = imu_data;
     return true;
+}
+
+/**
+ * @brief 通过上位机串口回传当前 yaw 角
+ * @param uart 上位机串口句柄
+ * @retval HAL 状态
+ */
+HAL_StatusTypeDef ImuMain_SendYaw(UART_HandleTypeDef *uart)
+{
+    uint8_t frame[IMU_YAW_FRAME_LENGTH];
+    int16_t yaw_cdeg;
+    float scaled_yaw;
+    uint32_t now_ms;
+
+    if ((uart == NULL) || !initialized || !imu_data.online ||
+        !imu_data.yaw_valid)
+    {
+        return HAL_ERROR;
+    }
+
+    now_ms = HAL_GetTick();
+    if ((now_ms - last_yaw_tx_ms) < IMU_YAW_TX_PERIOD_MS)
+    {
+        return HAL_BUSY;
+    }
+    last_yaw_tx_ms = now_ms;
+
+    scaled_yaw = imu_data.yaw_deg * IMU_YAW_TX_SCALE;
+    yaw_cdeg = (int16_t)(scaled_yaw +
+                        ((scaled_yaw >= 0.0f) ? 0.5f : -0.5f));
+    frame[0] = IMU_YAW_FRAME_HEADER_0;
+    frame[1] = IMU_YAW_FRAME_HEADER_1;
+    frame[2] = (uint8_t)((uint16_t)yaw_cdeg & 0xFFU);
+    frame[3] = (uint8_t)(((uint16_t)yaw_cdeg >> 8) & 0xFFU);
+    frame[4] = frame[2] ^ frame[3];
+
+    return HAL_UART_Transmit(uart, frame, sizeof(frame), 1U);
 }
 
 void ImuMain_HandleRxEvent(UART_HandleTypeDef *uart, uint16_t size)

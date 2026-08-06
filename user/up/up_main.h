@@ -32,12 +32,33 @@ HAL_StatusTypeDef Up_SetMotorPos(float rs_l_deg, float rs_f_deg,
                                  float dm_l_deg, float dm_f_deg);
 
 /**
+ * @brief 设置两台 RS00 的目标角度
+ * @param angle_deg 两台 RS00 的目标角度(deg)
+ * @retval HAL 状态
+ */
+HAL_StatusTypeDef Up_SetRsPos(float angle_deg);
+
+/**
+ * @brief 设置两台达妙电机的目标角度
+ * @param angle_deg 两台达妙电机的目标角度(deg)
+ * @retval HAL 状态
+ */
+HAL_StatusTypeDef Up_SetDmPos(float angle_deg);
+
+/**
  * @brief 设置并使能一台 M2006 的位置控制
  * @param id 电机 ID
  * @param position_deg 输出轴目标角度(deg)
  * @retval HAL 状态
  */
 HAL_StatusTypeDef Up_SetM2006Pos(uint8_t id, float position_deg);
+
+/**
+ * @brief 两台 M2006 输出轴分别相对当前位置转动指定角度
+ * @param offset_deg 输出轴相对转动角度(deg)
+ * @retval HAL 状态
+ */
+HAL_StatusTypeDef Up_MoveM2006(float offset_deg);
 
 void Up_Run1ms(void);
 void Up_StopAll(void);

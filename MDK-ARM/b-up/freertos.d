@@ -46,10 +46,12 @@ b-up/freertos.o: ..\Core\Src\freertos.c \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
   ..\Drivers\CMSIS\RTOS2\Include\cmsis_os2.h \
-  ..\user\chassis_vesc\chassis_main.h ..\user\chassis_vesc\vesc_motor.h \
-  ..\user\chassis_vesc\vesc_can.h ..\Core\Inc\fdcan.h \
+  ..\user\Action_api\action_api.h ..\user\chassis_vesc\chassis_main.h \
+  ..\user\chassis_vesc\vesc_motor.h ..\user\chassis_vesc\vesc_can.h \
+  ..\Core\Inc\fdcan.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
   ..\user\com_link\computer_link.h ..\user\imu\imu_main.h \
   ..\user\up\up_main.h ..\user\2006\c610_2006.h ..\user\up\dm_2006_bus.h \
   ..\user\up\dm_app.h ..\user\up\dm_motor.h ..\user\up\rs_app.h \
-  ..\user\up\rs00.h ..\user\up\rs_bus.h ..\Core\Inc\usart.h
+  ..\user\up\rs00.h ..\user\up\rs_bus.h ..\Core\Inc\usart.h \
+  ..\Core\Inc\gpio.h

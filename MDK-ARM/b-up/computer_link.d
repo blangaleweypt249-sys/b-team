@@ -37,7 +37,9 @@ b-up/computer_link.o: ..\user\com_link\computer_link.c \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
-  ..\user\chassis_vesc\chassis_main.h ..\user\chassis_vesc\vesc_motor.h \
-  ..\user\chassis_vesc\vesc_can.h ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
+  ..\user\Action_api\action_api.h ..\user\chassis_vesc\chassis_main.h \
+  ..\user\chassis_vesc\vesc_motor.h ..\user\chassis_vesc\vesc_can.h \
+  ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
+  ..\user\imu\imu_main.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\string.h

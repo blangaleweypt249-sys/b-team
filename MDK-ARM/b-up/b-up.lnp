@@ -50,6 +50,7 @@
 "b-up\rs_app.o"
 "b-up\fdcan_task.o"
 "b-up\up_main.o"
+"b-up\action_api.o"
 "b-up\c610_2006.o"
 "b-up\vesc_can.o"
 "b-up\vesc_motor.o"

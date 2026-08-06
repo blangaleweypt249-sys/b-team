@@ -174,6 +174,20 @@ static bool motor_angles_valid(const motor_angles_t *angles)
            (angles->dm_f_deg >= -DM_MAX_ANGLE_DEG);
 }
 
+static HAL_StatusTypeDef start_motor_curve(const motor_angles_t *target)
+{
+    if (!app_ready || !motor_angles_valid(target))
+    {
+        return HAL_ERROR;
+    }
+
+    motor_curve.start = motor_curve.current;
+    motor_curve.target = *target;
+    motor_curve.start_ms = HAL_GetTick();
+    motor_curve.running = true;
+    return HAL_OK;
+}
+
 static float curve_value(float start, float target, float progress)
 {
     float progress_2 = progress * progress;
@@ -433,16 +447,35 @@ HAL_StatusTypeDef Up_SetMotorPos(float rs_l_deg, float rs_f_deg,
         .dm_f_deg = dm_f_deg
     };
 
-    if (!app_ready || !motor_angles_valid(&target))
-    {
-        return HAL_ERROR;
-    }
+    return start_motor_curve(&target);
+}
 
-    motor_curve.start = motor_curve.current;
-    motor_curve.target = target;
-    motor_curve.start_ms = HAL_GetTick();
-    motor_curve.running = true;
-    return HAL_OK;
+/**
+ * @brief 设置两台 RS00 的目标角度
+ * @param angle_deg 两台 RS00 的目标角度(deg)
+ * @retval HAL 状态
+ */
+HAL_StatusTypeDef Up_SetRsPos(float angle_deg)
+{
+    motor_angles_t target = motor_curve.target;
+
+    target.rs_l_deg = angle_deg;
+    target.rs_f_deg = angle_deg;
+    return start_motor_curve(&target);
+}
+
+/**
+ * @brief 设置两台达妙电机的目标角度
+ * @param angle_deg 两台达妙电机的目标角度(deg)
+ * @retval HAL 状态
+ */
+HAL_StatusTypeDef Up_SetDmPos(float angle_deg)
+{
+    motor_angles_t target = motor_curve.target;
+
+    target.dm_l_deg = angle_deg;
+    target.dm_f_deg = angle_deg;
+    return start_motor_curve(&target);
 }
 
 HAL_StatusTypeDef Up_SetM2006Pos(uint8_t id, float position_deg)
@@ -453,6 +486,37 @@ HAL_StatusTypeDef Up_SetM2006Pos(uint8_t id, float position_deg)
     }
 
     return C610_SetPos(&c610_bus, id, position_deg);
+}
+
+/**
+ * @brief 两台 M2006 输出轴分别相对当前位置转动指定角度
+ * @param offset_deg 输出轴相对转动角度(deg)
+ * @retval HAL 状态
+ */
+HAL_StatusTypeDef Up_MoveM2006(float offset_deg)
+{
+    m2006_status_t left_status;
+    m2006_status_t front_status;
+
+    if (!app_ready || (offset_deg != offset_deg) ||
+        (offset_deg > FLT_MAX) || (offset_deg < -FLT_MAX))
+    {
+        return HAL_ERROR;
+    }
+    if (!C610_GetStatus(&c610_bus, M2006_MOTOR_L_ID, &left_status) ||
+        !C610_GetStatus(&c610_bus, M2006_MOTOR_F_ID, &front_status) ||
+        !left_status.online || !front_status.online)
+    {
+        return HAL_ERROR;
+    }
+
+    if (C610_SetPos(&c610_bus, M2006_MOTOR_L_ID,
+                    left_status.output_angle_deg + offset_deg) != HAL_OK)
+    {
+        return HAL_ERROR;
+    }
+    return C610_SetPos(&c610_bus, M2006_MOTOR_F_ID,
+                       front_status.output_angle_deg + offset_deg);
 }
 
 void Up_Run1ms(void)

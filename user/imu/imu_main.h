@@ -86,6 +86,13 @@ void ImuMain_EnableYawHold(bool enabled);
 bool ImuMain_GetData(imu_data_t *data);
 
 /**
+ * @brief 通过上位机串口回传当前 yaw 角
+ * @param uart 上位机串口句柄
+ * @retval HAL 状态
+ */
+HAL_StatusTypeDef ImuMain_SendYaw(UART_HandleTypeDef *uart);
+
+/**
  * @brief 转发 HAL 串口空闲事件
  * @param uart 触发回调的串口
  * @param size HAL 返回的当前 DMA 写入位置
