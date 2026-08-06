@@ -19,7 +19,7 @@
 #define CHASSIS_COMMAND_PERIOD_MS 10U
 #define CHASSIS_RX_DRAIN_MAX     32U
 
-#define CHASSIS_ROTATION_SCALE (4.31f + 5.30f)
+#define CHASSIS_ROTATION_SCALE (3.5f + 3.30f)
 
 static const vesc_motor_config_t motor_config[] = {
     {
