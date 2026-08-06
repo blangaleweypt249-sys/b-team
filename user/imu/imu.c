@@ -21,17 +21,17 @@ typedef struct
 {
     UART_HandleTypeDef *uart;
     uint8_t dma_buffer[IMU_DMA_BUFFER_SIZE];
-    uint8_t rx_fifo[IMU_RX_FIFO_SIZE];
+    uint8_t rx_fifo[IMU_RX_FIFO_SIZE];           //软件接收队列
     uint8_t frame_buffer[IMU_FRAME_BUFFER_SIZE];
-    volatile uint16_t fifo_write;
-    volatile uint16_t fifo_read;
+    volatile uint16_t fifo_write;                //fifo写指针
+    volatile uint16_t fifo_read;                 //fifo读指针
     uint16_t dma_read_pos;
     uint8_t frame_index;
     uint8_t expected_length;
     imu_raw_data_t raw_data;
     imu_stats_t stats;
     volatile bool restart_requested;
-    bool initialized;
+    bool initialized;                            //是否已初始化
 } imu_driver_t;
 
 static imu_driver_t imu_driver;
@@ -57,7 +57,7 @@ static HAL_StatusTypeDef start_receive(void)
     return status;
 }
 
-static void fifo_push(uint8_t byte)
+static void fifo_push(uint8_t byte)  //环形缓存区入队
 {
     uint16_t next_write = (uint16_t)(imu_driver.fifo_write + 1U);
 
@@ -65,7 +65,7 @@ static void fifo_push(uint8_t byte)
     {
         next_write = 0U;
     }
-    if (next_write == imu_driver.fifo_read)
+    if (next_write == imu_driver.fifo_read)  //防止写的数据追上读的造成覆盖
     {
         imu_driver.stats.rx_overflow_count++;
         return;
@@ -75,7 +75,7 @@ static void fifo_push(uint8_t byte)
     imu_driver.fifo_write = next_write;
 }
 
-static bool fifo_pop(uint8_t *byte)
+static bool fifo_pop(uint8_t *byte) //环形缓存区出队
 {
     uint16_t next_read;
 

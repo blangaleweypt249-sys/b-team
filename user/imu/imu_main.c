@@ -9,46 +9,68 @@
 #include <string.h>
 
 /* IMU 启动时序和偏航角上报协议。 */
-#define IMU_BOOT_DELAY_MS          100U
-#define IMU_CAL_CMD_DELAY_MS       50U
-#define IMU_GYRO_CAL_WAIT_MS       4000U
-#define IMU_CONFIG_START_DELAY_MS  100U
-#define IMU_CONFIG_CMD_DELAY_MS    20U
-#define IMU_GYRO_BIAS_SAMPLE_COUNT 200U
-#define IMU_ONLINE_TIMEOUT_MS      100U
-#define IMU_YAW_TX_PERIOD_MS       50U
 #define IMU_YAW_FRAME_HEADER_0     0xA5U
 #define IMU_YAW_FRAME_HEADER_1     0x5CU
 #define IMU_YAW_FRAME_LENGTH       5U
-#define IMU_YAW_PERIOD_MS          5U
-#define IMU_YAW_CMD_THRESHOLD      5
-#define IMU_YAW_LINEAR_THRESHOLD   5
 
 /* 偏航保持控制器参数。 */
-#define IMU_YAW_KALMAN_Q         0.02f
-#define IMU_YAW_KALMAN_R         3.0f
 #define IMU_ANGLE_HALF_RANGE_DEG 180.0f
 #define IMU_ANGLE_RANGE_DEG      360.0f
-#define IMU_YAW_TX_SCALE         100.0f
-#define IMU_YAW_DEADZONE_DEG     0.5f
-#define IMU_YAW_I_ACTIVE_DEG     10.0f
-#define IMU_YAW_I_DECAY          0.90f
-#define IMU_YAW_GYRO_K           5.0f
-#define IMU_GYRO_FILTER_Q        0.1f
-#define IMU_GYRO_FILTER_R        2.0f
+
+enum
+{
+    IMU_YAW_PID_MOVE,
+    IMU_YAW_PID_STOP,
+    IMU_YAW_PID_COUNT
+};
 
 //航向环
-#define IMU_YAW_MOVE_KP            1.8f
-#define IMU_YAW_MOVE_KP      1.8f
-#define IMU_YAW_MOVE_KI      0.25f
-#define IMU_YAW_MOVE_KD      1.8f
-#define IMU_YAW_MOVE_I_MAX   8.0f
-#define IMU_YAW_MOVE_OUT_MAX 1000.0f
-#define IMU_YAW_STOP_KP      1.0f
-#define IMU_YAW_STOP_KI      0.18f
-#define IMU_YAW_STOP_KD      1.8f
-#define IMU_YAW_STOP_I_MAX   12.0f
-#define IMU_YAW_STOP_OUT_MAX 250.0f
+typedef struct
+{
+    uint32_t boot_delay_ms;
+    uint32_t cal_cmd_delay_ms;
+    uint32_t gyro_cal_wait_ms;
+    uint32_t config_start_delay_ms;
+    uint32_t config_cmd_delay_ms;
+    uint16_t gyro_bias_samples;
+    uint32_t online_timeout_ms;
+    uint32_t yaw_tx_period_ms;
+    uint32_t yaw_control_period_ms;
+    int16_t yaw_cmd_threshold;
+    int16_t yaw_linear_threshold;
+    float kalman_q;
+    float kalman_r;
+    float gyro_filter_q;
+    float gyro_filter_r;
+    float yaw_tx_scale;
+    float yaw_deadzone_deg;
+    float yaw_i_active_deg;
+    float yaw_i_decay;
+    float yaw_gyro_k;
+} imu_config_t;
+
+static const imu_config_t imu_config = {
+    .boot_delay_ms = 100U,
+    .cal_cmd_delay_ms = 50U,
+    .gyro_cal_wait_ms = 4000U,
+    .config_start_delay_ms = 100U,
+    .config_cmd_delay_ms = 20U,
+    .gyro_bias_samples = 200U,
+    .online_timeout_ms = 100U,
+    .yaw_tx_period_ms = 50U,
+    .yaw_control_period_ms = 5U,
+    .yaw_cmd_threshold = 5,
+    .yaw_linear_threshold = 5,
+    .kalman_q = 0.02f,
+    .kalman_r = 3.0f,
+    .gyro_filter_q = 0.1f,
+    .gyro_filter_r = 2.0f,
+    .yaw_tx_scale = 100.0f,
+    .yaw_deadzone_deg = 0.5f,
+    .yaw_i_active_deg = 10.0f,
+    .yaw_i_decay = 0.90f,
+    .yaw_gyro_k = 5.0f
+};
 
 typedef enum
 {
@@ -64,7 +86,23 @@ typedef enum
 
 typedef struct
 {
-    const uint8_t *data;
+    imu_init_step_t step;
+    uint32_t next_action_ms;
+    uint32_t last_gyro_sequence;
+    uint32_t last_yaw_sequence;
+    float gyro_bias_sum_deg_s;
+    uint16_t gyro_bias_sample_count;
+    uint8_t config_index;
+} imu_init_context_t;
+
+enum
+{
+    IMU_COMMAND_MAX_LENGTH = 5U
+};
+
+typedef struct
+{
+    uint8_t data[IMU_COMMAND_MAX_LENGTH];
     uint8_t length;
 } imu_command_t;
 
@@ -87,60 +125,60 @@ typedef struct
     bool valid;
 } imu_gyro_filter_t;
 
-static const uint8_t cmd_enter_setup[] = {0xAAU, 0x06U, 0x01U, 0x0DU};
-static const uint8_t cmd_gyro_cal[] = {0xAAU, 0x03U, 0x02U, 0x0DU};
-static const uint8_t cmd_set_output_485[] = {0xAAU, 0x0AU, 0x01U, 0x0DU};
-static const uint8_t cmd_set_baud_921600[] = {
-    0xAAU, 0x0DU, 0x01U, 0x05U, 0x0DU
+enum
+{
+    IMU_CMD_ENTER_SETUP,
+    IMU_CMD_GYRO_CAL,
+    IMU_CMD_SET_OUTPUT_485,
+    IMU_CMD_SET_BAUD_921600,
+    IMU_CMD_ENABLE_ACTIVE,
+    IMU_CMD_OPEN_GYRO,
+    IMU_CMD_OPEN_EULER,
+    IMU_CMD_CLOSE_QUAT,
+    IMU_CMD_EXIT_SETUP,
+    IMU_CMD_COUNT
 };
-static const uint8_t cmd_enable_active[] = {
-    0xAAU, 0x01U, 0x13U, 0x0DU
-};
-static const uint8_t cmd_open_gyro[] = {0xAAU, 0x01U, 0x15U, 0x0DU};
-static const uint8_t cmd_open_euler[] = {0xAAU, 0x01U, 0x16U, 0x0DU};
-static const uint8_t cmd_close_quat[] = {0xAAU, 0x01U, 0x07U, 0x0DU};
-static const uint8_t cmd_exit_setup[] = {0xAAU, 0x06U, 0x00U, 0x0DU};
 
-static const imu_command_t config_commands[] = {
-    {cmd_enter_setup, sizeof(cmd_enter_setup)},
-    {cmd_set_output_485, sizeof(cmd_set_output_485)},
-    {cmd_set_baud_921600, sizeof(cmd_set_baud_921600)},
-    {cmd_enable_active, sizeof(cmd_enable_active)},
-    {cmd_open_gyro, sizeof(cmd_open_gyro)},
-    {cmd_open_euler, sizeof(cmd_open_euler)},
-    {cmd_close_quat, sizeof(cmd_close_quat)},
-    {cmd_exit_setup, sizeof(cmd_exit_setup)}
+static const imu_command_t imu_commands[IMU_CMD_COUNT] = {
+    [IMU_CMD_ENTER_SETUP] = {{0xAAU, 0x06U, 0x01U, 0x0DU}, 4U},
+    [IMU_CMD_GYRO_CAL] = {{0xAAU, 0x03U, 0x02U, 0x0DU}, 4U},
+    [IMU_CMD_SET_OUTPUT_485] = {{0xAAU, 0x0AU, 0x01U, 0x0DU}, 4U},
+    [IMU_CMD_SET_BAUD_921600] = {{0xAAU, 0x0DU, 0x01U, 0x05U, 0x0DU}, 5U},
+    [IMU_CMD_ENABLE_ACTIVE] = {{0xAAU, 0x01U, 0x13U, 0x0DU}, 4U},
+    [IMU_CMD_OPEN_GYRO] = {{0xAAU, 0x01U, 0x15U, 0x0DU}, 4U},
+    [IMU_CMD_OPEN_EULER] = {{0xAAU, 0x01U, 0x16U, 0x0DU}, 4U},
+    [IMU_CMD_CLOSE_QUAT] = {{0xAAU, 0x01U, 0x07U, 0x0DU}, 4U},
+    [IMU_CMD_EXIT_SETUP] = {{0xAAU, 0x06U, 0x00U, 0x0DU}, 4U}
+};
+
+static const uint8_t config_command_ids[] = {
+    IMU_CMD_ENTER_SETUP,
+    IMU_CMD_SET_OUTPUT_485,
+    IMU_CMD_SET_BAUD_921600,
+    IMU_CMD_ENABLE_ACTIVE,
+    IMU_CMD_OPEN_GYRO,
+    IMU_CMD_OPEN_EULER,
+    IMU_CMD_CLOSE_QUAT,
+    IMU_CMD_EXIT_SETUP
 };
 
 static imu_data_t imu_data;
-static imu_init_step_t init_step;
-static uint32_t next_action_ms;
-static uint32_t last_gyro_sequence;
-static uint32_t last_yaw_sequence;
-static float gyro_bias_sum_deg_s;
-static uint16_t gyro_bias_sample_count;
+static imu_init_context_t imu_init;
 static float yaw_zero_ref_deg;
 static bool yaw_zero_ref_valid;
 static float yaw_kalman_estimate_deg;
 static float yaw_kalman_p;
 static bool yaw_kalman_valid;
-static uint8_t config_index;
 static bool initialized;
-static imu_yaw_pid_t yaw_move_pid = {
-    .kp = IMU_YAW_MOVE_KP,
-    .ki = IMU_YAW_MOVE_KI,
-    .kd = IMU_YAW_MOVE_KD,
-    .i_max = IMU_YAW_MOVE_I_MAX,
-    .out_max = IMU_YAW_MOVE_OUT_MAX,
-    .first_run = true
-};
-static imu_yaw_pid_t yaw_stop_pid = {
-    .kp = IMU_YAW_STOP_KP,
-    .ki = IMU_YAW_STOP_KI,
-    .kd = IMU_YAW_STOP_KD,
-    .i_max = IMU_YAW_STOP_I_MAX,
-    .out_max = IMU_YAW_STOP_OUT_MAX,
-    .first_run = true
+static imu_yaw_pid_t yaw_pid[IMU_YAW_PID_COUNT] = {
+    {
+        .kp = 1.8f, .ki = 0.25f, .kd = 1.8f,
+        .i_max = 8.0f, .out_max = 1000.0f, .first_run = true
+    },
+    {
+        .kp = 1.0f, .ki = 0.18f, .kd = 1.8f,
+        .i_max = 12.0f, .out_max = 250.0f, .first_run = true
+    }
 };
 static imu_gyro_filter_t gyro_filter;
 static uint32_t last_yaw_control_ms;
@@ -194,8 +232,8 @@ static void reset_yaw_pid(imu_yaw_pid_t *pid)
 
 static void reset_yaw_control(void)
 {
-    reset_yaw_pid(&yaw_move_pid);
-    reset_yaw_pid(&yaw_stop_pid);
+    reset_yaw_pid(&yaw_pid[IMU_YAW_PID_MOVE]);
+    reset_yaw_pid(&yaw_pid[IMU_YAW_PID_STOP]);
     memset(&gyro_filter, 0, sizeof(gyro_filter));
     yaw_target_valid = false;
     last_yaw_control_ms = 0U;
@@ -205,7 +243,7 @@ static void reset_yaw_control(void)
     imu_data.yaw_hold_active = false;
 }
 
-static float filter_gyro(float gyro_deg_s)
+static float filter_gyro(float gyro_deg_s)   //一维卡尔曼滤波
 {
     float gain;
 
@@ -217,9 +255,9 @@ static float filter_gyro(float gyro_deg_s)
     }
     else
     {
-        gyro_filter.covariance += IMU_GYRO_FILTER_Q;
+        gyro_filter.covariance += imu_config.gyro_filter_q;
         gain = gyro_filter.covariance /
-               (gyro_filter.covariance + IMU_GYRO_FILTER_R);
+               (gyro_filter.covariance + imu_config.gyro_filter_r);
         gyro_filter.estimate += gain *
                                 (gyro_deg_s - gyro_filter.estimate);
         gyro_filter.covariance *= 1.0f - gain;
@@ -233,7 +271,7 @@ static float calculate_yaw_pid(imu_yaw_pid_t *pid, float error_deg)
     float error_delta;
     float output;
 
-    if (fabsf(error_deg) <= IMU_YAW_I_ACTIVE_DEG)
+    if (fabsf(error_deg) <= imu_config.yaw_i_active_deg)
     {
         pid->integral += pid->ki * error_deg;
         pid->integral = limit_float(pid->integral,
@@ -241,7 +279,7 @@ static float calculate_yaw_pid(imu_yaw_pid_t *pid, float error_deg)
     }
     else
     {
-        pid->integral *= IMU_YAW_I_DECAY;
+        pid->integral *= imu_config.yaw_i_decay;
     }
 
     if (pid->first_run)
@@ -271,10 +309,10 @@ static float filter_yaw(float measured_yaw_deg)
         return yaw_kalman_estimate_deg;
     }
 
-    yaw_kalman_p += IMU_YAW_KALMAN_Q;
+    yaw_kalman_p += imu_config.kalman_q;
     innovation_deg = normalize_angle(measured_yaw_deg -
                                      yaw_kalman_estimate_deg);
-    kalman_gain = yaw_kalman_p / (yaw_kalman_p + IMU_YAW_KALMAN_R);
+    kalman_gain = yaw_kalman_p / (yaw_kalman_p + imu_config.kalman_r);
     yaw_kalman_estimate_deg = normalize_angle(
         yaw_kalman_estimate_deg + kalman_gain * innovation_deg);
     yaw_kalman_p = (1.0f - kalman_gain) * yaw_kalman_p;
@@ -295,7 +333,7 @@ static void reset_yaw(void)
 
 static void set_error_state(void)
 {
-    init_step = IMU_INIT_ERROR;
+    imu_init.step = IMU_INIT_ERROR;
     imu_data.state = IMU_STATE_ERROR;
     imu_data.gyro_valid = false;
     imu_data.yaw_valid = false;
@@ -304,15 +342,15 @@ static void set_error_state(void)
 
 static void start_bias_sampling(const imu_raw_data_t *raw_data)
 {
-    gyro_bias_sum_deg_s = 0.0f;
-    gyro_bias_sample_count = 0U;
-    last_gyro_sequence = raw_data->gyro_sequence;
-    last_yaw_sequence = raw_data->yaw_sequence;
+    imu_init.gyro_bias_sum_deg_s = 0.0f;
+    imu_init.gyro_bias_sample_count = 0U;
+    imu_init.last_gyro_sequence = raw_data->gyro_sequence;
+    imu_init.last_yaw_sequence = raw_data->yaw_sequence;
     imu_data.gyro_bias_deg_s = 0.0f;
     imu_data.gyro_z_deg_s = 0.0f;
     imu_data.gyro_valid = false;
     reset_yaw();
-    init_step = IMU_INIT_SAMPLE_BIAS;
+    imu_init.step = IMU_INIT_SAMPLE_BIAS;
     imu_data.state = IMU_STATE_BIAS_SAMPLING;
 }
 
@@ -320,62 +358,65 @@ static void run_init_state(uint32_t now_ms, const imu_raw_data_t *raw_data)
 {
     const imu_command_t *command;
 
-    if (!time_reached(now_ms, next_action_ms))
+    if (!time_reached(now_ms, imu_init.next_action_ms))
     {
         return;
     }
 
     // 固定顺序：硬件校准 -> 配置主动输出 -> 软件零偏采样
-    switch (init_step)
+    switch (imu_init.step)
     {
     case IMU_INIT_WAIT_BOOT:
-        if (Imu_Send(cmd_enter_setup, sizeof(cmd_enter_setup)) != HAL_OK)
-        {
-            set_error_state();
-            break;
-        }
-        init_step = IMU_INIT_SEND_CAL;
-        next_action_ms = now_ms + IMU_CAL_CMD_DELAY_MS;
-        break;
-
-    case IMU_INIT_SEND_CAL:
-        if (Imu_Send(cmd_gyro_cal, sizeof(cmd_gyro_cal)) != HAL_OK)
-        {
-            set_error_state();
-            break;
-        }
-        init_step = IMU_INIT_WAIT_CAL;
-        next_action_ms = now_ms + IMU_GYRO_CAL_WAIT_MS;
-        break;
-
-    case IMU_INIT_WAIT_CAL:
-        init_step = IMU_INIT_WAIT_CONFIG;
-        imu_data.state = IMU_STATE_CONFIGURING;
-        next_action_ms = now_ms + IMU_CONFIG_START_DELAY_MS;
-        break;
-
-    case IMU_INIT_WAIT_CONFIG:
-        config_index = 0U;
-        init_step = IMU_INIT_SEND_CONFIG;
-        next_action_ms = now_ms;
-        break;
-
-    case IMU_INIT_SEND_CONFIG:
-        command = &config_commands[config_index];
+        command = &imu_commands[IMU_CMD_ENTER_SETUP];
         if (Imu_Send(command->data, command->length) != HAL_OK)
         {
             set_error_state();
             break;
         }
-        config_index++;
-        if (config_index >=
-            (uint8_t)(sizeof(config_commands) / sizeof(config_commands[0])))
+        imu_init.step = IMU_INIT_SEND_CAL;
+        imu_init.next_action_ms = now_ms + imu_config.cal_cmd_delay_ms;
+        break;
+
+    case IMU_INIT_SEND_CAL:
+        command = &imu_commands[IMU_CMD_GYRO_CAL];
+        if (Imu_Send(command->data, command->length) != HAL_OK)
+        {
+            set_error_state();
+            break;
+        }
+        imu_init.step = IMU_INIT_WAIT_CAL;
+        imu_init.next_action_ms = now_ms + imu_config.gyro_cal_wait_ms;
+        break;
+
+    case IMU_INIT_WAIT_CAL:
+        imu_init.step = IMU_INIT_WAIT_CONFIG;
+        imu_data.state = IMU_STATE_CONFIGURING;
+        imu_init.next_action_ms = now_ms + imu_config.config_start_delay_ms;
+        break;
+
+    case IMU_INIT_WAIT_CONFIG:
+        imu_init.config_index = 0U;
+        imu_init.step = IMU_INIT_SEND_CONFIG;
+        imu_init.next_action_ms = now_ms;
+        break;
+
+    case IMU_INIT_SEND_CONFIG:
+        command = &imu_commands[config_command_ids[imu_init.config_index]];
+        if (Imu_Send(command->data, command->length) != HAL_OK)
+        {
+            set_error_state();
+            break;
+        }
+        imu_init.config_index++;
+        if (imu_init.config_index >=
+            (uint8_t)(sizeof(config_command_ids) /
+                       sizeof(config_command_ids[0])))
         {
             start_bias_sampling(raw_data);
         }
         else
         {
-            next_action_ms = now_ms + IMU_CONFIG_CMD_DELAY_MS;
+            imu_init.next_action_ms = now_ms + imu_config.config_cmd_delay_ms;
         }
         break;
 
@@ -390,32 +431,32 @@ static void run_init_state(uint32_t now_ms, const imu_raw_data_t *raw_data)
 static void process_gyro(const imu_raw_data_t *raw_data)
 {
     if (!raw_data->gyro_valid ||
-        (raw_data->gyro_sequence == last_gyro_sequence))
+        (raw_data->gyro_sequence == imu_init.last_gyro_sequence))
     {
         return;
     }
-    last_gyro_sequence = raw_data->gyro_sequence;
+    imu_init.last_gyro_sequence = raw_data->gyro_sequence;
 
-    if (init_step == IMU_INIT_SAMPLE_BIAS)
+    if (imu_init.step == IMU_INIT_SAMPLE_BIAS)
     {
         // 延续旧工程做法，静止采集 200 帧 Z 轴角速度作为软件零偏
-        gyro_bias_sum_deg_s += raw_data->gyro_z_deg_s;
-        gyro_bias_sample_count++;
-        if (gyro_bias_sample_count >= IMU_GYRO_BIAS_SAMPLE_COUNT)
+        imu_init.gyro_bias_sum_deg_s += raw_data->gyro_z_deg_s;
+        imu_init.gyro_bias_sample_count++;
+        if (imu_init.gyro_bias_sample_count >= imu_config.gyro_bias_samples)
         {
-            imu_data.gyro_bias_deg_s = gyro_bias_sum_deg_s /
-                                       (float)gyro_bias_sample_count;
+            imu_data.gyro_bias_deg_s = imu_init.gyro_bias_sum_deg_s /
+                                       (float)imu_init.gyro_bias_sample_count;
             imu_data.gyro_z_deg_s = 0.0f;
             imu_data.gyro_valid = true;
-            last_yaw_sequence = raw_data->yaw_sequence;
+            imu_init.last_yaw_sequence = raw_data->yaw_sequence;
             reset_yaw();
-            init_step = IMU_INIT_COMPLETE;
+            imu_init.step = IMU_INIT_COMPLETE;
             imu_data.state = IMU_STATE_READY;
         }
         return;
     }
 
-    if (init_step == IMU_INIT_COMPLETE)
+    if (imu_init.step == IMU_INIT_COMPLETE)
     {
         imu_data.gyro_z_deg_s = -(raw_data->gyro_z_deg_s -
                                   imu_data.gyro_bias_deg_s);
@@ -428,12 +469,12 @@ static void process_yaw(const imu_raw_data_t *raw_data)
     float signed_yaw_deg;
     float zeroed_yaw_deg;
 
-    if ((init_step != IMU_INIT_COMPLETE) || !raw_data->yaw_valid ||
-        (raw_data->yaw_sequence == last_yaw_sequence))
+    if ((imu_init.step != IMU_INIT_COMPLETE) || !raw_data->yaw_valid ||
+        (raw_data->yaw_sequence == imu_init.last_yaw_sequence))
     {
         return;
     }
-    last_yaw_sequence = raw_data->yaw_sequence;
+    imu_init.last_yaw_sequence = raw_data->yaw_sequence;
     signed_yaw_deg = normalize_angle(-raw_data->yaw_deg);
 
     if (!yaw_zero_ref_valid)
@@ -466,7 +507,7 @@ static void update_stats(uint32_t now_ms)
     imu_data.uart_error_count = stats.uart_error_count;
     imu_data.online = (stats.last_valid_ms != 0U) &&
                       ((now_ms - stats.last_valid_ms) <=
-                       IMU_ONLINE_TIMEOUT_MS);
+                       imu_config.online_timeout_ms);
 }
 
 /**
@@ -487,10 +528,11 @@ HAL_StatusTypeDef ImuMain_Init(void)
         return HAL_ERROR;
     }
 
-    init_step = IMU_INIT_WAIT_BOOT;
+    memset(&imu_init, 0, sizeof(imu_init));
+    imu_init.step = IMU_INIT_WAIT_BOOT;
     imu_data.state = IMU_STATE_CALIBRATING;
     imu_data.yaw_hold_enabled = true;
-    next_action_ms = HAL_GetTick() + IMU_BOOT_DELAY_MS;
+    imu_init.next_action_ms = HAL_GetTick() + imu_config.boot_delay_ms;
     initialized = true;
     return HAL_OK;
 }
@@ -529,7 +571,7 @@ void ImuMain_Run1ms(void)
  */
 HAL_StatusTypeDef ImuMain_ZeroYaw(void)
 {
-    if (!initialized || (init_step != IMU_INIT_COMPLETE))
+    if (!initialized || (imu_init.step != IMU_INIT_COMPLETE))
     {
         return HAL_ERROR;
     }
@@ -564,7 +606,7 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
 
     now_ms = HAL_GetTick();
     if ((last_yaw_control_ms != 0U) &&
-        ((now_ms - last_yaw_control_ms) < IMU_YAW_PERIOD_MS))
+        ((now_ms - last_yaw_control_ms) < imu_config.yaw_control_period_ms))
     {
         return imu_data.omega_output;
     }
@@ -579,34 +621,34 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
     }
 
     // 手动旋转优先，旋转过程中持续记录当前航向，松手后原地保持
-    if ((omega > IMU_YAW_CMD_THRESHOLD) ||
-        (omega < -IMU_YAW_CMD_THRESHOLD))
+    if ((omega > imu_config.yaw_cmd_threshold) ||
+        (omega < -imu_config.yaw_cmd_threshold))
     {
         imu_data.target_yaw_deg = imu_data.yaw_deg;
         imu_data.yaw_error_deg = 0.0f;
         imu_data.omega_output = omega;
         imu_data.yaw_hold_active = false;
-        reset_yaw_pid(&yaw_move_pid);
-        reset_yaw_pid(&yaw_stop_pid);
+        reset_yaw_pid(&yaw_pid[IMU_YAW_PID_MOVE]);
+        reset_yaw_pid(&yaw_pid[IMU_YAW_PID_STOP]);
         return omega;
     }
 
-    stopped = (abs((int)vx) <= IMU_YAW_LINEAR_THRESHOLD) &&
-              (abs((int)vy) <= IMU_YAW_LINEAR_THRESHOLD);
-    active_pid = stopped ? &yaw_stop_pid : &yaw_move_pid;
+    stopped = (abs((int)vx) <= imu_config.yaw_linear_threshold) &&
+              (abs((int)vy) <= imu_config.yaw_linear_threshold);
+    active_pid = &yaw_pid[stopped ? IMU_YAW_PID_STOP : IMU_YAW_PID_MOVE];
     if (stopped)
     {
-        reset_yaw_pid(&yaw_move_pid);
+        reset_yaw_pid(&yaw_pid[IMU_YAW_PID_MOVE]);
     }
     else
     {
-        reset_yaw_pid(&yaw_stop_pid);
+        reset_yaw_pid(&yaw_pid[IMU_YAW_PID_STOP]);
     }
 
     imu_data.yaw_error_deg = normalize_angle(imu_data.target_yaw_deg -
                                              imu_data.yaw_deg);
     imu_data.yaw_hold_active = true;
-    if (fabsf(imu_data.yaw_error_deg) <= IMU_YAW_DEADZONE_DEG)
+    if (fabsf(imu_data.yaw_error_deg) <= imu_config.yaw_deadzone_deg)
     {
         reset_yaw_pid(active_pid);
         imu_data.omega_output = 0;
@@ -614,7 +656,7 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
     }
 
     output = calculate_yaw_pid(active_pid, imu_data.yaw_error_deg) -
-             filtered_gyro_deg_s * IMU_YAW_GYRO_K;
+             filtered_gyro_deg_s * imu_config.yaw_gyro_k;
     output = limit_float(output, -active_pid->out_max,
                          active_pid->out_max);
     imu_data.omega_output = (int16_t)output;
@@ -636,8 +678,8 @@ HAL_StatusTypeDef ImuMain_SetTargetYaw(float target_yaw_deg)
     imu_data.target_yaw_deg = normalize_angle(target_yaw_deg);
     imu_data.yaw_error_deg = 0.0f;
     yaw_target_valid = true;
-    reset_yaw_pid(&yaw_move_pid);
-    reset_yaw_pid(&yaw_stop_pid);
+    reset_yaw_pid(&yaw_pid[IMU_YAW_PID_MOVE]);
+    reset_yaw_pid(&yaw_pid[IMU_YAW_PID_STOP]);
     return HAL_OK;
 }
 
@@ -687,13 +729,13 @@ HAL_StatusTypeDef ImuMain_SendYaw(UART_HandleTypeDef *uart)
     }
 
     now_ms = HAL_GetTick();
-    if ((now_ms - last_yaw_tx_ms) < IMU_YAW_TX_PERIOD_MS)
+    if ((now_ms - last_yaw_tx_ms) < imu_config.yaw_tx_period_ms)
     {
         return HAL_BUSY;
     }
     last_yaw_tx_ms = now_ms;
 
-    scaled_yaw = imu_data.yaw_deg * IMU_YAW_TX_SCALE;
+    scaled_yaw = imu_data.yaw_deg * imu_config.yaw_tx_scale;
     yaw_cdeg = (int16_t)(scaled_yaw +
                         ((scaled_yaw >= 0.0f) ? 0.5f : -0.5f));
     frame[0] = IMU_YAW_FRAME_HEADER_0;

@@ -26,8 +26,10 @@ dt35\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash.h
 dt35\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash_ex.h
 dt35\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_i2c.h
 dt35\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h
+dt35\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h
 dt35\main.o: ../Core/Inc/dma.h
 dt35\main.o: ../Core/Inc/i2c.h
+dt35\main.o: ../Core/Inc/usart.h
 dt35\main.o: ../Core/Inc/gpio.h
 dt35\main.o: ../user/mymain.h
 dt35\main.o: ../user/dt35.h

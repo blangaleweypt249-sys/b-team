@@ -8,8 +8,8 @@
 
 typedef struct
 {
-    float gyro_z_deg_s;       // Z 轴原始角速度，单位为 deg/s
-    float yaw_deg;            // 原始偏航角，单位为 deg
+    float gyro_z_deg_s;       // Z 轴原始角速度
+    float yaw_deg;            // 原始偏航角
     uint32_t gyro_sequence;   // 角速度有效帧序号
     uint32_t yaw_sequence;    // 偏航角有效帧序号
     bool gyro_valid;          // 是否收到过有效角速度帧

@@ -45,5 +45,6 @@ b-up/main.o: ..\Core\Src\main.c ..\Core\Inc\main.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\mpu_wrappers.h \
   ..\Drivers\CMSIS\RTOS2\Include\cmsis_os2.h ..\Core\Inc\dma.h \
   ..\Core\Inc\fdcan.h ..\Core\Inc\usart.h ..\Core\Inc\gpio.h \
-  ..\user\com_link\computer_link.h ..\user\imu\imu_main.h \
+  ..\user\com_link\computer_link.h ..\user\com_link\dt35_link.h \
+  ..\user\imu\imu_main.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h
