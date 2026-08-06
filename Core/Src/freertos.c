@@ -29,6 +29,7 @@
 #include "action_api.h"
 #include "chassis_main.h"
 #include "computer_link.h"
+#include "dt35_link.h"
 #include "imu_main.h"
 #include "up_main.h"
 #include "usart.h"
@@ -54,12 +55,14 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 
-/* PC13/PC15 are active high on the target board. */
-#define STARTUP_LED_ON_LEVEL       GPIO_PIN_SET
-#define STARTUP_BUZZER_ON_LEVEL    GPIO_PIN_SET
-#define STARTUP_BUZZER_OFF_LEVEL   GPIO_PIN_RESET
-
 /* USER CODE END Variables */
+/* Definitions for startupReminder */
+osThreadId_t startupReminderHandle;
+const osThreadAttr_t startupReminder_attributes = {
+  .name = "startupReminder",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 /* Definitions for chassisTask */
 osThreadId_t chassisTaskHandle;
 const osThreadAttr_t chassisTask_attributes = {
@@ -81,23 +84,16 @@ const osThreadAttr_t commTask_attributes = {
   .stack_size = 768 * 4,
   .priority = (osPriority_t) osPriorityHigh,
 };
-/* Definitions for startupReminder */
-osThreadId_t startupReminderHandle;
-const osThreadAttr_t startupReminder_attributes = {
-  .name = "startupReminder",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
 /* USER CODE END FunctionPrototypes */
 
+void StartStartupReminderTask(void *argument);
 void StartChassisTask(void *argument);
 void StartLiftTask(void *argument);
 void StartCommTask(void *argument);
-void StartStartupReminderTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -148,6 +144,10 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
+  /* creation of startupReminder */
+  startupReminderHandle = osThreadNew(StartStartupReminderTask, NULL,
+                                      &startupReminder_attributes);
+
   /* creation of chassisTask */
   chassisTaskHandle = osThreadNew(StartChassisTask, NULL, &chassisTask_attributes);
 
@@ -156,11 +156,6 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of commTask */
   commTaskHandle = osThreadNew(StartCommTask, NULL, &commTask_attributes);
-
-  /* creation of startupReminder */
-  startupReminderHandle = osThreadNew(StartStartupReminderTask, NULL,
-                                      &startupReminder_attributes);
-
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -169,6 +164,43 @@ void MX_FREERTOS_Init(void) {
   /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
 
+}
+
+/* USER CODE BEGIN Header_StartStartupReminderTask */
+/**
+  * @brief  Function implementing the startupReminder thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartStartupReminderTask */
+__weak void StartStartupReminderTask(void *argument)
+{
+  /* USER CODE BEGIN StartStartupReminderTask */
+  (void)argument;
+
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+
+  /* Two short 500 Hz beeps with a pause between them. */
+  for (uint32_t beep = 0U; beep < 2U; beep++)
+  {
+    for (uint32_t cycle = 0U; cycle < 80U; cycle++)
+    {
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
+      (void)osDelay(1U);
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET);
+      (void)osDelay(1U);
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
+      (void)osDelay(1U);
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET);
+      (void)osDelay(1U);
+    }
+
+    (void)osDelay(80U);
+  }
+
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET);
+  osThreadExit();
+  /* USER CODE END StartStartupReminderTask */
 }
 
 /* USER CODE BEGIN Header_StartChassisTask */
@@ -250,51 +282,16 @@ __weak void StartCommTask(void *argument)
   /* USER CODE BEGIN StartCommTask */
   (void)argument;
   (void)ComputerLink_Init(&huart4);
+  (void)DT35Link_Init(&huart9);
 
   /* Infinite loop */
   for(;;)
   {
+    DT35Link_Run();
     ComputerLink_Run();
     osDelay(1);
   }
   /* USER CODE END StartCommTask */
-}
-
-/* USER CODE BEGIN Header_StartStartupReminderTask */
-/**
-  * @brief  Function implementing the startupReminder thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartStartupReminderTask */
-__weak void StartStartupReminderTask(void *argument)
-{
-  /* USER CODE BEGIN StartStartupReminderTask */
-  (void)argument;
-
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, STARTUP_LED_ON_LEVEL);
-
-  /* Two short 500 Hz beeps with a pause between them. */
-  for (uint32_t beep = 0U; beep < 2U; beep++)
-  {
-    for (uint32_t cycle = 0U; cycle < 80U; cycle++)
-    {
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, STARTUP_BUZZER_ON_LEVEL);
-      (void)osDelay(1U);
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, STARTUP_BUZZER_OFF_LEVEL);
-      (void)osDelay(1U);
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, STARTUP_BUZZER_ON_LEVEL);
-      (void)osDelay(1U);
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, STARTUP_BUZZER_OFF_LEVEL);
-      (void)osDelay(1U);
-    }
-
-    (void)osDelay(80U);
-  }
-
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, STARTUP_BUZZER_OFF_LEVEL);
-  osThreadExit();
-  /* USER CODE END StartStartupReminderTask */
 }
 
 /* Private application code --------------------------------------------------*/

@@ -9,6 +9,9 @@ from datetime import datetime
 
 from action_control import ActionControlPanel
 from robot_protocol import (
+    DT35_ADDR_40,
+    DT35_ADDR_41,
+    Dt35FrameParser,
     VelocityCommand,
     YawFrameParser,
     build_action_frame,
@@ -797,6 +800,7 @@ class MainWindow(QMainWindow):
         self._auto_scroll = True
         self._show_hex = True
         self._yaw_parser = YawFrameParser()
+        self._dt35_parser = Dt35FrameParser()
 
         self._filter_tx = True
         self._filter_rx = True
@@ -1044,11 +1048,15 @@ class MainWindow(QMainWindow):
         self.vy_label = QLabel()
         self.wz_label = QLabel()
         self.yaw_label = QLabel("Yaw  --.-- deg")
+        self.dt35_41_label = QLabel("DT35 41  -- cm")
+        self.dt35_40_label = QLabel("DT35 40  -- cm")
         for label in (
             self.vx_label,
             self.vy_label,
             self.wz_label,
             self.yaw_label,
+            self.dt35_41_label,
+            self.dt35_40_label,
         ):
             label.setObjectName("CommandValueLarge")
             label.setMinimumHeight(36)
@@ -1944,6 +1952,9 @@ class MainWindow(QMainWindow):
             self.debug_status_text.setStyleSheet("color: #86868b;")
             self._yaw_parser.reset()
             self.yaw_label.setText("Yaw  --.-- deg")
+            self._dt35_parser.reset()
+            self.dt35_41_label.setText("DT35 41  -- cm")
+            self.dt35_40_label.setText("DT35 40  -- cm")
 
         self.connect_button.setIcon(self.style().standardIcon(icon))
         self.debug_connect_btn.setIcon(self.style().standardIcon(icon))
@@ -2120,6 +2131,12 @@ class MainWindow(QMainWindow):
         yaw_values = self._yaw_parser.feed(payload)
         if yaw_values:
             self.yaw_label.setText(f"Yaw  {yaw_values[-1]:+.2f} deg")
+
+        for address, distance_cm in self._dt35_parser.feed(payload):
+            if address == DT35_ADDR_41:
+                self.dt35_41_label.setText(f"DT35 41  {distance_cm} cm")
+            elif address == DT35_ADDR_40:
+                self.dt35_40_label.setText(f"DT35 40  {distance_cm} cm")
 
         self._rx_count += len(payload)
         self.rx_count_label.setText(f"RX {self._rx_count}")

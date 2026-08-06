@@ -90,17 +90,21 @@ Section Cross References
     gpio.o(.ARM.exidx.text.MX_GPIO_Init) refers to gpio.o(.text.MX_GPIO_Init) for [Anonymous Symbol]
     freertos.o(.ARM.exidx.text.vApplicationStackOverflowHook) refers to freertos.o(.text.vApplicationStackOverflowHook) for [Anonymous Symbol]
     freertos.o(.ARM.exidx.text.vApplicationMallocFailedHook) refers to freertos.o(.text.vApplicationMallocFailedHook) for [Anonymous Symbol]
-    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.text.StartChassisTask) for StartChassisTask
-    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.rodata.chassisTask_attributes) for chassisTask_attributes
-    freertos.o(.text.MX_FREERTOS_Init) refers to cmsis_os2.o(.text.osThreadNew) for osThreadNew
-    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.bss..L_MergedGlobals) for .L_MergedGlobals
-    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.rodata.liftTask_attributes) for liftTask_attributes
-    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.text.StartLiftTask) for StartLiftTask
-    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.text.StartCommTask) for StartCommTask
-    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.rodata.commTask_attributes) for commTask_attributes
     freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.text.StartStartupReminderTask) for StartStartupReminderTask
     freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.rodata.startupReminder_attributes) for startupReminder_attributes
+    freertos.o(.text.MX_FREERTOS_Init) refers to cmsis_os2.o(.text.osThreadNew) for osThreadNew
+    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.bss..L_MergedGlobals) for .L_MergedGlobals
+    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.rodata.chassisTask_attributes) for chassisTask_attributes
+    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.text.StartChassisTask) for StartChassisTask
+    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.text.StartLiftTask) for StartLiftTask
+    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.rodata.liftTask_attributes) for liftTask_attributes
+    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.text.StartCommTask) for StartCommTask
+    freertos.o(.text.MX_FREERTOS_Init) refers to freertos.o(.rodata.commTask_attributes) for commTask_attributes
     freertos.o(.ARM.exidx.text.MX_FREERTOS_Init) refers to freertos.o(.text.MX_FREERTOS_Init) for [Anonymous Symbol]
+    freertos.o(.text.StartStartupReminderTask) refers to stm32h7xx_hal_gpio.o(.text.HAL_GPIO_WritePin) for HAL_GPIO_WritePin
+    freertos.o(.text.StartStartupReminderTask) refers to cmsis_os2.o(.text.osDelay) for osDelay
+    freertos.o(.text.StartStartupReminderTask) refers to cmsis_os2.o(.text.osThreadExit) for osThreadExit
+    freertos.o(.ARM.exidx.text.StartStartupReminderTask) refers to freertos.o(.text.StartStartupReminderTask) for [Anonymous Symbol]
     freertos.o(.text.StartChassisTask) refers to cmsis_os2.o(.text.osKernelGetTickCount) for osKernelGetTickCount
     freertos.o(.text.StartChassisTask) refers to imu_main.o(.text.ImuMain_Init) for ImuMain_Init
     freertos.o(.text.StartChassisTask) refers to chassis_main.o(.text.Chassis_Init) for Chassis_Init
@@ -119,14 +123,10 @@ Section Cross References
     freertos.o(.text.StartCommTask) refers to computer_link.o(.text.ComputerLink_Run) for ComputerLink_Run
     freertos.o(.text.StartCommTask) refers to cmsis_os2.o(.text.osDelay) for osDelay
     freertos.o(.ARM.exidx.text.StartCommTask) refers to freertos.o(.text.StartCommTask) for [Anonymous Symbol]
-    freertos.o(.text.StartStartupReminderTask) refers to stm32h7xx_hal_gpio.o(.text.HAL_GPIO_WritePin) for HAL_GPIO_WritePin
-    freertos.o(.text.StartStartupReminderTask) refers to cmsis_os2.o(.text.osDelay) for osDelay
-    freertos.o(.text.StartStartupReminderTask) refers to cmsis_os2.o(.text.osThreadExit) for osThreadExit
-    freertos.o(.ARM.exidx.text.StartStartupReminderTask) refers to freertos.o(.text.StartStartupReminderTask) for [Anonymous Symbol]
+    freertos.o(.rodata.startupReminder_attributes) refers to freertos.o(.rodata.str1.1) for [Anonymous Symbol]
     freertos.o(.rodata.chassisTask_attributes) refers to freertos.o(.rodata.str1.1) for [Anonymous Symbol]
     freertos.o(.rodata.liftTask_attributes) refers to freertos.o(.rodata.str1.1) for [Anonymous Symbol]
     freertos.o(.rodata.commTask_attributes) refers to freertos.o(.rodata.str1.1) for [Anonymous Symbol]
-    freertos.o(.rodata.startupReminder_attributes) refers to freertos.o(.rodata.str1.1) for [Anonymous Symbol]
     dma.o(.text.MX_DMA_Init) refers to stm32h7xx_hal_cortex.o(.text.HAL_NVIC_SetPriority) for HAL_NVIC_SetPriority
     dma.o(.text.MX_DMA_Init) refers to stm32h7xx_hal_cortex.o(.text.HAL_NVIC_EnableIRQ) for HAL_NVIC_EnableIRQ
     dma.o(.ARM.exidx.text.MX_DMA_Init) refers to dma.o(.text.MX_DMA_Init) for [Anonymous Symbol]
@@ -3049,10 +3049,10 @@ Removing Unused input sections from the image.
     Removing freertos.o(.ARM.exidx.text.vApplicationStackOverflowHook), (8 bytes).
     Removing freertos.o(.ARM.exidx.text.vApplicationMallocFailedHook), (8 bytes).
     Removing freertos.o(.ARM.exidx.text.MX_FREERTOS_Init), (8 bytes).
+    Removing freertos.o(.ARM.exidx.text.StartStartupReminderTask), (8 bytes).
     Removing freertos.o(.ARM.exidx.text.StartChassisTask), (8 bytes).
     Removing freertos.o(.ARM.exidx.text.StartLiftTask), (8 bytes).
     Removing freertos.o(.ARM.exidx.text.StartCommTask), (8 bytes).
-    Removing freertos.o(.ARM.exidx.text.StartStartupReminderTask), (8 bytes).
     Removing dma.o(.text), (0 bytes).
     Removing dma.o(.ARM.exidx.text.MX_DMA_Init), (8 bytes).
     Removing fdcan.o(.text), (0 bytes).
@@ -6317,10 +6317,10 @@ Image Symbol Table
     action_pending                           0x24000050   Data           1  action_api.o(.data.action_pending)
     __libspace_start                         0x24000058   Data          96  libspace.o(.bss)
     __temporary_stack_top$libspace           0x240000b8   Data           0  libspace.o(.bss)
-    chassisTaskHandle                        0x240000b8   Data           4  freertos.o(.bss..L_MergedGlobals)
-    liftTaskHandle                           0x240000bc   Data           4  freertos.o(.bss..L_MergedGlobals)
-    commTaskHandle                           0x240000c0   Data           4  freertos.o(.bss..L_MergedGlobals)
-    startupReminderHandle                    0x240000c4   Data           4  freertos.o(.bss..L_MergedGlobals)
+    startupReminderHandle                    0x240000b8   Data           4  freertos.o(.bss..L_MergedGlobals)
+    chassisTaskHandle                        0x240000bc   Data           4  freertos.o(.bss..L_MergedGlobals)
+    liftTaskHandle                           0x240000c0   Data           4  freertos.o(.bss..L_MergedGlobals)
+    commTaskHandle                           0x240000c4   Data           4  freertos.o(.bss..L_MergedGlobals)
     chassis_target_vx                        0x2400020e   Data           2  chassis_main.o(.bss..L_MergedGlobals)
     chassis_target_vy                        0x24000210   Data           2  chassis_main.o(.bss..L_MergedGlobals)
     chassis_target_z                         0x24000212   Data           2  chassis_main.o(.bss..L_MergedGlobals)
@@ -6789,13 +6789,13 @@ Memory Map of the image
     0x0800b6c6   0x0800b6c6   0x0000000a   PAD
     0x0800b6d0   0x0800b6d0   0x00000024   Code   RO         2358    .text.SVC_Handler   port.o
     0x0800b6f4   0x0800b6f4   0x00000004   PAD
-    0x0800b6f8   0x0800b6f8   0x0000005a   Code   RO           51    .text.StartChassisTask  freertos.o
+    0x0800b6f8   0x0800b6f8   0x0000005a   Code   RO           53    .text.StartChassisTask  freertos.o
     0x0800b752   0x0800b752   0x00000006   PAD
-    0x0800b758   0x0800b758   0x0000001c   Code   RO           55    .text.StartCommTask  freertos.o
+    0x0800b758   0x0800b758   0x0000001c   Code   RO           57    .text.StartCommTask  freertos.o
     0x0800b774   0x0800b774   0x00000004   PAD
-    0x0800b778   0x0800b778   0x0000002e   Code   RO           53    .text.StartLiftTask  freertos.o
+    0x0800b778   0x0800b778   0x0000002e   Code   RO           55    .text.StartLiftTask  freertos.o
     0x0800b7a6   0x0800b7a6   0x00000002   PAD
-    0x0800b7a8   0x0800b7a8   0x000000ce   Code   RO           57    .text.StartStartupReminderTask  freertos.o
+    0x0800b7a8   0x0800b7a8   0x000000ce   Code   RO           51    .text.StartStartupReminderTask  freertos.o
     0x0800b876   0x0800b876   0x00000002   PAD
     0x0800b878   0x0800b878   0x000000a4   Code   RO         2444    .text.StdCan_AddHandler  dm_2006_bus.o
     0x0800b91c   0x0800b91c   0x00000004   PAD
@@ -7008,7 +7008,7 @@ Memory Map of the image
     0x08011382   0x08011382   0x00000006   Data   RO         1729    .rodata..Lswitch.table.UART_SetConfig.9  stm32h7xx_hal_uart.o
     0x08011388   0x08011388   0x00000010   Data   RO         1785    .rodata.D1CorePrescTable  system_stm32h7xx.o
     0x08011398   0x08011398   0x00000018   Data   RO         1727    .rodata.UARTPrescTable  stm32h7xx_hal_uart.o
-    0x080113b0   0x080113b0   0x00000024   Data   RO           60    .rodata.chassisTask_attributes  freertos.o
+    0x080113b0   0x080113b0   0x00000024   Data   RO           61    .rodata.chassisTask_attributes  freertos.o
     0x080113d4   0x080113d4   0x00000004   Data   RO         2787    .rodata.cmd_close_quat  imu_main.o
     0x080113d8   0x080113d8   0x00000004   Data   RO         2784    .rodata.cmd_enable_active  imu_main.o
     0x080113dc   0x080113dc   0x00000004   Data   RO         2779    .rodata.cmd_enter_setup  imu_main.o
@@ -7019,17 +7019,17 @@ Memory Map of the image
     0x080113f0   0x080113f0   0x00000005   Data   RO         2783    .rodata.cmd_set_baud_921600  imu_main.o
     0x080113f5   0x080113f5   0x00000004   Data   RO         2782    .rodata.cmd_set_output_485  imu_main.o
     0x080113f9   0x080113f9   0x00000003   PAD
-    0x080113fc   0x080113fc   0x00000024   Data   RO           62    .rodata.commTask_attributes  freertos.o
+    0x080113fc   0x080113fc   0x00000024   Data   RO           63    .rodata.commTask_attributes  freertos.o
     0x08011420   0x08011420   0x00000040   Data   RO         2781    .rodata.config_commands  imu_main.o
     0x08011460   0x08011460   0x00000010   Data   RO         1584    .rodata.cst16       stm32h7xx_hal_fdcan.o
     0x08011470   0x08011470   0x00000010   Data   RO         1770    .rodata.cst8        stm32h7xx_hal_uart_ex.o
     0x08011480   0x08011480   0x00000038   Data   RO         2604    .rodata.dm_motor_config  up_main.o
     0x080114b8   0x080114b8   0x0000000c   Data   RO         2601    .rodata.fdcan_config  up_main.o
-    0x080114c4   0x080114c4   0x00000024   Data   RO           61    .rodata.liftTask_attributes  freertos.o
+    0x080114c4   0x080114c4   0x00000024   Data   RO           62    .rodata.liftTask_attributes  freertos.o
     0x080114e8   0x080114e8   0x00000028   Data   RO         2606    .rodata.m2006_motor_config  up_main.o
     0x08011510   0x08011510   0x00000040   Data   RO         2707    .rodata.motor_config  chassis_main.o
     0x08011550   0x08011550   0x00000040   Data   RO         2608    .rodata.rs_motor_config  up_main.o
-    0x08011590   0x08011590   0x00000024   Data   RO           63    .rodata.startupReminder_attributes  freertos.o
+    0x08011590   0x08011590   0x00000024   Data   RO           60    .rodata.startupReminder_attributes  freertos.o
     0x080115b4   0x080115b4   0x00000008   Data   RO         2607    .rodata.std_rx_ids  up_main.o
     0x080115bc   0x080115bc   0x0000002e   Data   RO           59    .rodata.str1.1      freertos.o
     0x080115ea   0x080115ea   0x00000005   Data   RO         2153    .rodata.str1.1      timers.o

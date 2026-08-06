@@ -4,7 +4,8 @@
 #include <stddef.h>
 #include <string.h>
 
-#define RS_APP_ID_MAX      0x7FU
+#define RS_APP_ID_MAX 0x7FU
+
 #define RS_APP_RAD_PER_DEG 0.01745329251994329577f
 
 static bool time_reached(uint32_t now_ms, uint32_t due_ms)

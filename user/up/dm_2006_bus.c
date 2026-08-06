@@ -4,8 +4,9 @@
 #include <stddef.h>
 #include <string.h>
 
+/* 环形队列掩码，队列长度必须保持为 2 的幂。 */
 #define STD_CAN_RX_QUEUE_MASK (STD_CAN_RX_QUEUE_SIZE - 1U)
-#define STD_CAN_ID_MAX        0x7FFU
+#define STD_CAN_ID_MAX 0x7FFU
 
 #if ((STD_CAN_RX_QUEUE_SIZE & STD_CAN_RX_QUEUE_MASK) != 0U)
 #error "STD_CAN_RX_QUEUE_SIZE must be a power of two"

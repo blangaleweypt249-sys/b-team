@@ -2,11 +2,12 @@
 
 #include "up_main.h"
 
-#define LEG_HOME_ANGLE_DEG     0.0f
-#define LEG_LIFT_ANGLE_DEG     180.0f
-#define LEG_FOLD_ANGLE_DEG     270.0f
-#define LEG_FLAT_ANGLE_DEG     450.0f
-#define LEG_DOWN_ANGLE_DEG     540.0f
+/* 动作命令使用的固定机械位置，单位为度。 */
+#define LEG_HOME_ANGLE_DEG      0.0f
+#define LEG_LIFT_ANGLE_DEG      180.0f
+#define LEG_FOLD_ANGLE_DEG      270.0f
+#define LEG_FLAT_ANGLE_DEG      450.0f
+#define LEG_DOWN_ANGLE_DEG      540.0f
 #define M2006_FORWARD_ANGLE_DEG 360.0f
 
 volatile action_cmd_t action_pending = ACTION_CMD_NONE;

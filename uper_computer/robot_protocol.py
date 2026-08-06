@@ -7,6 +7,9 @@ from dataclasses import dataclass
 VELOCITY_HEADER = bytes((0xA5, 0x5A))
 ACTION_HEADER = bytes((0xA5, 0x5B))
 YAW_HEADER = bytes((0xA5, 0x5C))
+DT35_HEADER = bytes((0xAA,))
+DT35_ADDR_41 = 0x41
+DT35_ADDR_40 = 0x40
 
 ACTION_LOWER = 0x00
 ACTION_LIFT = 0x01
@@ -20,6 +23,7 @@ ACTION_REAR_DOWN = 0x08
 
 YAW_FRAME_LENGTH = 5
 YAW_SCALE = 100.0
+DT35_FRAME_LENGTH = 5
 
 
 @dataclass(frozen=True)
@@ -87,3 +91,39 @@ class YawFrameParser:
             del self._buffer[:YAW_FRAME_LENGTH]
 
         return yaw_values
+
+
+class Dt35FrameParser:
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+
+    def reset(self) -> None:
+        self._buffer.clear()
+
+    def feed(self, payload: bytes) -> list[tuple[int, int]]:
+        frames = []
+        self._buffer.extend(payload)
+
+        while len(self._buffer) >= DT35_FRAME_LENGTH:
+            header_index = self._buffer.find(DT35_HEADER)
+            if header_index < 0:
+                self._buffer.clear()
+                break
+            if header_index > 0:
+                del self._buffer[:header_index]
+            if len(self._buffer) < DT35_FRAME_LENGTH:
+                break
+
+            frame = self._buffer[:DT35_FRAME_LENGTH]
+            checksum = 0
+            for byte in frame[:4]:
+                checksum ^= byte
+            if frame[1] not in (DT35_ADDR_40, DT35_ADDR_41) or frame[4] != checksum:
+                del self._buffer[0]
+                continue
+
+            distance_cm = frame[2] | (frame[3] << 8)
+            frames.append((frame[1], distance_cm))
+            del self._buffer[:DT35_FRAME_LENGTH]
+
+        return frames

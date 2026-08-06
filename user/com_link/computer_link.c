@@ -2,6 +2,7 @@
 
 #include "action_api.h"
 #include "chassis_main.h"
+#include "dt35_link.h"
 #include "imu_main.h"
 
 #include <stdbool.h>
@@ -9,13 +10,14 @@
 #include <stdint.h>
 #include <string.h>
 
-#define COMPUTER_FRAME_HEADER_0    0xA5U
-#define COMPUTER_VELOCITY_HEADER   0x5AU
-#define COMPUTER_ACTION_HEADER     0x5BU
-#define COMPUTER_VELOCITY_LENGTH   9U
-#define COMPUTER_ACTION_LENGTH     3U
-#define COMPUTER_MAX_FRAME_LENGTH  COMPUTER_VELOCITY_LENGTH
-#define COMPUTER_LINK_TIMEOUT_MS   500U
+/* 上位机到控制器的数据帧格式。 */
+#define COMPUTER_FRAME_HEADER_0   0xA5U
+#define COMPUTER_VELOCITY_HEADER  0x5AU
+#define COMPUTER_ACTION_HEADER    0x5BU
+#define COMPUTER_VELOCITY_LENGTH  9U
+#define COMPUTER_ACTION_LENGTH    3U
+#define COMPUTER_MAX_FRAME_LENGTH COMPUTER_VELOCITY_LENGTH
+#define COMPUTER_LINK_TIMEOUT_MS  500U
 
 typedef enum
 {
@@ -250,6 +252,7 @@ void ComputerLink_Run(void)
     }
 
     (void)ImuMain_SendYaw(computer_uart);
+    DT35Link_Send(computer_uart);
 
     now_ms = HAL_GetTick();
     if (link_online && ((now_ms - last_rx_ms) > COMPUTER_LINK_TIMEOUT_MS))

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* IMU 启动时序和偏航角上报协议。 */
 #define IMU_BOOT_DELAY_MS          100U
 #define IMU_CAL_CMD_DELAY_MS       50U
 #define IMU_GYRO_CAL_WAIT_MS       4000U
@@ -15,38 +16,39 @@
 #define IMU_CONFIG_CMD_DELAY_MS    20U
 #define IMU_GYRO_BIAS_SAMPLE_COUNT 200U
 #define IMU_ONLINE_TIMEOUT_MS      100U
-#define IMU_YAW_KALMAN_Q           0.02f
-#define IMU_YAW_KALMAN_R           3.0f
-#define IMU_ANGLE_HALF_RANGE_DEG   180.0f
-#define IMU_ANGLE_RANGE_DEG        360.0f
 #define IMU_YAW_TX_PERIOD_MS       50U
-#define IMU_YAW_TX_SCALE           100.0f
 #define IMU_YAW_FRAME_HEADER_0     0xA5U
 #define IMU_YAW_FRAME_HEADER_1     0x5CU
 #define IMU_YAW_FRAME_LENGTH       5U
-
 #define IMU_YAW_PERIOD_MS          5U
 #define IMU_YAW_CMD_THRESHOLD      5
 #define IMU_YAW_LINEAR_THRESHOLD   5
-#define IMU_YAW_DEADZONE_DEG       0.5f
-#define IMU_YAW_I_ACTIVE_DEG       10.0f
-#define IMU_YAW_I_DECAY            0.90f
-#define IMU_YAW_GYRO_K             5.0f
-#define IMU_GYRO_FILTER_Q          0.1f
-#define IMU_GYRO_FILTER_R          2.0f
+
+/* 偏航保持控制器参数。 */
+#define IMU_YAW_KALMAN_Q         0.02f
+#define IMU_YAW_KALMAN_R         3.0f
+#define IMU_ANGLE_HALF_RANGE_DEG 180.0f
+#define IMU_ANGLE_RANGE_DEG      360.0f
+#define IMU_YAW_TX_SCALE         100.0f
+#define IMU_YAW_DEADZONE_DEG     0.5f
+#define IMU_YAW_I_ACTIVE_DEG     10.0f
+#define IMU_YAW_I_DECAY          0.90f
+#define IMU_YAW_GYRO_K           5.0f
+#define IMU_GYRO_FILTER_Q        0.1f
+#define IMU_GYRO_FILTER_R        2.0f
 
 //航向环
 #define IMU_YAW_MOVE_KP            1.8f
-#define IMU_YAW_MOVE_KI            0.25f
-#define IMU_YAW_MOVE_KD            1.8f
-#define IMU_YAW_MOVE_I_MAX         8.0f
-#define IMU_YAW_MOVE_OUT_MAX       1000.0f
-
-#define IMU_YAW_STOP_KP            1.0f
-#define IMU_YAW_STOP_KI            0.18f
-#define IMU_YAW_STOP_KD            1.8f
-#define IMU_YAW_STOP_I_MAX         12.0f
-#define IMU_YAW_STOP_OUT_MAX       250.0f
+#define IMU_YAW_MOVE_KP      1.8f
+#define IMU_YAW_MOVE_KI      0.25f
+#define IMU_YAW_MOVE_KD      1.8f
+#define IMU_YAW_MOVE_I_MAX   8.0f
+#define IMU_YAW_MOVE_OUT_MAX 1000.0f
+#define IMU_YAW_STOP_KP      1.0f
+#define IMU_YAW_STOP_KI      0.18f
+#define IMU_YAW_STOP_KD      1.8f
+#define IMU_YAW_STOP_I_MAX   12.0f
+#define IMU_YAW_STOP_OUT_MAX 250.0f
 
 typedef enum
 {

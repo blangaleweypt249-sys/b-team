@@ -4,17 +4,18 @@
 #include <stddef.h>
 #include <string.h>
 
-#define C610_FEEDBACK_TIMEOUT_MS  20U
-#define C610_COMMAND_ID_1_TO_4    0x200U
-#define C610_COMMAND_ID_5_TO_8    0x1FFU
-#define C610_ENCODER_COUNTS       8192
-#define C610_ENCODER_HALF         (C610_ENCODER_COUNTS / 2)
-#define C610_CURRENT_UNITS_PER_A  1000.0f
-#define M2006_GEAR_RATIO          36.0f
-#define M2006_CURRENT_LIMIT_A     3.0f
+/* C610 帧 ID、编码器分辨率和反馈超时。 */
+#define C610_FEEDBACK_TIMEOUT_MS 20U
+#define C610_COMMAND_ID_1_TO_4   0x200U
+#define C610_COMMAND_ID_5_TO_8   0x1FFU
+#define C610_ENCODER_COUNTS      8192
+#define C610_ENCODER_HALF        (C610_ENCODER_COUNTS / 2)
+
+#define M2006_GEAR_RATIO            36.0f
+#define M2006_CURRENT_LIMIT_A       3.0f
 #define M2006_POSITION_DEADBAND_DEG 0.2f
-#define M2006_PID_GAIN_MAX        10000.0f
-#define M2006_DT_S                (C610_CONTROL_PERIOD_MS / 1000.0f)
+#define M2006_PID_GAIN_MAX          10000.0f
+#define M2006_DT_S                  (C610_CONTROL_PERIOD_MS / 1000.0f)
 
 static float clamp_symmetric(float value, float limit)
 {
@@ -106,7 +107,7 @@ static bool attach_motor(c610_bus_t *bus, m2006_motor_t *motor,
                          const m2006_config_t *config)
 {
     uint8_t slot = config->id - 1U;
-    float current_limit = M2006_CURRENT_LIMIT_A * C610_CURRENT_UNITS_PER_A;
+    float current_limit = M2006_CURRENT_LIMIT_A * 1000.0f;
 
     if (bus->motors[slot] != NULL)
     {

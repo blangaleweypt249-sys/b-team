@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* 应用层调度周期和电机容量。 */
 #define DM_APP_MAX_MOTORS          8U
 #define DM_APP_CONTROL_PERIOD_MS   1U
 #define DM_APP_FEEDBACK_TIMEOUT_MS 50U

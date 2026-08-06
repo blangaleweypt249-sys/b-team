@@ -6,9 +6,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define C610_MAX_MOTORS         8U
-#define C610_FEEDBACK_ID_BASE   0x201U
-#define C610_CONTROL_PERIOD_MS  2U
+/* C610 总线容量和反馈 ID 布局。 */
+#define C610_MAX_MOTORS        8U
+#define C610_FEEDBACK_ID_BASE  0x201U
+#define C610_CONTROL_PERIOD_MS 2U
+/* 根据电机编号计算标准 CAN 反馈 ID。 */
 #define C610_FEEDBACK_ID(id) \
     ((uint16_t)(C610_FEEDBACK_ID_BASE + (uint16_t)(id) - 1U))
 

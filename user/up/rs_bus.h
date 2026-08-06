@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* 队列长度属于中断与任务共享环形缓冲区布局。 */
 #define RS_BUS_RX_QUEUE_SIZE 32U
 
 typedef void (*rs_bus_rx_handler_t)(void *context, uint32_t id,

@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* 队列和回调容量属于编译期内存布局参数。 */
 #define STD_CAN_RX_QUEUE_SIZE 32U
 #define STD_CAN_MAX_HANDLERS  2U
 

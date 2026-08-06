@@ -5,22 +5,21 @@
 
 #include <stddef.h>
 
+/* 仅用于本文件的静态数组遍历。 */
 #define ARRAY_SIZE(array) ((uint8_t)(sizeof(array) / sizeof((array)[0])))
 
-#define CHASSIS_MOTOR_LF_ID       87U
-#define CHASSIS_MOTOR_RF_ID       43U
-#define CHASSIS_MOTOR_LR_ID       67U
-#define CHASSIS_MOTOR_RR_ID       59U
-#define CHASSIS_MOTOR_POLE_PAIRS  21U
-#define CHASSIS_MAX_RPM           4000
-#define CHASSIS_MIN_RPM           0
-#define CHASSIS_BRAKE_CURRENT_A   18.0f
-#define CHASSIS_HALF_WIDTH_SCALE  4.31f
-#define CHASSIS_HALF_LENGTH_SCALE 5.30f
-#define CHASSIS_ROTATION_SCALE    (CHASSIS_HALF_WIDTH_SCALE + \
-                                   CHASSIS_HALF_LENGTH_SCALE)
+/* 按当前接线固定的 VESC ID 和底盘指令限制。 */
+#define CHASSIS_MOTOR_LF_ID      87U
+#define CHASSIS_MOTOR_RF_ID      43U
+#define CHASSIS_MOTOR_LR_ID      67U
+#define CHASSIS_MOTOR_RR_ID      59U
+#define CHASSIS_MOTOR_POLE_PAIRS 21U
+#define CHASSIS_MAX_RPM          4000
+#define CHASSIS_MIN_RPM          0
 #define CHASSIS_COMMAND_PERIOD_MS 10U
-#define CHASSIS_RX_DRAIN_MAX      32U
+#define CHASSIS_RX_DRAIN_MAX     32U
+
+#define CHASSIS_ROTATION_SCALE (4.31f + 5.30f)
 
 static const vesc_motor_config_t motor_config[] = {
     {
@@ -28,28 +27,28 @@ static const vesc_motor_config_t motor_config[] = {
         .pole_pairs = CHASSIS_MOTOR_POLE_PAIRS,
         .min_rpm = CHASSIS_MIN_RPM,
         .max_rpm = CHASSIS_MAX_RPM,
-        .brake_current_a = CHASSIS_BRAKE_CURRENT_A
+        .brake_current_a = 18.0f
     },
     {
         .id = CHASSIS_MOTOR_RF_ID,
         .pole_pairs = CHASSIS_MOTOR_POLE_PAIRS,
         .min_rpm = CHASSIS_MIN_RPM,
         .max_rpm = CHASSIS_MAX_RPM,
-        .brake_current_a = CHASSIS_BRAKE_CURRENT_A
+        .brake_current_a = 18.0f
     },
     {
         .id = CHASSIS_MOTOR_LR_ID,
         .pole_pairs = CHASSIS_MOTOR_POLE_PAIRS,
         .min_rpm = CHASSIS_MIN_RPM,
         .max_rpm = CHASSIS_MAX_RPM,
-        .brake_current_a = CHASSIS_BRAKE_CURRENT_A
+        .brake_current_a = 18.0f
     },
     {
         .id = CHASSIS_MOTOR_RR_ID,
         .pole_pairs = CHASSIS_MOTOR_POLE_PAIRS,
         .min_rpm = CHASSIS_MIN_RPM,
         .max_rpm = CHASSIS_MAX_RPM,
-        .brake_current_a = CHASSIS_BRAKE_CURRENT_A
+        .brake_current_a = 18.0f
     }
 };
 

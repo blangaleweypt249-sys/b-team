@@ -4,14 +4,15 @@
 #include <stddef.h>
 #include <string.h>
 
+/* DM 电机 CAN 指令编码。 */
 #define DM_STD_ID_MAX      0x7FFU
 #define DM_FEEDBACK_ID_MAX 0x0FU
 #define DM_SPECIAL_DATA    0xFFU
 #define DM_CMD_ENABLE      0xFCU
 #define DM_CMD_DISABLE     0xFDU
 #define DM_CMD_ZERO        0xFEU
-#define DM_POSITION_BITS   16U      // 位置用16位表示
-#define DM_PARAMETER_BITS  12U      // 速度/力矩/KP/KD用12位表示
+#define DM_POSITION_BITS   16U
+#define DM_PARAMETER_BITS  12U
 
 
 static bool valid_float(float value)

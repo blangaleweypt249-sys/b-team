@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <string.h>
 
+/* DM-IMU 接收缓冲区和数据帧字段。 */
 #define IMU_DMA_BUFFER_SIZE       256U
 #define IMU_RX_FIFO_SIZE          512U
 #define IMU_FRAME_BUFFER_SIZE     24U
@@ -15,9 +16,6 @@
 #define IMU_FRAME_LENGTH_STANDARD 19U
 #define IMU_FRAME_LENGTH_QUAT     23U
 #define IMU_VALUE_OFFSET          12U
-#define IMU_GYRO_LIMIT_DEG_S      2000.0f
-#define IMU_ANGLE_LIMIT_DEG       360.0f
-#define IMU_UART_TX_TIMEOUT_MS    100U
 
 typedef struct
 {
@@ -185,7 +183,7 @@ static bool parse_frame(void)
 
     if (frame_type == IMU_FRAME_TYPE_GYRO)
     {
-        if (fabsf(value) > IMU_GYRO_LIMIT_DEG_S)
+        if (fabsf(value) > 2000.0f)
         {
             return false;
         }
@@ -195,7 +193,7 @@ static bool parse_frame(void)
     }
     else
     {
-        if (fabsf(value) > IMU_ANGLE_LIMIT_DEG)
+        if (fabsf(value) > 360.0f)
         {
             return false;
         }
@@ -361,7 +359,7 @@ HAL_StatusTypeDef Imu_Send(const uint8_t *data, uint16_t length)
     }
 
     return HAL_UART_Transmit(imu_driver.uart, (uint8_t *)data, length,
-                             IMU_UART_TX_TIMEOUT_MS);
+                             100U);
 }
 
 bool Imu_GetRawData(imu_raw_data_t *data)

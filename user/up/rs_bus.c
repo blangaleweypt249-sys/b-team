@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 
+/* 环形队列掩码，队列长度必须保持为 2 的幂。 */
 #define RS_BUS_RX_QUEUE_MASK (RS_BUS_RX_QUEUE_SIZE - 1U)
 
 #if ((RS_BUS_RX_QUEUE_SIZE & RS_BUS_RX_QUEUE_MASK) != 0U)

@@ -5,17 +5,19 @@
 #include <float.h>
 #include <stddef.h>
 
+/* 仅用于本文件的静态数组遍历。 */
 #define ARRAY_SIZE(array) ((uint8_t)(sizeof(array) / sizeof((array)[0])))
 
-#define RS_HOST_ID           0xFDU
-#define RS_MOTOR_L_ID        39U
-#define RS_MOTOR_F_ID        40U
-#define DM_MOTOR_L_ID        0x05U
-#define DM_MOTOR_F_ID        0x07U
-#define DM_MOTOR_L_RX_ID     0x15U
-#define DM_MOTOR_F_RX_ID     0x17U
-#define M2006_MOTOR_L_ID     1U
-#define M2006_MOTOR_F_ID     2U
+/* 电机总线 ID 由当前接线固定。 */
+#define RS_HOST_ID       0xFDU
+#define RS_MOTOR_L_ID    39U
+#define RS_MOTOR_F_ID    40U
+#define DM_MOTOR_L_ID    0x05U
+#define DM_MOTOR_F_ID    0x07U
+#define DM_MOTOR_L_RX_ID 0x15U
+#define DM_MOTOR_F_RX_ID 0x17U
+#define M2006_MOTOR_L_ID 1U
+#define M2006_MOTOR_F_ID 2U
 
 #define RS_HOME_ANGLE_DEG    0.0f
 #define RS_HOME_SPEED_RAD_S  9.5f
@@ -30,11 +32,8 @@
 #define M2006_PID_KD         5.0f
 #define MOTOR_MOVE_TIME_MS   2000U // 四台电机到达目标角度的总时间
 #define RAD_TO_DEG           57.2957795f
-#define DM_MAX_ANGLE_DEG     (DM_J4310_P_MAX * RAD_TO_DEG)
-
-#if (MOTOR_MOVE_TIME_MS == 0U)
-#error "MOTOR_MOVE_TIME_MS must be greater than zero"
-#endif
+#define RAD_TO_DEG       57.2957795f
+#define DM_MAX_ANGLE_DEG (DM_J4310_P_MAX * RAD_TO_DEG)
 
 typedef struct
 {

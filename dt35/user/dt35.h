@@ -3,23 +3,19 @@
 
 #include "stm32f1xx_hal.h"
 
-
-#define DT35_I2C_ADDR          0x41U
-
-#define DT35_VOLT_NEAR_MV      0U
-#define DT35_VOLT_FAR_MV       10000U
-#define DT35_DIST_NEAR_CM      5.0f
-#define DT35_DIST_FAR_CM       20.0f
+/* 两个距离传感器的固定 I2C 地址。 */
+#define DT35_ADDR_41 0x41U
+#define DT35_ADDR_40 0x40U
 
 typedef struct
 {
     uint16_t raw;
     uint16_t voltage_mv;
-    float distance_cm;
-} DT35_Data;
+    uint16_t distance_cm;
+} dt35_data_t;
 
 HAL_StatusTypeDef DT35_Init(I2C_HandleTypeDef *i2c);
-HAL_StatusTypeDef DT35_Read(void);
-HAL_StatusTypeDef DT35_Get(DT35_Data *data);
+HAL_StatusTypeDef DT35_Read_41(dt35_data_t *data);
+HAL_StatusTypeDef DT35_Read_40(dt35_data_t *data);
 
 #endif

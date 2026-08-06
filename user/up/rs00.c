@@ -3,26 +3,26 @@
 #include <float.h>
 #include <string.h>
 
-#define RS_MODE_DELAY_MS   3U
-#define RS_ID_MAX          0x7FU
+/* RS00 协议范围和数据缩放。 */
+#define RS_MODE_DELAY_MS        3U
+#define RS_ID_MAX               0x7FU
+#define RS_LIMIT_IQ_VALID       (1U << 0)
+#define RS_LIMIT_SPEED_VALID    (1U << 1)
 
-#define RS_PI       3.14159265358979323846f
-#define RS_P_MIN    (-4.0f * RS_PI)
-#define RS_P_MAX    (4.0f * RS_PI)
-#define RS_P_PERIOD (8.0f * RS_PI)
-#define RS_V_MIN    (-33.0f)
-#define RS_V_MAX    (33.0f)
-#define RS_T_MIN    (-14.0f)
-#define RS_T_MAX    (14.0f)
-#define RS_IQ_MIN   (-16.0f)
-#define RS_IQ_MAX   (16.0f)
-
-#define RS_LIMIT_IQ_VALID    (1U << 0)
-#define RS_LIMIT_SPEED_VALID (1U << 1)
-#define RS_UINT16_MAX        65535.0f
-#define RS_MOTION_KP_MAX     500.0f
-#define RS_MOTION_KD_MAX     5.0f
-#define RS_TEMP_SCALE_C      0.1f
+#define RS_PI            3.14159265358979323846f
+#define RS_P_MIN         (-4.0f * RS_PI)
+#define RS_P_MAX         (4.0f * RS_PI)
+#define RS_P_PERIOD      (8.0f * RS_PI)
+#define RS_V_MIN         (-33.0f)
+#define RS_V_MAX         33.0f
+#define RS_T_MIN         (-14.0f)
+#define RS_T_MAX         14.0f
+#define RS_IQ_MIN        (-16.0f)
+#define RS_IQ_MAX        16.0f
+#define RS_UINT16_MAX    65535.0f
+#define RS_MOTION_KP_MAX 500.0f
+#define RS_MOTION_KD_MAX 5.0f
+#define RS_TEMP_SCALE_C  0.1f
 
 enum
 {

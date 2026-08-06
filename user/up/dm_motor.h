@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* MIT 指令校验使用的 J4310 物理范围。 */
 #define DM_J4310_P_MAX 12.5f
 #define DM_J4310_V_MAX 30.0f
 #define DM_J4310_T_MAX 10.0f

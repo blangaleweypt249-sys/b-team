@@ -3,7 +3,7 @@
 <title>Static Call Graph - [b-up\b-up.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image b-up\b-up.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6180002: Last Updated: Thu Aug  6 11:21:05 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6180002: Last Updated: Thu Aug  6 14:15:58 2026
 <BR><P>
 <H3>Maximum Stack Usage =        496 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -143,10 +143,10 @@ Function Pointers
  <LI><a href="#[5a]">SPI6_IRQHandler</a> from startup_stm32h723xx.o(.text) referenced from startup_stm32h723xx.o(RESET)
  <LI><a href="#[6]">SVC_Handler</a> from port.o(.text.SVC_Handler) referenced from startup_stm32h723xx.o(RESET)
  <LI><a href="#[6a]">SWPMI1_IRQHandler</a> from startup_stm32h723xx.o(.text) referenced from startup_stm32h723xx.o(RESET)
- <LI><a href="#[99]">StartChassisTask</a> from freertos.o(.text.StartChassisTask) referenced 2 times from freertos.o(.text.MX_FREERTOS_Init)
- <LI><a href="#[9b]">StartCommTask</a> from freertos.o(.text.StartCommTask) referenced 2 times from freertos.o(.text.MX_FREERTOS_Init)
- <LI><a href="#[9a]">StartLiftTask</a> from freertos.o(.text.StartLiftTask) referenced 2 times from freertos.o(.text.MX_FREERTOS_Init)
- <LI><a href="#[9c]">StartStartupReminderTask</a> from freertos.o(.text.StartStartupReminderTask) referenced 2 times from freertos.o(.text.MX_FREERTOS_Init)
+ <LI><a href="#[9a]">StartChassisTask</a> from freertos.o(.text.StartChassisTask) referenced 2 times from freertos.o(.text.MX_FREERTOS_Init)
+ <LI><a href="#[9c]">StartCommTask</a> from freertos.o(.text.StartCommTask) referenced 2 times from freertos.o(.text.MX_FREERTOS_Init)
+ <LI><a href="#[9b]">StartLiftTask</a> from freertos.o(.text.StartLiftTask) referenced 2 times from freertos.o(.text.MX_FREERTOS_Init)
+ <LI><a href="#[99]">StartStartupReminderTask</a> from freertos.o(.text.StartStartupReminderTask) referenced 2 times from freertos.o(.text.MX_FREERTOS_Init)
  <LI><a href="#[9]">SysTick_Handler</a> from cmsis_os2.o(.text.SysTick_Handler) referenced from startup_stm32h723xx.o(RESET)
  <LI><a href="#[94]">SystemInit</a> from system_stm32h7xx.o(.text.SystemInit) referenced from startup_stm32h723xx.o(.text)
  <LI><a href="#[c]">TAMP_STAMP_IRQHandler</a> from startup_stm32h723xx.o(.text) referenced from startup_stm32h723xx.o(RESET)
@@ -844,7 +844,7 @@ Global Symbols
 <LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Up_SetRsPos
 <LI><a href="#[c5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Up_SetMotorPos
 </UL>
-<BR>[Called By]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartLiftTask
+<BR>[Called By]<UL><LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartLiftTask
 </UL>
 
 <P><STRONG><a name="[4]"></a>BusFault_Handler</STRONG> (Thumb, 2 bytes, Stack size 0 bytes, stm32h7xx_it.o(.text.BusFault_Handler))
@@ -890,7 +890,7 @@ Global Symbols
 <LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Stop
 <LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Init
 </UL>
-<BR>[Called By]<UL><LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
+<BR>[Called By]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
 </UL>
 
 <P><STRONG><a name="[d4]"></a>Chassis_Run1ms</STRONG> (Thumb, 328 bytes, Stack size 56 bytes, chassis_main.o(.text.Chassis_Run1ms))
@@ -906,7 +906,7 @@ Global Symbols
 <LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Read
 <LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Recover
 </UL>
-<BR>[Called By]<UL><LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
+<BR>[Called By]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
 </UL>
 
 <P><STRONG><a name="[db]"></a>Chassis_SetVelocity</STRONG> (Thumb, 128 bytes, Stack size 24 bytes, chassis_main.o(.text.Chassis_SetVelocity))
@@ -936,7 +936,7 @@ Global Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[de]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UART_Receive_IT
 </UL>
-<BR>[Called By]<UL><LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartCommTask
+<BR>[Called By]<UL><LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartCommTask
 </UL>
 
 <P><STRONG><a name="[df]"></a>ComputerLink_Run</STRONG> (Thumb, 178 bytes, Stack size 16 bytes, computer_link.o(.text.ComputerLink_Run))
@@ -951,7 +951,7 @@ Global Symbols
 <LI><a href="#[db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_SetVelocity
 <LI><a href="#[e1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Action_Request
 </UL>
-<BR>[Called By]<UL><LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartCommTask
+<BR>[Called By]<UL><LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartCommTask
 </UL>
 
 <P><STRONG><a name="[e3]"></a>ComputerLink_RxCplt</STRONG> (Thumb, 242 bytes, Stack size 24 bytes, computer_link.o(.text.ComputerLink_RxCplt))
@@ -1481,7 +1481,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[15f]"></a>HAL_GPIO_WritePin</STRONG> (Thumb, 10 bytes, Stack size 0 bytes, stm32h7xx_hal_gpio.o(.text.HAL_GPIO_WritePin))
-<BR><BR>[Called By]<UL><LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartStartupReminderTask
+<BR><BR>[Called By]<UL><LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartStartupReminderTask
 <LI><a href="#[15e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MX_GPIO_Init
 </UL>
 
@@ -1964,7 +1964,7 @@ Global Symbols
 <LI><a href="#[151]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Imu_Init
 <LI><a href="#[ca]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memclr4
 </UL>
-<BR>[Called By]<UL><LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
+<BR>[Called By]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
 </UL>
 
 <P><STRONG><a name="[152]"></a>ImuMain_Run1ms</STRONG> (Thumb, 1620 bytes, Stack size 56 bytes, imu_main.o(.text.ImuMain_Run1ms))
@@ -1976,7 +1976,7 @@ Global Symbols
 <LI><a href="#[155]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Imu_Send
 <LI><a href="#[153]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Imu_Process
 </UL>
-<BR>[Called By]<UL><LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
+<BR>[Called By]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
 </UL>
 
 <P><STRONG><a name="[e2]"></a>ImuMain_SendYaw</STRONG> (Thumb, 160 bytes, Stack size 24 bytes, imu_main.o(.text.ImuMain_SendYaw))
@@ -2388,7 +2388,7 @@ Global Symbols
 <P><STRONG><a name="[6]"></a>SVC_Handler</STRONG> (Thumb, 36 bytes, Stack size 0 bytes, port.o(.text.SVC_Handler))
 <BR>[Address Reference Count : 1]<UL><LI> startup_stm32h723xx.o(RESET)
 </UL>
-<P><STRONG><a name="[99]"></a>StartChassisTask</STRONG> (Thumb, 90 bytes, Stack size 16 bytes, freertos.o(.text.StartChassisTask))
+<P><STRONG><a name="[9a]"></a>StartChassisTask</STRONG> (Thumb, 90 bytes, Stack size 16 bytes, freertos.o(.text.StartChassisTask))
 <BR><BR>[Stack]<UL><LI>Max Depth = 196 + Unknown Stack Size
 <LI>Call Chain = StartChassisTask &rArr; Chassis_Run1ms &rArr; VescMotor_SendRpm &rArr; VescCan_Send &rArr; HAL_FDCAN_AddMessageToTxFifoQ
 </UL>
@@ -2401,17 +2401,17 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> freertos.o(.text.MX_FREERTOS_Init)
 </UL>
-<P><STRONG><a name="[9b]"></a>StartCommTask</STRONG> (Thumb, 28 bytes, Stack size 8 bytes, freertos.o(.text.StartCommTask))
+<P><STRONG><a name="[9c]"></a>StartCommTask</STRONG> (Thumb, 28 bytes, Stack size 8 bytes, freertos.o(.text.StartCommTask))
 <BR><BR>[Stack]<UL><LI>Max Depth = 172 + Unknown Stack Size
 <LI>Call Chain = StartCommTask &rArr; ComputerLink_Run &rArr; Chassis_StopAll &rArr; VescMotor_SendRpm &rArr; VescCan_Send &rArr; HAL_FDCAN_AddMessageToTxFifoQ
 </UL>
-<BR>[Calls]<UL><LI><a href="#[186]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osDelay
-<LI><a href="#[df]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ComputerLink_Run
+<BR>[Calls]<UL><LI><a href="#[df]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ComputerLink_Run
 <LI><a href="#[dd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ComputerLink_Init
+<LI><a href="#[186]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osDelay
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> freertos.o(.text.MX_FREERTOS_Init)
 </UL>
-<P><STRONG><a name="[9a]"></a>StartLiftTask</STRONG> (Thumb, 46 bytes, Stack size 8 bytes, freertos.o(.text.StartLiftTask))
+<P><STRONG><a name="[9b]"></a>StartLiftTask</STRONG> (Thumb, 46 bytes, Stack size 8 bytes, freertos.o(.text.StartLiftTask))
 <BR><BR>[Stack]<UL><LI>Max Depth = 284 + Unknown Stack Size
 <LI>Call Chain = StartLiftTask &rArr; Up_Run1ms &rArr; RsApp_Run &rArr; RsMotor_SetCsp &rArr; write_float &rArr; RsBus_Send &rArr; HAL_FDCAN_AddMessageToTxFifoQ
 </UL>
@@ -2423,7 +2423,7 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> freertos.o(.text.MX_FREERTOS_Init)
 </UL>
-<P><STRONG><a name="[9c]"></a>StartStartupReminderTask</STRONG> (Thumb, 206 bytes, Stack size 16 bytes, freertos.o(.text.StartStartupReminderTask))
+<P><STRONG><a name="[99]"></a>StartStartupReminderTask</STRONG> (Thumb, 206 bytes, Stack size 16 bytes, freertos.o(.text.StartStartupReminderTask))
 <BR><BR>[Stack]<UL><LI>Max Depth = 120<LI>Call Chain = StartStartupReminderTask &rArr; osThreadExit &rArr; vTaskDelete &rArr; vPortFree &rArr; xTaskResumeAll &rArr; xTaskIncrementTick
 </UL>
 <BR>[Calls]<UL><LI><a href="#[189]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osThreadExit
@@ -2640,7 +2640,7 @@ Global Symbols
 <LI><a href="#[16b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsApp_Init
 <LI><a href="#[e7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;DmApp_Init
 </UL>
-<BR>[Called By]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartLiftTask
+<BR>[Called By]<UL><LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartLiftTask
 </UL>
 
 <P><STRONG><a name="[c6]"></a>Up_MoveM2006</STRONG> (Thumb, 192 bytes, Stack size 64 bytes, up_main.o(.text.Up_MoveM2006))
@@ -2668,7 +2668,7 @@ Global Symbols
 <LI><a href="#[ed]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;DmApp_SetMitCmd
 <LI><a href="#[e9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;DmApp_Run
 </UL>
-<BR>[Called By]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartLiftTask
+<BR>[Called By]<UL><LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartLiftTask
 </UL>
 
 <P><STRONG><a name="[c8]"></a>Up_SetDmPos</STRONG> (Thumb, 184 bytes, Stack size 8 bytes, up_main.o(.text.Up_SetDmPos))
@@ -2824,8 +2824,8 @@ Global Symbols
 <BR>[Calls]<UL><LI><a href="#[18a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xTaskGetSchedulerState
 <LI><a href="#[1a5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;vTaskDelay
 </UL>
-<BR>[Called By]<UL><LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartStartupReminderTask
-<LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartCommTask
+<BR>[Called By]<UL><LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartCommTask
+<LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartStartupReminderTask
 </UL>
 
 <P><STRONG><a name="[185]"></a>osDelayUntil</STRONG> (Thumb, 92 bytes, Stack size 16 bytes, cmsis_os2.o(.text.osDelayUntil))
@@ -2835,8 +2835,8 @@ Global Symbols
 <LI><a href="#[1a6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xTaskGetTickCount
 <LI><a href="#[1a7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xTaskDelayUntil
 </UL>
-<BR>[Called By]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartLiftTask
-<LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
+<BR>[Called By]<UL><LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartLiftTask
+<LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
 </UL>
 
 <P><STRONG><a name="[184]"></a>osKernelGetTickCount</STRONG> (Thumb, 50 bytes, Stack size 8 bytes, cmsis_os2.o(.text.osKernelGetTickCount))
@@ -2846,8 +2846,8 @@ Global Symbols
 <LI><a href="#[1a8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xTaskGetTickCountFromISR
 <LI><a href="#[1a6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xTaskGetTickCount
 </UL>
-<BR>[Called By]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartLiftTask
-<LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
+<BR>[Called By]<UL><LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartLiftTask
+<LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
 </UL>
 
 <P><STRONG><a name="[1a3]"></a>osKernelInitialize</STRONG> (Thumb, 78 bytes, Stack size 8 bytes, cmsis_os2.o(.text.osKernelInitialize))
@@ -2873,7 +2873,7 @@ Global Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[1aa]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;vTaskDelete
 </UL>
-<BR>[Called By]<UL><LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartStartupReminderTask
+<BR>[Called By]<UL><LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartStartupReminderTask
 </UL>
 
 <P><STRONG><a name="[15d]"></a>osThreadNew</STRONG> (Thumb, 204 bytes, Stack size 40 bytes, cmsis_os2.o(.text.osThreadNew))
@@ -3186,9 +3186,9 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[18a]"></a>xTaskGetSchedulerState</STRONG> (Thumb, 28 bytes, Stack size 0 bytes, tasks.o(.text.xTaskGetSchedulerState))
-<BR><BR>[Called By]<UL><LI><a href="#[186]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osDelay
-<LI><a href="#[185]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osDelayUntil
+<BR><BR>[Called By]<UL><LI><a href="#[185]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osDelayUntil
 <LI><a href="#[184]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osKernelGetTickCount
+<LI><a href="#[186]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osDelay
 <LI><a href="#[15d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osThreadNew
 <LI><a href="#[1a4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osKernelStart
 <LI><a href="#[1a3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osKernelInitialize
