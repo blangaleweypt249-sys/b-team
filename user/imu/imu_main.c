@@ -24,31 +24,6 @@ enum
     IMU_YAW_PID_COUNT
 };
 
-//航向环
-typedef struct
-{
-    uint32_t boot_delay_ms;
-    uint32_t cal_cmd_delay_ms;
-    uint32_t gyro_cal_wait_ms;
-    uint32_t config_start_delay_ms;
-    uint32_t config_cmd_delay_ms;
-    uint16_t gyro_bias_samples;
-    uint32_t online_timeout_ms;
-    uint32_t yaw_tx_period_ms;
-    uint32_t yaw_control_period_ms;
-    int16_t yaw_cmd_threshold;
-    int16_t yaw_linear_threshold;
-    float kalman_q;
-    float kalman_r;
-    float gyro_filter_q;
-    float gyro_filter_r;
-    float yaw_tx_scale;
-    float yaw_deadzone_deg;
-    float yaw_i_active_deg;
-    float yaw_i_decay;
-    float yaw_gyro_k;
-} imu_config_t;
-
 static const imu_config_t imu_config = {
     .boot_delay_ms = 100U,
     .cal_cmd_delay_ms = 50U,
@@ -86,9 +61,9 @@ typedef enum
 
 typedef struct
 {
-    imu_init_step_t step;
+    imu_init_step_t step;       // 当前初始化步骤
     uint32_t next_action_ms;
-    uint32_t last_gyro_sequence;
+    uint32_t last_gyro_sequence;   
     uint32_t last_yaw_sequence;
     float gyro_bias_sum_deg_s;
     uint16_t gyro_bias_sample_count;
@@ -243,21 +218,21 @@ static void reset_yaw_control(void)
     imu_data.yaw_hold_active = false;
 }
 
-static float filter_gyro(float gyro_deg_s)   //一维卡尔曼滤波
+static float filter_gyro(float gyro_deg_s)   //一维卡尔曼滤波(角速度)
 {
-    float gain;
+    float gain;     //卡尔曼增益k
 
     if (!gyro_filter.valid)
     {
-        gyro_filter.estimate = gyro_deg_s;
-        gyro_filter.covariance = 1.0f;
+        gyro_filter.estimate = gyro_deg_s;   //角速度估计值
+        gyro_filter.covariance = 1.0f;       //估计协方差p
         gyro_filter.valid = true;
     }
     else
     {
-        gyro_filter.covariance += imu_config.gyro_filter_q;
+        gyro_filter.covariance += imu_config.gyro_filter_q; //Q为过程噪声
         gain = gyro_filter.covariance /
-               (gyro_filter.covariance + imu_config.gyro_filter_r);
+               (gyro_filter.covariance + imu_config.gyro_filter_r);  //r为测量噪声
         gyro_filter.estimate += gain *
                                 (gyro_deg_s - gyro_filter.estimate);
         gyro_filter.covariance *= 1.0f - gain;
@@ -279,7 +254,7 @@ static float calculate_yaw_pid(imu_yaw_pid_t *pid, float error_deg)
     }
     else
     {
-        pid->integral *= imu_config.yaw_i_decay;
+        pid->integral *= imu_config.yaw_i_decay;   //积分软释放 防止积分饱和
     }
 
     if (pid->first_run)
@@ -297,8 +272,8 @@ static float calculate_yaw_pid(imu_yaw_pid_t *pid, float error_deg)
 
 static float filter_yaw(float measured_yaw_deg)
 {
-    float innovation_deg;
-    float kalman_gain;
+    float innovation_deg; //观测值与预测值的差值
+    float kalman_gain;    //卡尔曼增益k
 
     // 标量卡尔曼参数，并对跨越正负 180 度的误差归一化
     if (!yaw_kalman_valid)
@@ -309,6 +284,7 @@ static float filter_yaw(float measured_yaw_deg)
         return yaw_kalman_estimate_deg;
     }
 
+    // 更新卡尔曼滤波器的协方差
     yaw_kalman_p += imu_config.kalman_q;
     innovation_deg = normalize_angle(measured_yaw_deg -
                                      yaw_kalman_estimate_deg);

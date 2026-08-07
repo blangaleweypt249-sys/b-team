@@ -37,6 +37,30 @@ typedef struct
     bool yaw_hold_active;          // 当前是否由航向闭环控制旋转
 } imu_data_t;
 
+//航向环
+typedef struct
+{
+    uint32_t boot_delay_ms;           // 上电后等待 IMU 启动的时间
+    uint32_t cal_cmd_delay_ms;        // 发送校准命令前的间隔
+    uint32_t gyro_cal_wait_ms;        // 等待 IMU 硬件陀螺仪校准完成的时间
+    uint32_t config_start_delay_ms;   // 校准完成后，开始发配置命令前的等待
+    uint32_t config_cmd_delay_ms;     // 每条配置命令之间的发送间隔
+    uint16_t gyro_bias_samples;       // 软件零偏采样采集的帧数
+    uint32_t online_timeout_ms;       // 判定 IMU 离线的超时时间
+    uint32_t yaw_tx_period_ms;        // 向上位机发送偏航角的周期
+    uint32_t yaw_control_period_ms;   // 航向保持控制环的执行周期
+    int16_t yaw_cmd_threshold;        // 手动旋转指令阈值（判定是否手动旋转）
+    int16_t yaw_linear_threshold;     // 底盘平移速度阈值（判定静止/运动）
+    float kalman_q;                   // 偏航角卡尔曼滤波的过程噪声
+    float kalman_r;                   // 偏航角卡尔曼滤波的测量噪声
+    float gyro_filter_q;              // 角速度卡尔曼滤波的过程噪声
+    float gyro_filter_r;              // 角速度卡尔曼滤波的测量噪声
+    float yaw_tx_scale;               // 偏航角上报时的放大倍数
+    float yaw_deadzone_deg;           // 航向保持死区（误差小于此值不输出）
+    float yaw_i_active_deg;           // 积分分离阈值（误差在此范围内才积分）
+    float yaw_i_decay;                // 积分分离时的积分衰减系数
+    float yaw_gyro_k;                 // 角速度前馈阻尼系数
+} imu_config_t;
 /**
  * @brief 初始化 IMU 上层逻辑并启动 USART1 接收
  * @retval HAL 状态

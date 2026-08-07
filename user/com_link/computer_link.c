@@ -16,7 +16,7 @@
 #define COMPUTER_ACTION_HEADER    0x5BU
 #define COMPUTER_VELOCITY_LENGTH  9U
 #define COMPUTER_ACTION_LENGTH    3U
-#define COMPUTER_MAX_FRAME_LENGTH COMPUTER_VELOCITY_LENGTH
+#define COMPUTER_MAX_FRAME_LENGTH 9U
 #define COMPUTER_LINK_TIMEOUT_MS  500U
 
 typedef enum
@@ -116,10 +116,10 @@ static void parse_byte(uint8_t data)
             rx_index = 2U;
             rx_length = (data == COMPUTER_VELOCITY_HEADER)
                             ? COMPUTER_VELOCITY_LENGTH
-                            : COMPUTER_ACTION_LENGTH;
+                            : COMPUTER_ACTION_LENGTH;    //速度帧9字节，动作帧3字节
             rx_state = COMPUTER_RX_FRAME;
         }
-        else if (data != COMPUTER_FRAME_HEADER_0)
+        else if (data != COMPUTER_FRAME_HEADER_0)   // 不是 0xA5 也不是有效帧头，重置
         {
             reset_parser();
         }

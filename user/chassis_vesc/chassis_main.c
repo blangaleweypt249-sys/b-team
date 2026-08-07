@@ -9,11 +9,11 @@
 #define ARRAY_SIZE(array) ((uint8_t)(sizeof(array) / sizeof((array)[0])))
 
 /* 按当前接线固定的 VESC ID 和底盘指令限制。 */
-#define CHASSIS_MOTOR_LF_ID      87U
-#define CHASSIS_MOTOR_RF_ID      43U
-#define CHASSIS_MOTOR_LR_ID      67U
-#define CHASSIS_MOTOR_RR_ID      59U
-#define CHASSIS_MOTOR_POLE_PAIRS 21U
+#define CHASSIS_MOTOR_LF_ID  87U   // 左前轮 VESC ID
+#define CHASSIS_MOTOR_RF_ID  43U   // 右前轮 VESC ID
+#define CHASSIS_MOTOR_LR_ID  67U   // 左后轮 VESC ID
+#define CHASSIS_MOTOR_RR_ID  59U   // 右后轮 VESC ID
+#define CHASSIS_MOTOR_POLE_PAIRS 21U   // VESC 极对数
 #define CHASSIS_MAX_RPM          4000
 #define CHASSIS_MIN_RPM          0
 #define CHASSIS_COMMAND_PERIOD_MS 10U
