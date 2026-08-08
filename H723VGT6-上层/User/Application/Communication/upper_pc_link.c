@@ -72,10 +72,8 @@ static bool UpperPcLink_DecodeTarget(const pc_frame_t *frame,
     target->arm.grip_kd = UpperPcLink_ReadFloat(value + 12U);
     target->arm.m3508_vel_rad_s[0] = UpperPcLink_ReadFloat(value + 16U);
     target->arm.m3508_vel_rad_s[1] = UpperPcLink_ReadFloat(value + 20U);
-    target->arm.m3508_vel_rad_s[2] = UpperPcLink_ReadFloat(value + 24U);
-    target->arm.m3508_vel_rad_s[3] = UpperPcLink_ReadFloat(value + 28U);
-    target->conveyor.m2006_vel_rad_s = UpperPcLink_ReadFloat(value + 32U);
-    target->gripper.m2006_vel_rad_s = UpperPcLink_ReadFloat(value + 36U);
+    target->conveyor.m2006_vel_rad_s = UpperPcLink_ReadFloat(value + 24U);
+    target->gripper.m2006_vel_rad_s = UpperPcLink_ReadFloat(value + 28U);
     return true;
 }
 

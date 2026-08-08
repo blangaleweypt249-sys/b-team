@@ -92,9 +92,13 @@ bool M2006_GetTimeoutStats(uint8_t can_bus,
 bool M2006_SetSpeedPid(uint8_t can_bus,
                        uint8_t motor_id,
                        const m2006_pid_cfg_t *cfg);
+bool M2006_SetPositionPid(uint8_t can_bus,
+                          uint8_t motor_id,
+                          const m2006_pid_cfg_t *cfg);
 bool M2006_SetOnlinePidEnabled(uint8_t can_bus,
                                uint8_t motor_id,
                                bool enabled);
+bool M2006_ZeroPosition(uint8_t can_bus, uint8_t motor_id);
 bool M2006_GetOnlinePidState(uint8_t can_bus,
                              uint8_t motor_id,
                              m2006_online_pid_state_t *state);

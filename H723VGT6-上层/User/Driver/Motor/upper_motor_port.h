@@ -27,5 +27,8 @@ void UpperMotorPort_OnFrame(uint8_t can_bus,
                              uint32_t tick_ms);
 bool UpperMotorPort_GetHealth(uint32_t tick_ms,
                               upper_motor_health_t *health);
+bool UpperMotorPort_IsDjiConfigured(uint8_t can_bus,
+                                    motor_model_t model,
+                                    uint8_t node_id);
 
 #endif

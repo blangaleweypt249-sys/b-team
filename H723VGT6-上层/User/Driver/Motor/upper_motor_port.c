@@ -700,3 +700,26 @@ bool UpperMotorPort_GetHealth(uint32_t tick_ms,
     }
     return true;
 }
+
+bool UpperMotorPort_IsDjiConfigured(uint8_t can_bus,
+                                    motor_model_t model,
+                                    uint8_t node_id)
+{
+    size_t index;
+
+    if (!UpperMotorPort_IsDjiModel(model) ||
+        (upper_motor_cfg_ref == NULL))
+    {
+        return false;
+    }
+    for (index = 0U; index < upper_motor_count; index++)
+    {
+        if ((upper_motor_cfg_ref[index].can_bus == can_bus) &&
+            (upper_motor_cfg_ref[index].node_id == node_id) &&
+            (upper_motor_cfg_ref[index].model == model))
+        {
+            return true;
+        }
+    }
+    return false;
+}

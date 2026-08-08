@@ -67,8 +67,6 @@ static void Test_SendAll(uint32_t tick_ms)
     {
         1.0f,
         2.0f,
-        -1.0f,
-        -2.0f,
         0.0f,
         1.0f,
         -1.0f
@@ -98,69 +96,44 @@ static void Test_SendAll(uint32_t tick_ms)
 
 static void Test_CheckTopology(void)
 {
-    assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_1].can_bus == 1U);
+    assert(UPPER_CONTROL_FREQUENCY_HZ == 1000U);
+    assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_1].can_bus == 2U);
     assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_1].node_id == 1U);
-    assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_2].can_bus == 1U);
+    assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_2].can_bus == 2U);
     assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_2].node_id == 2U);
-    assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_3].can_bus == 2U);
-    assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_3].node_id == 1U);
-    assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_4].can_bus == 2U);
-    assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_4].node_id == 2U);
     assert(upper_motor_cfg[UPPER_MOTOR_ARM_J4310].can_bus == 1U);
     assert(upper_motor_cfg[UPPER_MOTOR_ARM_J4310].node_id == 3U);
     assert(upper_motor_cfg[UPPER_MOTOR_CONVEYOR_M2006].can_bus == 3U);
     assert(upper_motor_cfg[UPPER_MOTOR_GRIPPER_M2006].can_bus == 3U);
 }
 
-static void Test_CheckNoBudgetGuard(void)
-{
-    motor_cfg_t high_load_cfg[UPPER_MOTOR_COUNT];
-
-    (void)memcpy(high_load_cfg, upper_motor_cfg, sizeof(high_load_cfg));
-    high_load_cfg[UPPER_MOTOR_ARM_M3508_3].can_bus = 1U;
-    high_load_cfg[UPPER_MOTOR_ARM_M3508_3].node_id = 4U;
-    high_load_cfg[UPPER_MOTOR_ARM_M3508_4].can_bus = 1U;
-    high_load_cfg[UPPER_MOTOR_ARM_M3508_4].node_id = 5U;
-    assert(UpperMotorPort_Init(high_load_cfg, UPPER_MOTOR_COUNT));
-}
-
 static void Test_CheckFirstCycle(void)
 {
-    assert(test_tx_count == 4U);
+    assert(test_tx_count == 3U);
     assert(test_tx[0].can_bus == 1U);
-    assert(test_tx[0].frame.id == 0x200U);
-    assert(Test_ReadI16Be(&test_tx[0].frame.data[0]) > 0);
-    assert(Test_ReadI16Be(&test_tx[0].frame.data[2]) > 0);
-    assert(Test_ReadI16Be(&test_tx[0].frame.data[4]) == 0);
-    assert(Test_ReadI16Be(&test_tx[0].frame.data[6]) == 0);
+    assert(test_tx[0].frame.id == 3U);
+    assert(test_tx[0].frame.data[7] == 0xFCU);
 
-    assert(test_tx[1].can_bus == 1U);
-    assert(test_tx[1].frame.id == 3U);
-    assert(test_tx[1].frame.data[7] == 0xFCU);
+    assert(test_tx[1].can_bus == 2U);
+    assert(test_tx[1].frame.id == 0x200U);
+    assert(Test_ReadI16Be(&test_tx[1].frame.data[0]) > 0);
+    assert(Test_ReadI16Be(&test_tx[1].frame.data[2]) > 0);
+    assert(Test_ReadI16Be(&test_tx[1].frame.data[4]) == 0);
+    assert(Test_ReadI16Be(&test_tx[1].frame.data[6]) == 0);
 
-    assert(test_tx[2].can_bus == 2U);
+    assert(test_tx[2].can_bus == 3U);
     assert(test_tx[2].frame.id == 0x200U);
-    assert(Test_ReadI16Be(&test_tx[2].frame.data[0]) < 0);
+    assert(Test_ReadI16Be(&test_tx[2].frame.data[0]) > 0);
     assert(Test_ReadI16Be(&test_tx[2].frame.data[2]) < 0);
     assert(Test_ReadI16Be(&test_tx[2].frame.data[4]) == 0);
     assert(Test_ReadI16Be(&test_tx[2].frame.data[6]) == 0);
-
-    assert(test_tx[3].can_bus == 3U);
-    assert(test_tx[3].frame.id == 0x200U);
-    assert(Test_ReadI16Be(&test_tx[3].frame.data[0]) > 0);
-    assert(Test_ReadI16Be(&test_tx[3].frame.data[2]) < 0);
-    assert(Test_ReadI16Be(&test_tx[3].frame.data[4]) == 0);
-    assert(Test_ReadI16Be(&test_tx[3].frame.data[6]) == 0);
 }
 
 int main(void)
 {
     Test_CheckTopology();
-    Test_CheckNoBudgetGuard();
     assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
 
-    Test_FeedDji(1U, 1U, 0U);
-    Test_FeedDji(1U, 2U, 0U);
     Test_FeedDji(2U, 1U, 0U);
     Test_FeedDji(2U, 2U, 0U);
     Test_FeedDji(3U, 1U, 0U);
@@ -173,11 +146,11 @@ int main(void)
     Test_FeedJ4310(1U);
     Test_ResetTx();
     Test_SendAll(2U);
-    assert(test_tx_count == 4U);
+    assert(test_tx_count == 3U);
     assert(test_tx[0].can_bus == 1U);
-    assert(test_tx[0].frame.id == 0x200U);
-    assert(test_tx[1].can_bus == 1U);
-    assert(test_tx[1].frame.id == 3U);
-    assert(test_tx[1].frame.data[7] != 0xFCU);
+    assert(test_tx[0].frame.id == 3U);
+    assert(test_tx[0].frame.data[7] != 0xFCU);
+    assert(test_tx[1].can_bus == 2U);
+    assert(test_tx[1].frame.id == 0x200U);
     return 0;
 }

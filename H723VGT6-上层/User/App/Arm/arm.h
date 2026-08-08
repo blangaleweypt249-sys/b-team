@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#include "motor_manager.h"
+#include "upper_config.h"
 
 typedef struct
 {
@@ -12,14 +12,14 @@ typedef struct
     float grip_vel_rad_s;
     float grip_kp;
     float grip_kd;
-    float m3508_vel_rad_s[4];
+    float m3508_vel_rad_s[UPPER_ARM_M3508_COUNT];
 } arm_target_t;
 
 typedef struct
 {
     bool enabled;
     motor_cmd_t j4310;
-    motor_cmd_t m3508[4];
+    motor_cmd_t m3508[UPPER_ARM_M3508_COUNT];
 } arm_output_t;
 
 bool Arm_Calc(const arm_target_t *target, arm_output_t *output);

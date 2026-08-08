@@ -58,8 +58,8 @@ void FlashTool_Init(void)
     (void)memset(flash_data, 0, sizeof(flash_data));
     rx_index = 0U;
     line_overflow = false;
-    /* UART4 is the VOFA Flash console by default. This prevents the upper
-       computer's binary state frames from being mixed into text responses. */
+    /* UART4 is the startup/default console; after a command arrives, the
+       communication runtime follows that ordinary UART for responses. */
     flash_tool_active = true;
     flash_init_status = W25Q_PortInit();
     flash_device_id_status =

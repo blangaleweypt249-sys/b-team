@@ -28,7 +28,7 @@ bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
     {
         return false;
     }
-    for (index = 0U; index < 4U; index++)
+    for (index = 0U; index < UPPER_ARM_M3508_COUNT; index++)
     {
         if (!Arm_ValueWithin(target->m3508_vel_rad_s[index],
                              UPPER_M3508_POSITION_VEL_LIMIT_RAD_S))
@@ -46,7 +46,7 @@ bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
         .kp = target->grip_kp,
         .kd = target->grip_kd
     };
-    for (index = 0U; index < 4U; index++)
+    for (index = 0U; index < UPPER_ARM_M3508_COUNT; index++)
     {
         output->m3508[index] = (motor_cmd_t)
         {
@@ -68,7 +68,7 @@ bool Arm_Apply(motor_manager_t *manager, const arm_output_t *output)
     }
 
     success = true;
-    for (index = 0U; index < 4U; index++)
+    for (index = 0U; index < UPPER_ARM_M3508_COUNT; index++)
     {
         success = MotorManager_SetCmd(
                       manager,

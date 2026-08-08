@@ -39,7 +39,7 @@ static void Test_OnTarget(const upper_target_t *target, void *user_data)
 static size_t Test_BuildCommand(uint16_t payload_size, uint8_t *frame)
 {
     uint8_t payload[50] = {0};
-    static const float value[10] =
+    static const float value[8] =
     {
         1.0f,
         2.0f,
@@ -48,14 +48,12 @@ static size_t Test_BuildCommand(uint16_t payload_size, uint8_t *frame)
         5.0f,
         6.0f,
         7.0f,
-        8.0f,
-        9.0f,
-        10.0f
+        8.0f
     };
     size_t index;
 
     Test_WriteU16(payload, 0x0007U);
-    for (index = 0U; index < 10U; index++)
+    for (index = 0U; index < 8U; index++)
     {
         Test_WriteFloat(&payload[2U + index * sizeof(float)], value[index]);
     }
@@ -88,12 +86,12 @@ int main(void)
     assert(test_target.arm.grip_kp == 3.0f);
     assert(test_target.arm.grip_kd == 4.0f);
     assert(test_target.arm.m3508_vel_rad_s[0] == 5.0f);
-    assert(test_target.arm.m3508_vel_rad_s[3] == 8.0f);
-    assert(test_target.conveyor.m2006_vel_rad_s == 9.0f);
-    assert(test_target.gripper.m2006_vel_rad_s == 10.0f);
+    assert(test_target.arm.m3508_vel_rad_s[1] == 6.0f);
+    assert(test_target.conveyor.m2006_vel_rad_s == 7.0f);
+    assert(test_target.gripper.m2006_vel_rad_s == 8.0f);
 
     test_target_received = false;
-    frame_size = Test_BuildCommand(50U, frame);
+    frame_size = Test_BuildCommand(42U, frame);
     assert(frame_size > 0U);
     UpperPcLink_Push(&link, frame, frame_size, 101U);
     assert(!test_target_received);
@@ -101,7 +99,7 @@ int main(void)
 
     frame_size = Test_BuildCommand(UPPER_PC_CMD_PAYLOAD_SIZE, frame);
     assert(frame_size > 0U);
-    frame[2] = 1U;
+    frame[2] = 2U;
     UpperPcLink_Push(&link, frame, frame_size, 102U);
     assert(!test_target_received);
     assert(link.last_rx_tick_ms == 100U);

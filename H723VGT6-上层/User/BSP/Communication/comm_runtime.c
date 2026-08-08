@@ -7,7 +7,8 @@
 #include "usart.h"
 
 #define UART_DMA_RX_BUFFER_SIZE 256U
-#define UART_CHANNEL_COUNT      3U
+#define UART_CHANNEL_COUNT      ((uint32_t)COMM_UART_CHANNEL_COUNT)
+#define UART_NON_RS485_COUNT    ((uint32_t)COMM_UART_RS485_1)
 #define FDCAN_CHANNEL_COUNT     3U
 #define DCACHE_LINE_SIZE        32U
 
@@ -16,6 +17,7 @@ typedef struct
   UART_HandleTypeDef *handle;
   uint8_t *buffer;
   uint32_t event_flag;
+  bool use_dma;
   volatile uint32_t produced;
   volatile uint16_t isr_position;
   volatile uint8_t restart_requested;
@@ -23,14 +25,28 @@ typedef struct
 } UartDmaChannel;
 
 __ALIGNED(DCACHE_LINE_SIZE) static uint8_t uart4_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
+__ALIGNED(DCACHE_LINE_SIZE) static uint8_t uart5_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
+__ALIGNED(DCACHE_LINE_SIZE) static uint8_t uart7_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
+__ALIGNED(DCACHE_LINE_SIZE) static uint8_t uart8_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
+__ALIGNED(DCACHE_LINE_SIZE) static uint8_t uart9_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
+__ALIGNED(DCACHE_LINE_SIZE) static uint8_t usart3_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
+__ALIGNED(DCACHE_LINE_SIZE) static uint8_t usart6_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
+__ALIGNED(DCACHE_LINE_SIZE) static uint8_t usart10_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
 __ALIGNED(DCACHE_LINE_SIZE) static uint8_t usart1_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
 __ALIGNED(DCACHE_LINE_SIZE) static uint8_t usart2_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
 
 static UartDmaChannel uart_channels[UART_CHANNEL_COUNT] =
 {
-  { &huart4, uart4_rx_buffer, COMM_EVENT_UART4_RX, 0U, 0U, 0U, 0U },
-  { &huart1, usart1_rx_buffer, COMM_EVENT_USART1_RX, 0U, 0U, 0U, 0U },
-  { &huart2, usart2_rx_buffer, COMM_EVENT_USART2_RX, 0U, 0U, 0U, 0U }
+  { &huart4,   uart4_rx_buffer,   COMM_EVENT_UART4_RX,   true,  0U, 0U, 0U, 0U },
+  { &huart5,   uart5_rx_buffer,   COMM_EVENT_UART5_RX,   false, 0U, 0U, 0U, 0U },
+  { &huart7,   uart7_rx_buffer,   COMM_EVENT_UART7_RX,   false, 0U, 0U, 0U, 0U },
+  { &huart8,   uart8_rx_buffer,   COMM_EVENT_UART8_RX,   false, 0U, 0U, 0U, 0U },
+  { &huart9,   uart9_rx_buffer,   COMM_EVENT_UART9_RX,   false, 0U, 0U, 0U, 0U },
+  { &huart3,   usart3_rx_buffer,  COMM_EVENT_USART3_RX,  false, 0U, 0U, 0U, 0U },
+  { &huart6,   usart6_rx_buffer,  COMM_EVENT_USART6_RX,  false, 0U, 0U, 0U, 0U },
+  { &huart10,  usart10_rx_buffer, COMM_EVENT_USART10_RX, false, 0U, 0U, 0U, 0U },
+  { &huart1,   usart1_rx_buffer,  COMM_EVENT_USART1_RX,  true,  0U, 0U, 0U, 0U },
+  { &huart2,   usart2_rx_buffer,  COMM_EVENT_USART2_RX,  true,  0U, 0U, 0U, 0U }
 };
 
 static FDCAN_HandleTypeDef *const fdcan_channels[FDCAN_CHANNEL_COUNT] =
@@ -51,6 +67,7 @@ static osThreadId_t comm_notify_task;
 static comm_uart_handler_t comm_uart_handler;
 static comm_can_handler_t comm_can_handler;
 static void *comm_handler_user_data;
+static volatile comm_uart_channel_t comm_pc_channel = COMM_UART_UART4;
 
 volatile uint32_t comm_uart_rx_bytes[UART_CHANNEL_COUNT];
 volatile uint32_t comm_uart_overrun_count[UART_CHANNEL_COUNT];
@@ -148,12 +165,21 @@ static HAL_StatusTypeDef StartUartReception(UartDmaChannel *channel)
   channel->restart_requested = 0U;
   DmaCache_PrepareRx(channel->buffer, UART_DMA_RX_BUFFER_SIZE);
 
-  status = HAL_UARTEx_ReceiveToIdle_DMA(channel->handle,
-                                        channel->buffer,
-                                        UART_DMA_RX_BUFFER_SIZE);
-  if (status == HAL_OK)
+  if (channel->use_dma)
   {
-    __HAL_DMA_DISABLE_IT(channel->handle->hdmarx, DMA_IT_HT);
+    status = HAL_UARTEx_ReceiveToIdle_DMA(channel->handle,
+                                          channel->buffer,
+                                          UART_DMA_RX_BUFFER_SIZE);
+    if (status == HAL_OK)
+    {
+      __HAL_DMA_DISABLE_IT(channel->handle->hdmarx, DMA_IT_HT);
+    }
+  }
+  else
+  {
+    status = HAL_UARTEx_ReceiveToIdle_IT(channel->handle,
+                                         channel->buffer,
+                                         UART_DMA_RX_BUFFER_SIZE);
   }
 
   return status;
@@ -163,41 +189,17 @@ static HAL_StatusTypeDef ConfigureFdcanFilter(FDCAN_HandleTypeDef *hfdcan)
 {
   FDCAN_FilterTypeDef filter = {0};
 
-  filter.IdType = FDCAN_STANDARD_ID;
-  filter.FilterIndex = 0U;
-  filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-
-  if (hfdcan == &hfdcan1)
-  {
-    filter.FilterType = FDCAN_FILTER_DUAL;
-    filter.FilterID1 = CAN_FILTER_DJI_NODE_1_ID;
-    filter.FilterID2 = CAN_FILTER_DJI_NODE_2_ID;
-    if (HAL_FDCAN_ConfigFilter(hfdcan, &filter) != HAL_OK)
-    {
-      return HAL_ERROR;
-    }
-
-    filter.FilterIndex = 1U;
-    filter.FilterType = FDCAN_FILTER_MASK;
-    filter.FilterID1 = CAN_FILTER_ARM_J4310_ID;
-    filter.FilterID2 = 0x7FFU;
-  }
-  else if (hfdcan == &hfdcan2)
-  {
-    filter.FilterType = FDCAN_FILTER_DUAL;
-    filter.FilterID1 = CAN_FILTER_DJI_NODE_1_ID;
-    filter.FilterID2 = CAN_FILTER_DJI_NODE_2_ID;
-  }
-  else if (hfdcan == &hfdcan3)
-  {
-    filter.FilterType = FDCAN_FILTER_DUAL;
-    filter.FilterID1 = CAN_FILTER_AUX_CONVEYOR_ID;
-    filter.FilterID2 = CAN_FILTER_AUX_GRIPPER_ID;
-  }
-  else
+  if ((hfdcan != &hfdcan1) && (hfdcan != &hfdcan2) &&
+      (hfdcan != &hfdcan3))
   {
     return HAL_ERROR;
   }
+  filter.IdType = FDCAN_STANDARD_ID;
+  filter.FilterIndex = 0U;
+  filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+  filter.FilterType = FDCAN_FILTER_RANGE;
+  filter.FilterID1 = 0x000U;
+  filter.FilterID2 = 0x7FFU;
 
   if (HAL_FDCAN_ConfigFilter(hfdcan, &filter) != HAL_OK)
   {
@@ -265,7 +267,9 @@ static void ProcessUartChannel(uint32_t index)
   uint32_t pending;
 
   channel = &uart_channels[index];
-  if (channel->restart_requested != 0U)
+  /* DMA channels keep a circular buffer; interrupt-only channels contain one
+     complete idle-delimited packet and are rearmed after it is consumed. */
+  if (channel->use_dma && (channel->restart_requested != 0U))
   {
     (void)HAL_UART_AbortReceive(channel->handle);
     if (StartUartReception(channel) != HAL_OK)
@@ -275,7 +279,10 @@ static void ProcessUartChannel(uint32_t index)
     return;
   }
 
-  DmaCache_CompleteRx(channel->buffer, UART_DMA_RX_BUFFER_SIZE);
+  if (channel->use_dma)
+  {
+    DmaCache_CompleteRx(channel->buffer, UART_DMA_RX_BUFFER_SIZE);
+  }
   produced = channel->produced;
   pending = produced - channel->consumed;
 
@@ -308,6 +315,15 @@ static void ProcessUartChannel(uint32_t index)
     channel->consumed += chunk;
     comm_uart_rx_bytes[index] += chunk;
     pending -= chunk;
+  }
+
+  if (!channel->use_dma && (channel->restart_requested != 0U))
+  {
+    (void)HAL_UART_AbortReceive(channel->handle);
+    if (StartUartReception(channel) != HAL_OK)
+    {
+      comm_uart_error_count[index]++;
+    }
   }
 }
 
@@ -369,17 +385,34 @@ void CommRuntime_Process(uint32_t flags)
   }
 }
 
-static HAL_StatusTypeDef CommRuntime_UartTransmitDma(UART_HandleTypeDef *huart,
-                                                     const uint8_t *data,
-                                                     uint16_t size)
+static HAL_StatusTypeDef CommRuntime_UartTransmitAsync(UartDmaChannel *channel,
+                                                       const uint8_t *data,
+                                                       uint16_t size)
 {
-  if ((huart == NULL) || (data == NULL) || (size == 0U))
+  if ((channel == NULL) || (channel->handle == NULL) ||
+      (data == NULL) || (size == 0U))
   {
     return HAL_ERROR;
   }
 
-  DmaCache_PrepareTx(data, size);
-  return HAL_UART_Transmit_DMA(huart, data, size);
+  if (channel->use_dma)
+  {
+    DmaCache_PrepareTx(data, size);
+    return HAL_UART_Transmit_DMA(channel->handle, data, size);
+  }
+  return HAL_UART_Transmit_IT(channel->handle, data, size);
+}
+
+static UartDmaChannel *GetPcUartChannel(void)
+{
+  uint32_t index;
+
+  index = (uint32_t)comm_pc_channel;
+  if (index >= UART_NON_RS485_COUNT)
+  {
+    index = (uint32_t)COMM_UART_UART4;
+  }
+  return &uart_channels[index];
 }
 
 void CommRuntime_SetHandlers(comm_uart_handler_t uart_handler,
@@ -393,18 +426,19 @@ void CommRuntime_SetHandlers(comm_uart_handler_t uart_handler,
 
 bool CommRuntime_PcTxReady(void)
 {
-  return huart4.gState == HAL_UART_STATE_READY;
+  return GetPcUartChannel()->handle->gState == HAL_UART_STATE_READY;
 }
 
 bool CommRuntime_PcTransmit(const uint8_t *data, uint16_t size)
 {
-  return CommRuntime_UartTransmitDma(&huart4, data, size) == HAL_OK;
+  return CommRuntime_UartTransmitAsync(GetPcUartChannel(), data, size) == HAL_OK;
 }
 
 bool CommRuntime_PcTransmitBlocking(const uint8_t *data,
                                     uint16_t size,
                                     uint32_t timeout_ms)
 {
+  UartDmaChannel *channel;
   uint32_t start_tick;
 
   if ((data == NULL) || (size == 0U) || (timeout_ms == 0U))
@@ -412,13 +446,14 @@ bool CommRuntime_PcTransmitBlocking(const uint8_t *data,
     return false;
   }
 
+  channel = GetPcUartChannel();
   start_tick = HAL_GetTick();
   while ((HAL_GetTick() - start_tick) < timeout_ms)
   {
     uint32_t elapsed;
     uint32_t remaining;
 
-    if (huart4.gState != HAL_UART_STATE_READY)
+    if (channel->handle->gState != HAL_UART_STATE_READY)
     {
       (void)osDelay(1U);
       continue;
@@ -426,7 +461,7 @@ bool CommRuntime_PcTransmitBlocking(const uint8_t *data,
 
     elapsed = HAL_GetTick() - start_tick;
     remaining = timeout_ms - elapsed;
-    if (HAL_UART_Transmit(&huart4,
+    if (HAL_UART_Transmit(channel->handle,
                           (const uint8_t *)data,
                           size,
                           remaining) == HAL_OK)
@@ -437,6 +472,76 @@ bool CommRuntime_PcTransmitBlocking(const uint8_t *data,
   }
 
   return false;
+}
+
+void CommRuntime_SetPcChannel(comm_uart_channel_t channel)
+{
+  if ((uint32_t)channel < UART_NON_RS485_COUNT)
+  {
+    comm_pc_channel = channel;
+  }
+}
+
+comm_uart_channel_t CommRuntime_GetPcChannel(void)
+{
+  return comm_pc_channel;
+}
+
+bool CommRuntime_TelemetryTxReady(void)
+{
+  uint32_t index;
+  uint32_t control_index;
+
+  control_index = (uint32_t)comm_pc_channel;
+  for (index = 0U; index < UART_NON_RS485_COUNT; index++)
+  {
+    if (index == control_index)
+    {
+      continue;
+    }
+    if (uart_channels[index].handle->gState != HAL_UART_STATE_READY)
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool CommRuntime_TelemetryTransmit(const uint8_t *data, uint16_t size)
+{
+  uint32_t index;
+  uint32_t control_index;
+
+  if ((data == NULL) || (size == 0U))
+  {
+    return false;
+  }
+
+  control_index = (uint32_t)comm_pc_channel;
+  for (index = 0U; index < UART_NON_RS485_COUNT; index++)
+  {
+    if (index == control_index)
+    {
+      continue;
+    }
+    if (uart_channels[index].handle->gState != HAL_UART_STATE_READY)
+    {
+      return false;
+    }
+  }
+
+  for (index = 0U; index < UART_NON_RS485_COUNT; index++)
+  {
+    if (index == control_index)
+    {
+      continue;
+    }
+    if (CommRuntime_UartTransmitAsync(&uart_channels[index], data, size) != HAL_OK)
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 uint32_t CommRuntime_GetTickMs(void)
@@ -489,6 +594,10 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
   }
   channel->isr_position = position;
   channel->produced += delta;
+  if (!channel->use_dma)
+  {
+    channel->restart_requested = 1U;
+  }
   NotifyCommTask(channel->event_flag);
 }
 

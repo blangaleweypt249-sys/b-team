@@ -5,9 +5,11 @@
 
 #include "motor_manager.h"
 
-#define UPPER_CONTROL_PERIOD_MS 1U
-#define UPPER_PC_TIMEOUT_MS     200U
-#define UPPER_MOTOR_FEEDBACK_TIMEOUT_MS       50U
+#define UPPER_CONTROL_FREQUENCY_HZ             1000U
+#define UPPER_CONTROL_PERIOD_MS                1U
+#define UPPER_ARM_M3508_COUNT                  2U
+#define UPPER_PC_TIMEOUT_MS                    200U
+#define UPPER_MOTOR_FEEDBACK_TIMEOUT_MS        50U
 
 /* These MIT mapping limits must match the values stored in the J4310. */
 #define UPPER_J4310_POSITION_MAX_RAD           12.5f
@@ -45,8 +47,6 @@ typedef enum
 {
     UPPER_MOTOR_ARM_M3508_1,
     UPPER_MOTOR_ARM_M3508_2,
-    UPPER_MOTOR_ARM_M3508_3,
-    UPPER_MOTOR_ARM_M3508_4,
     UPPER_MOTOR_ARM_J4310,
     UPPER_MOTOR_CONVEYOR_M2006,
     UPPER_MOTOR_GRIPPER_M2006,

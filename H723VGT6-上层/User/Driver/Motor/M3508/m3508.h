@@ -93,9 +93,13 @@ bool M3508_GetTimeoutStats(uint8_t can_bus,
 bool M3508_SetSpeedPid(uint8_t can_bus,
                        uint8_t motor_id,
                        const m3508_pid_cfg_t *cfg);
+bool M3508_SetPositionPid(uint8_t can_bus,
+                          uint8_t motor_id,
+                          const m3508_pid_cfg_t *cfg);
 bool M3508_SetOnlinePidEnabled(uint8_t can_bus,
                                uint8_t motor_id,
                                bool enabled);
+bool M3508_ZeroPosition(uint8_t can_bus, uint8_t motor_id);
 bool M3508_GetOnlinePidState(uint8_t can_bus,
                              uint8_t motor_id,
                              m3508_online_pid_state_t *state);

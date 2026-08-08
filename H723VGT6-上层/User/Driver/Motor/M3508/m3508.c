@@ -597,6 +597,22 @@ bool M3508_SetSpeedPid(uint8_t can_bus,
     return true;
 }
 
+bool M3508_SetPositionPid(uint8_t can_bus,
+                          uint8_t motor_id,
+                          const m3508_pid_cfg_t *cfg)
+{
+    m3508_context_t *context;
+
+    context = M3508_GetContext(can_bus, motor_id);
+    if ((context == NULL) || !M3508_IsValidPid(cfg))
+    {
+        return false;
+    }
+    context->position_pid.cfg = *cfg;
+    M3508_ResetPid(&context->position_pid);
+    return true;
+}
+
 bool M3508_SetOnlinePidEnabled(uint8_t can_bus,
                                uint8_t motor_id,
                                bool enabled)
@@ -611,6 +627,21 @@ bool M3508_SetOnlinePidEnabled(uint8_t can_bus,
     MotorOnlinePid_SetEnabled(&context->speed_online_pid, enabled);
     context->speed_pid.cfg = context->speed_pid_base;
     M3508_ResetPid(&context->speed_pid);
+    return true;
+}
+
+bool M3508_ZeroPosition(uint8_t can_bus, uint8_t motor_id)
+{
+    m3508_context_t *context;
+
+    context = M3508_GetContext(can_bus, motor_id);
+    if ((context == NULL) || !context->feedback_valid)
+    {
+        return false;
+    }
+    context->zero_encoder_counts = context->feedback.total_encoder_counts;
+    context->position_pid.integral = 0.0f;
+    context->position_pid.previous_valid = false;
     return true;
 }
 

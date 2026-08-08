@@ -6,6 +6,7 @@
 #include "upper_config.h"
 #include "upper_motor_port.h"
 #include "upper_pc_link.h"
+#include "vofa_bridge.h"
 
 #define UPPER_CMD_QUEUE_DEPTH  4U
 #define UPPER_STATE_PERIOD_MS  50U
@@ -15,6 +16,7 @@ static upper_robot_t upper_robot;
 static upper_pc_link_t upper_pc_link;
 static osMessageQueueId_t upper_cmd_queue;
 static volatile bool upper_estop_pending;
+static bool upper_vofa_suspended;
 static uint32_t upper_cmd_drop_count;
 __ALIGNED(32) static uint8_t upper_tx_buffer[UPPER_TX_BUFFER_SIZE];
 
@@ -39,8 +41,15 @@ static void UpperEntry_OnUart(comm_uart_channel_t channel,
                               void *user_data)
 {
     (void)user_data;
-    if (channel == COMM_UART_PC)
+    if ((uint32_t)channel < (uint32_t)COMM_UART_RS485_1)
     {
+        CommRuntime_SetPcChannel(channel);
+        if (VofaBridge_Receive(data,
+                               size,
+                               CommRuntime_GetTickMs()))
+        {
+            return;
+        }
         if (!FlashTool_Receive(data, size))
         {
             UpperEntry_OnPcData(data, size, CommRuntime_GetTickMs());
@@ -62,6 +71,8 @@ bool UpperEntry_Init(void)
     {
         return false;
     }
+    VofaBridge_Init();
+    upper_vofa_suspended = false;
 
     upper_cmd_queue = osMessageQueueNew(UPPER_CMD_QUEUE_DEPTH,
                                         sizeof(upper_target_t),
@@ -101,7 +112,7 @@ static void UpperEntry_SendState(uint32_t tick_ms)
 {
     size_t frame_size;
 
-    if (FlashTool_IsActive())
+    if (FlashTool_IsActive() || VofaBridge_IsActive())
     {
         return;
     }
@@ -129,6 +140,17 @@ static void UpperEntry_SendState(uint32_t tick_ms)
 void UpperEntry_Control1ms(uint32_t tick_ms)
 {
     UpperMotorPort_BeginCycle(tick_ms);
+    if (VofaBridge_IsActive())
+    {
+        if (!upper_vofa_suspended)
+        {
+            UpperRobot_Stop(&upper_robot);
+            upper_vofa_suspended = true;
+        }
+        VofaBridge_Control1ms(tick_ms);
+        return;
+    }
+    upper_vofa_suspended = false;
     UpperEntry_ProcessCmd();
     if (upper_estop_pending)
     {
@@ -161,6 +183,7 @@ void UpperEntry_OnCanFrame(uint8_t can_bus,
                            uint32_t tick_ms)
 {
     UpperMotorPort_OnFrame(can_bus, frame, tick_ms);
+    VofaBridge_OnCanFrame(can_bus, frame, tick_ms);
 }
 
 void App_Control1ms(void)

@@ -21,24 +21,31 @@
 | FDCAN2 | PB12 RX / PB13 TX | CAN2_R / CAN2_T | 1 Mbps，经典 CAN |
 | FDCAN3 | PD12 RX / PD13 TX | CAN3_R / CAN3_T | 1 Mbps，经典 CAN |
 | RS485-1 | PB15 RX / PB14 TX | MAX13488 U9 | USART1，115200 8N1，RX/TX DMA |
-| RS485-2 | PA3 RX / PA2 TX | MAX13488 U10 | USART2，115200 8N1，RX/TX DMA |
-| USB 串口 | PA1 RX / PA0 TX | CH340N TXD/RXD | UART4，115200 8N1，RX/TX DMA |
+| RS485-2 | PA3 RX / PA2 TX | MAX13488 U10 | USART2，460800 8N1，RX/TX DMA，仅保留 485 通道 |
+| USB 串口 | PA1 RX / PA0 TX | CH340N TXD/RXD | UART4，115200 8N1，RX/TX DMA，普通 UART 默认控制通道 |
+| 普通 UART | PD2 RX / PC12 TX | H3.24 / H3.19 | UART5，115200 8N1，中断收发 |
+| 普通 UART | PE7 RX / PE8 TX | H1.18 / H1.17 | UART7，115200 8N1，中断收发 |
+| 普通 UART | PE0 RX / PE1 TX | H2.10 / H2.7 | UART8，115200 8N1，中断收发 |
+| 普通 UART | PD14 RX / PD15 TX | H3.7 / H3.10 | UART9，115200 8N1，中断收发 |
+| 普通 UART | PB11 RX / PB10 TX | H3.4 / H3.1 | USART3，115200 8N1，中断收发 |
+| 普通 UART | PC7 RX / PC6 TX | H3.12 / H3.9 | USART6，115200 8N1，中断收发 |
+| 普通 UART | PE2 RX / PE3 TX | H2.8 / H2.5 | USART10，115200 8N1，中断收发 |
 | W25Q128 | PA4 / PA5 / PA6 / PA7 | NSS/SCK/MISO/MOSI | SPI1 Mode 0，25 MHz，RX/TX DMA |
 | 状态灯 | PC13 | LED1 | 推挽输出，默认低 |
 | 蜂鸣器 | PC15 | Q3 驱动 | 推挽输出，默认低 |
 
-FDCAN1 连接两台 M3508/C620（节点 1、2）和一台 J4310（电机 ID 3、Master ID 0）；
-FDCAN2 连接另外两台 M3508/C620（节点 1、2）；FDCAN3 连接两台 M2006/C610，传送带为
-节点 1，夹爪为节点 2。三条总线上的 DJI 节点各自共用本总线的一个 `0x200` 组控制帧，
-节点 3、4 对应槽位始终为零。M3508 的运行上下文按“总线 + 节点”隔离，FDCAN1 和
-FDCAN2 的同号节点不会共享目标、反馈或 PID。
+默认机器人拓扑是：FDCAN1 连接一台 J4310（电机 ID 3、Master ID 0），FDCAN2 连接两台
+M3508/C620（节点 1、2），FDCAN3 连接两台 M2006/C610（节点 1、2）。进入 VOFA 模式后，
+上位机可以把 M2006 或 M3508 会话放到 FDCAN1/2/3 的任意组合；每个“型号 + 总线”最多一组
+会话，每组最多 8 个 ID。每条总线仍共用 `0x200`/`0x1FF` 组控制帧，未配置的槽位为零。
+各电机上下文按“型号 + 总线 + 节点”隔离，目标、反馈和 PID 不跨路由共享。
 
-接收过滤器按实际拓扑精确配置：FDCAN1 只接收 J4310 Master ID 0 以及 `0x201`、`0x202`，
-FDCAN2 和 FDCAN3 只接收 `0x201`、`0x202`；其他标准帧、扩展帧和远程帧均拒绝。
-三路控制周期均为 1 ms。按 135 bit/帧保守估算，FDCAN1 持续 5 帧/ms，占用 67.5%；
-FDCAN2、FDCAN3 各 3 帧/ms，占用 40.5%，均保留超过 20% 的持续带宽余量。FDCAN1
-每周期先将 M3508 `0x200` 组帧加入发送 FIFO，再加入 J4310 控制或状态帧。占用率仅用于
-设计评估，初始化不设置 80% 带宽门限，超过 80% 的合法电机配置也允许启动。
+为支持可选路由，三路接收过滤器均接收标准 ID `0x000..0x7FF`，但拒绝扩展帧和远程帧；
+VOFA 桥只把当前会话所选的 `0x201..0x208` 反馈交给对应型号驱动，J4310 仍由原机器人链路处理。
+三路控制周期均为 1 ms（1 kHz）。按 135 bit/帧保守估算，FDCAN1 持续 2 帧/ms，
+占用 27.0%；FDCAN2、FDCAN3 各 3 帧/ms，占用 40.5%，均保留超过 20% 的持续带宽余量。
+2 kHz 不作为本工程控制频率：FreeRTOS Tick 和 M3508 闭环时间步长均为 1 ms，提升频率
+需要同时改时间基准、超时语义和 PID 参数，不能仅提高发送次数。
 
 网表中的 LED2、LED3 是电源指示，BOOT0 和 NRST 由硬件电路管理。只接到排针、
 尚未分配业务的 GPIO 保持复位状态，避免初始工程抢占后续外设复用。
@@ -51,6 +58,9 @@ FDCAN2、FDCAN3 各 3 帧/ms，占用 40.5%，均保留超过 20% 的持续带�
 | 2 / 3 | USART1 RX / TX | RX Circular / TX Normal |
 | 4 / 5 | USART2 RX / TX | RX Circular / TX Normal |
 | 6 / 7 | SPI1 RX / TX | Normal / Normal |
+
+普通 UART 使用 `HAL_UARTEx_ReceiveToIdle_IT()` 和 TX 中断，不占用 DMA1；USART1/2 的
+RS485 DMA 配置保持不变。
 
 DMA、UART、SPI 和 FDCAN 中断优先级均为 5，可以调用 FreeRTOS 的 ISR 安全接口。
 FDCAN 使用片上 Message RAM，不使用 DMA1/2。
@@ -79,16 +89,38 @@ void App_Control1ms(void);
 ```
 
 Type-C 的 D+/D- 实际连接 CH340N，H723 侧通过 UART4 PA0/PA1 与其通信。小电脑看到的是
-USB 虚拟串口，H723 不启用原生 USB CDC。帧格式、超时策略、电机拓扑和目标任务职责见
+USB 虚拟串口，H723 不启用原生 USB CDC。除此之外，H1/H2/H3 排针上的普通 UART 均可用
+USB-TTL 转换器连接电脑。帧格式、超时策略、电机拓扑和目标任务职责见
 [上层代码框架说明.md](../上层代码框架说明.md)。
 
-## W25Q128 与 VOFA 串口工具
+## DJI VOFA 上位机模式
+
+所有普通 UART（UART4、UART5、UART7、UART8、UART9、USART3、USART6、USART10）
+都可以作为命令与 ACK 链路，统一为 115200 8N1。板子从哪一路普通 UART 收到命令，就从哪一路
+返回 ACK 和普通状态；默认未收到命令前使用 UART4。JustFloat 遥测以 115200 8N1 广播到除
+当前控制 UART 外的所有普通 UART，因此上位机可在“遥测串口”下拉框选择任意另接的 USB-TTL
+适配器。USART1/USART2 仍是 MAX13488 485 通道，不参与普通控制和遥测广播。命令格式在电机
+型号后增加 CAN 路由，例如：
+
+```text
+VOFA M3508 CAN 2 START IDS 2 1 2 PERIOD 20
+VOFA M2006 CAN 3 START IDS 2 1 2 PERIOD 20
+```
+
+固件维护 `2 种 DJI 型号 × 3 路 FDCAN` 共 6 个独立会话，并在每条总线上合并生成 DJI 组控制帧。
+不同路由可同时运行；同一 CAN 上重复占用同一 ID 会返回忙状态。未显式写 `CAN` 的旧命令仍兼容：
+M3508 默认 FDCAN2，M2006 默认 FDCAN3。JustFloat 本身不带路由标签，因此只上传最近一次
+被 `FOCUS` 选中的会话，其他会话的控制周期不受影响。VOFA 模式会暂停普通机器人控制，全部会话退出后恢复接收；
+机器人若要重新运动仍需重新下发目标。
+上位机切换已有路由时会发送 `FOCUS`，只切换遥测焦点，不改变电机目标。
+
+## W25Q128 与 Flash 串口工具
 
 W25Qxx 的 C 驱动已放在工程内 `User/Driver/Flash`，其端口配置与本板一致：`hspi1`、
 `FLASH_CS_GPIO_Port` 和 `FLASH_CS_Pin`。Flash 在 `commRxTask` 启动后初始化，
 因此驱动可以使用 CMSIS-RTOS2 延时，擦除或自动擦除写入不会阻塞 1 ms 控制任务。
 
-在 VOFA 中选择 CH340 对应串口，配置 `115200 8N1`，文本命令以回车或换行结束。
+在串口终端中选择任意已接入的普通 UART，配置 `115200 8N1`，Flash 文本命令以回车或换行结束。
 地址无前缀时按十进制解析，也可以使用 `0x` 前缀输入十六进制地址；写入数据字节按
 十六进制解析。支持以下命令：
 
@@ -110,9 +142,10 @@ EXIT
 W25Q128 正常时，`INFO` 应包含 `JEDEC_ID=0xEF4018 DEVICE_STATUS=0
 DEVICE_ID=0xEF17 MODEL=W25Q128 CAPACITY_KB=16384`。`ERASE` 地址必须
 按 `0x1000`（4 KiB）对齐；`WRITE` 最多写入 256 Byte，并由驱动自动处理跨页和必要的
-扇区擦除。Flash 文本命令会临时占用 UART4，发送 `EXIT` 后恢复原有二进制上位机通信。
+扇区擦除。Flash 文本命令会临时占用最近收到命令的普通 UART，发送 `EXIT` 后恢复原有二进制上位机通信。
 
-三路 UART 接收使用 256-byte、32-byte 对齐、独占 Cache line 的循环 DMA 缓冲区。
+UART4/USART1/USART2 接收使用 256-byte、32-byte 对齐、独占 Cache line 的循环 DMA 缓冲区；
+其余普通 UART 使用同规格的中断接收缓冲区。
 `CommRuntime_PcTransmit()` 会在启动 TX DMA 前 Clean D-Cache；调用者必须保证发送
 完成前缓冲区不被修改或释放。
 

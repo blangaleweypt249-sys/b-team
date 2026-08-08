@@ -1,0 +1,496 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<ScratchFile FileVersion="3.0">
+  <FileVersion>3.0</FileVersion>
+  <Workspace>
+    <WorkspaceType>Single-project</WorkspaceType>
+    <WorkspacePath>D:\桌面\暑期培训\暑期培训-B组\上层分支\H723VGT6-上层\</WorkspacePath>
+    <underRoot>false</underRoot>
+    <TrustZone>0</TrustZone>
+    <HAL_Driver>C:\Users\24280\STM32Cube\Repository\STM32Cube_FW_H7_V1.13.0\</HAL_Driver>
+    <CMSIS>..\Drivers\CMSIS</CMSIS>
+    <Toolchain>MDK-ARM</Toolchain>
+    <Toolversion>5.32</Toolversion>
+    <IocFile>H723VGT6.ioc</IocFile>
+    <Project>
+              
+      <ProjectName>H723VGT6</ProjectName>
+           
+      <ProjectNature>C</ProjectNature>
+       
+      <Secure/>
+            
+      <filestoremove>
+                
+        <file>
+                      
+          <name>../Drivers/CMSIS/Device/ST/STM32H7xx/Source/Templates/arm/startup_stm32h723xx.s</name>
+                  
+        </file>
+        <file>
+                      
+          <name>..\Src\custom.c</name>
+                  
+        </file>
+                           
+      </filestoremove>
+          
+      <configs>
+        <config>
+              
+          <name>H723VGT6</name>
+          	 
+          <mainSourceRepo>Core</mainSourceRepo>
+             
+          <sourceStructure>Advanced</sourceStructure>
+           
+          <device>STM32H723VGTx</device>
+          		     
+          <cpucore/>
+              
+          <fpu>DP</fpu>
+                
+          <memories>
+                       
+            <memory access="xrw" name="DTCMRAM" size="131072" start="0x20000000"/>
+                    
+            <memory access="xrw" name="RAM_D1" size="327680" start="0x24000000"/>
+                    
+            <memory access="xrw" name="RAM_D2" size="32768" start="0x30000000"/>
+                    
+            <memory access="xrw" name="RAM_D3" size="16384" start="0x38000000"/>
+                    
+            <memory access="xrw" name="ITCMRAM" size="65536" start="0x00000000"/>
+                    
+            <memory access="rx" name="FLASH" size="1048576" start="0x8000000"/>
+                
+          </memories>
+              
+          <startup>C:\Users\24280\STM32Cube\Repository\STM32Cube_FW_H7_V1.13.0\Drivers\CMSIS\Device\ST\STM32H7xx\Source\Templates\gcc\startup_stm32h723xx.s</startup>
+                
+          <LinkSettings>
+                    
+            <icfloc/>
+            	
+            <LinkAdditionalLibs>	</LinkAdditionalLibs>
+          </LinkSettings>
+              
+          <heapSize>0x800</heapSize>
+              
+          <stackSize>0x1000</stackSize>
+                  
+          <cpuclock>25</cpuclock>
+                  
+          <board>custom</board>
+              
+          <debugprobe>swd</debugprobe>
+              
+          <optimization/>
+              
+          <Aincludes>
+                                         
+            <include>..\Core\Inc</include>
+                                                  
+            <include>..\Drivers\STM32H7xx_HAL_Driver\Inc</include>
+                                                  
+            <include>..\Drivers\STM32H7xx_HAL_Driver\Inc\Legacy</include>
+                                                  
+            <include>..\Middlewares\Third_Party\FreeRTOS\Source\include</include>
+                                                  
+            <include>..\Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS_V2</include>
+                                                  
+            <include>..\Middlewares\Third_Party\FreeRTOS\Source\portable\GCC\ARM_CM7\r0p1</include>
+                                                  
+            <include>..\Drivers\CMSIS\Device\ST\STM32H7xx\Include</include>
+                                                  
+            <include>..\Drivers\CMSIS\Include</include>
+                    
+          </Aincludes>
+              
+          <Adefines>        </Adefines>
+                
+          <Cdefines>
+                    
+            <define>USE_PWR_LDO_SUPPLY</define>
+                    
+            <define>USE_HAL_DRIVER</define>
+                    
+            <define>STM32H723xx</define>
+                    
+          </Cdefines>
+              
+          <Ldefines>        </Ldefines>
+                  
+          <Cincludes>
+            		        
+            <include>..\Core\Inc</include>
+                    
+            <include>..\Drivers\STM32H7xx_HAL_Driver\Inc</include>
+                    
+            <include>..\Drivers\STM32H7xx_HAL_Driver\Inc\Legacy</include>
+                    
+            <include>..\Middlewares\Third_Party\FreeRTOS\Source\include</include>
+                    
+            <include>..\Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS_V2</include>
+                    
+            <include>..\Middlewares\Third_Party\FreeRTOS\Source\portable\GCC\ARM_CM7\r0p1</include>
+                    
+            <include>..\Drivers\CMSIS\Device\ST\STM32H7xx\Include</include>
+                    
+            <include>..\Drivers\CMSIS\Include</include>
+                    
+          </Cincludes>
+              
+          <definestoremove>
+                    
+            <Adefines>            </Adefines>
+                    
+            <Cdefines>
+                                  
+              <define>USE_FULL_LL_DRIVER</define>
+                                  
+              <define>USE_FULL_ASSERT=1U</define>
+                          
+            </Cdefines>
+                     
+            <Ldefines>            </Ldefines>
+                     
+          </definestoremove>
+              
+          <inctoremove>
+                    
+            <Aincludes>
+                          
+              <include/>
+                          
+            </Aincludes>
+                    
+            <Cincludes>            </Cincludes>
+                    
+          </inctoremove>
+                 
+          <LinkAdditionalLibs>        </LinkAdditionalLibs>
+              
+        </config>
+                
+      </configs>
+       
+      <copyAsReference>false</copyAsReference>
+       
+      <Groups>
+            
+        <group>
+                  
+          <name>Middlewares</name>
+           		        
+          <group>
+                        
+            <name>FreeRTOS</name>
+                        
+            <file>
+                              
+              <name>..\Middlewares\Third_Party\FreeRTOS\Source\croutine.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Middlewares\Third_Party\FreeRTOS\Source\event_groups.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Middlewares\Third_Party\FreeRTOS\Source\list.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Middlewares\Third_Party\FreeRTOS\Source\queue.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Middlewares\Third_Party\FreeRTOS\Source\stream_buffer.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Middlewares\Third_Party\FreeRTOS\Source\tasks.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Middlewares\Third_Party\FreeRTOS\Source\timers.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS_V2\cmsis_os2.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Middlewares\Third_Party\FreeRTOS\Source\portable\MemMang\heap_4.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Middlewares\Third_Party\FreeRTOS\Source\portable\GCC\ARM_CM7\r0p1\port.c</name>
+                              
+            </file>
+                        
+          </group>
+                  
+        </group>
+             
+        <group>
+                  
+          <name>Drivers</name>
+                                       
+          <group>
+                        
+            <name>STM32H7xx_HAL_Driver</name>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_tim.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_tim_ex.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_cortex.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_rcc.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_rcc_ex.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_flash.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_flash_ex.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_gpio.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_hsem.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_dma.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_dma_ex.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_mdma.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_pwr.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_pwr_ex.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_i2c.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_i2c_ex.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_exti.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_fdcan.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_spi.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_spi_ex.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_uart.c</name>
+                              
+            </file>
+                        
+            <file>
+                              
+              <name>..\Drivers\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_uart_ex.c</name>
+                              
+            </file>
+                        
+          </group>
+                  
+          <group>
+                        
+            <name>CMSIS</name>
+                            
+            <file>
+                                          
+              <name>../Core/Src/system_stm32h7xx.c</name>
+                                          
+            </file>
+                                    
+          </group>
+                  
+        </group>
+               
+        <group>
+                  
+          <name>Application</name>
+                  
+          <group>
+                        
+            <name>User</name>
+                              
+            <group>
+                              
+              <name>Core</name>
+                                
+              <file>
+                                    
+                <name>..\Core\Src\main.c</name>
+                                    
+              </file>
+                              
+              <file>
+                                    
+                <name>..\Core\Src\gpio.c</name>
+                                    
+              </file>
+                              
+              <file>
+                                    
+                <name>..\Core\Src\freertos.c</name>
+                                    
+              </file>
+                              
+              <file>
+                                    
+                <name>..\Core\Src\dma.c</name>
+                                    
+              </file>
+                              
+              <file>
+                                    
+                <name>..\Core\Src\fdcan.c</name>
+                                    
+              </file>
+                              
+              <file>
+                                    
+                <name>..\Core\Src\spi.c</name>
+                                    
+              </file>
+                              
+              <file>
+                                    
+                <name>..\Core\Src\usart.c</name>
+                                    
+              </file>
+                              
+              <file>
+                                    
+                <name>..\Core\Src\stm32h7xx_it.c</name>
+                                    
+              </file>
+                              
+              <file>
+                                    
+                <name>..\Core\Src\stm32h7xx_hal_msp.c</name>
+                                    
+              </file>
+                              
+              <file>
+                                    
+                <name>..\Core\Src\stm32h7xx_hal_timebase_tim.c</name>
+                                    
+              </file>
+                              
+            </group>
+                                          
+          </group>
+                   
+        </group>
+                
+      </Groups>
+    </Project>
+  </Workspace>
+</ScratchFile>
