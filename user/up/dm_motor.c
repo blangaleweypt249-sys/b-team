@@ -76,8 +76,8 @@ static dm_result_t build_special_frame(const dm_motor_t *motor, uint8_t command,
         return result;
     }
 
-    memset(frame->data, DM_SPECIAL_DATA, 7U);   // 前7字节填0xFF
-    frame->data[7] = command;                   // 第8字节填命令码
+    memset(frame->data, DM_SPECIAL_DATA, 7U);   /* 前 7 字节填 0xFF。 */
+    frame->data[7] = command;                   /* 第 8 字节填命令码。 */
     return DM_OK;
 }
 
@@ -189,7 +189,6 @@ bool DmMotor_Parse(dm_motor_t *motor, uint16_t id, const uint8_t *data,
     uint16_t position;
     uint16_t velocity;
     uint16_t torque;
-    uint32_t seq;
 
     if ((motor == NULL) || (data == NULL) || (length != 8U) ||
         (id != motor->master_id) ||
@@ -202,9 +201,6 @@ bool DmMotor_Parse(dm_motor_t *motor, uint16_t id, const uint8_t *data,
     velocity = (uint16_t)(((uint16_t)data[3] << 4) | (data[4] >> 4));
     torque = (uint16_t)((((uint16_t)data[4] & 0x0FU) << 8) | data[5]);
 
-    // 奇数序号表示正在写入，偶数序号表示反馈完整。
-    seq = motor->state_seq;
-    motor->state_seq = seq + 1U;
     motor->state.position_rad =
         uint_to_float(position, -motor->limits.position_rad,
                       motor->limits.position_rad, DM_POSITION_BITS);
@@ -219,35 +215,16 @@ bool DmMotor_Parse(dm_motor_t *motor, uint16_t id, const uint8_t *data,
     motor->state.rotor_temp_c = data[7];
     motor->state.rx_tick_ms = tick_ms;
     motor->state.rx_count++;
-    motor->state_seq = seq + 2U;
     return true;
 }
 
 bool DmMotor_GetState(const dm_motor_t *motor, dm_state_t *state)
 {
-    uint32_t before;
-    uint32_t after;
-
     if ((motor == NULL) || (state == NULL))
     {
         return false;
     }
 
-    // 若读取期间收到新反馈，则重新复制一次完整快照。
-    for (;;)
-    {
-        before = motor->state_seq;
-        if ((before & 1U) != 0U)
-        {
-            continue;
-        }
-        *state = motor->state;
-        after = motor->state_seq;
-        if (before == after)
-        {
-            break;
-        }
-    }
-
+    *state = motor->state;
     return state->rx_count != 0U;
 }

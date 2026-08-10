@@ -29,7 +29,7 @@
 #include "action_api.h"
 #include "chassis_main.h"
 #include "computer_link.h"
-#include "dt35_link.h"
+#include "dt35_pnp_link.h"
 #include "imu_main.h"
 #include "up_main.h"
 #include "usart.h"
@@ -282,12 +282,14 @@ __weak void StartCommTask(void *argument)
   /* USER CODE BEGIN StartCommTask */
   (void)argument;
   (void)ComputerLink_Init(&huart4);
-  (void)DT35Link_Init(&huart9);
+  (void)DT35PnpLink_Init(&huart9);
 
   /* Infinite loop */
   for(;;)
   {
-    DT35Link_Run();
+    DT35PnpLink_Run();
+    Action_UpdatePnp(pnp_link[SENSOR_LINK_F_INDEX].trigger,
+                     pnp_link[SENSOR_LINK_L_B_INDEX].trigger);
     ComputerLink_Run();
     osDelay(1);
   }

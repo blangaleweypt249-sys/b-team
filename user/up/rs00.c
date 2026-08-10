@@ -5,7 +5,6 @@
 
 /* RS00 协议范围和数据缩放。 */
 #define RS_MODE_DELAY_MS        3U
-#define RS_ID_MAX               0x7FU
 #define RS_LIMIT_IQ_VALID       (1U << 0)
 #define RS_LIMIT_SPEED_VALID    (1U << 1)
 
@@ -148,7 +147,7 @@ static bool mode_ok(rs_mode_t mode)
 static bool motor_ok(const rs_motor_t *motor)
 {
     return (motor != NULL) && (motor->bus != NULL) && motor->bus->ready &&
-           (motor->id <= RS_ID_MAX);
+           (motor->id <= RS_MOTOR_ID_MAX);
 }
 
 static HAL_StatusTypeDef require_mode(rs_motor_t *motor, rs_mode_t mode)
@@ -224,12 +223,6 @@ static bool time_reached(uint32_t now_ms, uint32_t due_ms)
     return (int32_t)(now_ms - due_ms) >= 0;
 }
 
-static void update_position(rs_motor_t *motor, float position_rad)
-{
-    motor->feedback.position_rad = position_rad;
-    motor->feedback.valid |= RS_FDB_POSITION;
-}
-
 static HAL_StatusTypeDef set_iq_limit(rs_motor_t *motor, float max_iq)
 {
     float iq = clampf(max_iq, 0.0f, RS_IQ_MAX);
@@ -279,7 +272,7 @@ static HAL_StatusTypeDef set_speed_limit(rs_motor_t *motor,
 HAL_StatusTypeDef RsMotor_Init(rs_motor_t *motor, rs_bus_t *bus, uint8_t id)
 {
     if ((motor == NULL) || (bus == NULL) || !bus->ready ||
-        (id > RS_ID_MAX))
+        (id > RS_MOTOR_ID_MAX))
     {
         return HAL_ERROR;
     }
@@ -309,16 +302,16 @@ HAL_StatusTypeDef RsMotor_Start(rs_motor_t *motor, rs_mode_t mode,
         return HAL_ERROR;
     }
 
-    if ((motor->start_step != 0U) &&
+    if ((motor->start_step != RS_START_IDLE) &&
         (motor->requested_mode != (uint8_t)mode))
     {
-        motor->start_step = 0U;
+        motor->start_step = RS_START_IDLE;
     }
 
     motor->requested_mode = (uint8_t)mode;
 
-    // 停止、写模式、使能分多次调用推进，避免阻塞 1 ms 任务。
-    if (motor->start_step == 0U)
+    /* 停止、写模式、使能分多次调用推进，避免阻塞 1 ms 任务。 */
+    if (motor->start_step == RS_START_IDLE)
     {
         if (motor->active)
         {
@@ -329,11 +322,11 @@ HAL_StatusTypeDef RsMotor_Start(rs_motor_t *motor, rs_mode_t mode,
             }
             motor->active = false;
             motor->transition_due_ms = now_ms + RS_MODE_DELAY_MS;
-            motor->start_step = 1U;
+            motor->start_step = RS_START_MODE;
             return HAL_BUSY;
         }
 
-        motor->start_step = 1U;
+        motor->start_step = RS_START_MODE;
         motor->transition_due_ms = now_ms;
     }
 
@@ -342,34 +335,34 @@ HAL_StatusTypeDef RsMotor_Start(rs_motor_t *motor, rs_mode_t mode,
         return HAL_BUSY;
     }
 
-    if (motor->start_step == 1U)
+    if (motor->start_step == RS_START_MODE)
     {
         if (motor->mode != (uint8_t)mode)
         {
             status = write_u8(motor, RS_PARAM_MODE, (uint8_t)mode);
             if (status != HAL_OK)
             {
-                motor->start_step = 0U;
+                motor->start_step = RS_START_IDLE;
                 return status;
             }
             motor->mode = (uint8_t)mode;
             motor->transition_due_ms = now_ms + RS_MODE_DELAY_MS;
-            motor->start_step = 2U;
+            motor->start_step = RS_START_ENABLE;
             return HAL_BUSY;
         }
-        motor->start_step = 2U;
+        motor->start_step = RS_START_ENABLE;
     }
 
-    if (motor->start_step == 2U)
+    if (motor->start_step == RS_START_ENABLE)
     {
         status = send_command(motor, RS_CMD_ON, 0U);
         if (status != HAL_OK)
         {
-            motor->start_step = 0U;
+            motor->start_step = RS_START_IDLE;
             return status;
         }
         motor->transition_due_ms = now_ms + RS_MODE_DELAY_MS;
-        motor->start_step = 3U;
+        motor->start_step = RS_START_WAIT;
         return HAL_BUSY;
     }
 
@@ -381,7 +374,7 @@ HAL_StatusTypeDef RsMotor_Start(rs_motor_t *motor, rs_mode_t mode,
     motor->active = true;
     motor->pp_configured = false;
     motor->limit_valid = 0U;
-    motor->start_step = 0U;
+    motor->start_step = RS_START_IDLE;
     return HAL_OK;
 }
 
@@ -394,7 +387,7 @@ HAL_StatusTypeDef RsMotor_Stop(rs_motor_t *motor)
         return HAL_ERROR;
     }
 
-    motor->start_step = 0U;
+    motor->start_step = RS_START_IDLE;
     status = send_command(motor, RS_CMD_OFF, 0U);
     if (status == HAL_OK)
     {
@@ -412,7 +405,7 @@ HAL_StatusTypeDef RsMotor_ClearFault(rs_motor_t *motor)
         return HAL_ERROR;
     }
 
-    motor->start_step = 0U;
+    motor->start_step = RS_START_IDLE;
     status = send_command(motor, RS_CMD_OFF, 1U);
     if (status == HAL_OK)
     {
@@ -600,7 +593,9 @@ HAL_StatusTypeDef RsMotor_GetFeedback(const rs_motor_t *motor,
 static void parse_feedback(rs_motor_t *motor, uint32_t id,
                            const uint8_t data[8])
 {
-    update_position(motor, unpack_scaled_u16(&data[0], RS_P_MIN, RS_P_MAX));
+    motor->feedback.position_rad =
+        unpack_scaled_u16(&data[0], RS_P_MIN, RS_P_MAX);
+    motor->feedback.valid |= RS_FDB_POSITION;
 
     motor->feedback.velocity_rad_s =
         unpack_scaled_u16(&data[2], RS_V_MIN, RS_V_MAX);

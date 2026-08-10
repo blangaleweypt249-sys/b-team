@@ -57,16 +57,46 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define SW_2_Pin GPIO_PIN_3
+#define SW_2_GPIO_Port GPIOE
+#define SW_1_Pin GPIO_PIN_4
+#define SW_1_GPIO_Port GPIOE
+#define KEY_3_Pin GPIO_PIN_0
+#define KEY_3_GPIO_Port GPIOC
+#define KEY_2_Pin GPIO_PIN_1
+#define KEY_2_GPIO_Port GPIOC
+#define KEY_1_Pin GPIO_PIN_0
+#define KEY_1_GPIO_Port GPIOA
+#define KEY_4_Pin GPIO_PIN_1
+#define KEY_4_GPIO_Port GPIOA
+#define KEY_5_Pin GPIO_PIN_2
+#define KEY_5_GPIO_Port GPIOA
+#define KEY_6_Pin GPIO_PIN_4
+#define KEY_6_GPIO_Port GPIOA
+#define BUZZER_Pin GPIO_PIN_2
+#define BUZZER_GPIO_Port GPIOB
+#define KEY_10_Pin GPIO_PIN_8
+#define KEY_10_GPIO_Port GPIOD
+#define KEY_11_Pin GPIO_PIN_9
+#define KEY_11_GPIO_Port GPIOD
+#define KEY_12_Pin GPIO_PIN_10
+#define KEY_12_GPIO_Port GPIOD
+#define KEY_9_Pin GPIO_PIN_11
+#define KEY_9_GPIO_Port GPIOD
+#define KEY_8_Pin GPIO_PIN_12
+#define KEY_8_GPIO_Port GPIOD
+#define KEY_7_Pin GPIO_PIN_13
+#define KEY_7_GPIO_Port GPIOD
+#define SW_6_Pin GPIO_PIN_5
+#define SW_6_GPIO_Port GPIOD
+#define SW_5_Pin GPIO_PIN_6
+#define SW_5_GPIO_Port GPIOD
+#define SW_4_Pin GPIO_PIN_0
+#define SW_4_GPIO_Port GPIOE
+#define SW_3_Pin GPIO_PIN_1
+#define SW_3_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
-#define LORA_RX_Pin GPIO_PIN_5
-#define LORA_RX_GPIO_Port GPIOC
-#define LORA_AUX_Pin GPIO_PIN_8
-#define LORA_AUX_GPIO_Port GPIOC
-#define LORA_M0_Pin GPIO_PIN_14
-#define LORA_M0_GPIO_Port GPIOD
-#define LORA_M1_Pin GPIO_PIN_15
-#define LORA_M1_GPIO_Port GPIOD
 
 /* USER CODE END Private defines */
 

@@ -1518,14 +1518,14 @@
               <FilePath>../user/com_link/computer_link.h</FilePath>
             </File>
             <File>
-              <FileName>dt35_link.c</FileName>
+              <FileName>dt35_pnp_link.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../user/com_link/dt35_link.c</FilePath>
+              <FilePath>../user/com_link/dt35_pnp_link.c</FilePath>
             </File>
             <File>
-              <FileName>dt35_link.h</FileName>
+              <FileName>dt35_pnp_link.h</FileName>
               <FileType>5</FileType>
-              <FilePath>../user/com_link/dt35_link.h</FilePath>
+              <FilePath>../user/com_link/dt35_pnp_link.h</FilePath>
             </File>
           </Files>
         </Group>

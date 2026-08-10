@@ -4,9 +4,10 @@
 #include <stddef.h>
 #include <string.h>
 
-#define RS_APP_ID_MAX 0x7FU
-
 #define RS_APP_RAD_PER_DEG 0.01745329251994329577f
+/* 5:9 减速齿轮，应用层量为输出轴量。 */
+#define RS_APP_OUTPUT_TO_MOTOR_RATIO (9.0f / 5.0f)
+#define RS_APP_MOTOR_TO_OUTPUT_RATIO (5.0f / 9.0f)
 
 static bool time_reached(uint32_t now_ms, uint32_t due_ms)
 {
@@ -110,9 +111,10 @@ static HAL_StatusTypeDef send_control(rs_app_motor_t *motor)
     case RS_MOTION:
         return RsMotor_SetMotion(
             &motor->motor,
-            command->data.motion.angle_deg * RS_APP_RAD_PER_DEG,
-            command->data.motion.speed_rad_s,
-            command->data.motion.torque_nm,
+            command->data.motion.angle_deg * RS_APP_RAD_PER_DEG *
+                RS_APP_OUTPUT_TO_MOTOR_RATIO,
+            command->data.motion.speed_rad_s * RS_APP_OUTPUT_TO_MOTOR_RATIO,
+            command->data.motion.torque_nm * RS_APP_MOTOR_TO_OUTPUT_RATIO,
             command->data.motion.kp, command->data.motion.kd);
 
     case RS_IQ:
@@ -120,21 +122,24 @@ static HAL_StatusTypeDef send_control(rs_app_motor_t *motor)
 
     case RS_SPD:
         return RsMotor_SetSpeed(&motor->motor,
-                                command->data.speed.speed_rad_s,
+                                command->data.speed.speed_rad_s *
+                                    RS_APP_OUTPUT_TO_MOTOR_RATIO,
                                 command->data.speed.max_iq);
 
     case RS_CSP:
         return RsMotor_SetCsp(
             &motor->motor,
-            command->data.csp.angle_deg * RS_APP_RAD_PER_DEG,
-            command->data.csp.max_speed_rad_s);
+            command->data.csp.angle_deg * RS_APP_RAD_PER_DEG *
+                RS_APP_OUTPUT_TO_MOTOR_RATIO,
+            command->data.csp.max_speed_rad_s * RS_APP_OUTPUT_TO_MOTOR_RATIO);
 
     case RS_PP:
         return RsMotor_SetPp(
             &motor->motor,
-            command->data.pp.angle_deg * RS_APP_RAD_PER_DEG,
-            command->data.pp.max_speed_rad_s,
-            command->data.pp.acceleration_rad_s2);
+            command->data.pp.angle_deg * RS_APP_RAD_PER_DEG *
+                RS_APP_OUTPUT_TO_MOTOR_RATIO,
+            command->data.pp.max_speed_rad_s * RS_APP_OUTPUT_TO_MOTOR_RATIO,
+            command->data.pp.acceleration_rad_s2 * RS_APP_OUTPUT_TO_MOTOR_RATIO);
 
     default:
         return HAL_ERROR;
@@ -183,7 +188,7 @@ HAL_StatusTypeDef RsApp_Init(rs_app_t *app, rs_bus_t *bus,
 
     for (i = 0U; i < count; i++)
     {
-        if ((config[i].id > RS_APP_ID_MAX) ||
+        if ((config[i].id > RS_MOTOR_ID_MAX) ||
             !command_valid(&config[i].command))
         {
             return HAL_ERROR;
@@ -239,7 +244,8 @@ void RsApp_Run(rs_app_t *app, uint32_t now_ms)
 
         if (!motor->enable_requested)
         {
-            if (motor->motor.active || (motor->motor.start_step != 0U))
+            if (motor->motor.active ||
+                (motor->motor.start_step != RS_START_IDLE))
             {
                 motor->last_result = RsMotor_Stop(&motor->motor);
             }
@@ -252,7 +258,7 @@ void RsApp_Run(rs_app_t *app, uint32_t now_ms)
 
         if (!motor->motor.active ||
             (motor->motor.mode != (uint8_t)motor->command.mode) ||
-            (motor->motor.start_step != 0U))
+            (motor->motor.start_step != RS_START_IDLE))
         {
             motor->last_result =
                 RsMotor_Start(&motor->motor, motor->command.mode, now_ms);
@@ -275,7 +281,7 @@ HAL_StatusTypeDef RsApp_SetCmd(rs_app_t *app, uint8_t id,
 {
     rs_app_motor_t *motor;
 
-    if (!command_valid(command))
+    if ((app == NULL) || !app->ready || !command_valid(command))
     {
         return HAL_ERROR;
     }
@@ -292,8 +298,13 @@ HAL_StatusTypeDef RsApp_SetCmd(rs_app_t *app, uint8_t id,
 
 HAL_StatusTypeDef RsApp_Enable(rs_app_t *app, uint8_t id, bool enabled)
 {
-    rs_app_motor_t *motor = find_motor(app, id);
+    rs_app_motor_t *motor;
 
+    if ((app == NULL) || !app->ready)
+    {
+        return HAL_ERROR;
+    }
+    motor = find_motor(app, id);
     if (motor == NULL)
     {
         return HAL_ERROR;
@@ -305,8 +316,13 @@ HAL_StatusTypeDef RsApp_Enable(rs_app_t *app, uint8_t id, bool enabled)
 
 HAL_StatusTypeDef RsApp_Restart(rs_app_t *app, uint8_t id)
 {
-    rs_app_motor_t *motor = find_motor(app, id);
+    rs_app_motor_t *motor;
 
+    if ((app == NULL) || !app->ready)
+    {
+        return HAL_ERROR;
+    }
+    motor = find_motor(app, id);
     if (motor == NULL)
     {
         return HAL_ERROR;
@@ -315,15 +331,20 @@ HAL_StatusTypeDef RsApp_Restart(rs_app_t *app, uint8_t id)
     motor->enable_requested = true;
     motor->next_control_ms = 0U;
     motor->motor.active = true;
-    motor->motor.start_step = 0U;
+    motor->motor.start_step = RS_START_IDLE;
     motor->motor.mode = UINT8_MAX;
     return HAL_OK;
 }
 
 HAL_StatusTypeDef RsApp_SetZero(rs_app_t *app, uint8_t id)
 {
-    rs_app_motor_t *motor = find_motor(app, id);
+    rs_app_motor_t *motor;
 
+    if ((app == NULL) || !app->ready)
+    {
+        return HAL_ERROR;
+    }
+    motor = find_motor(app, id);
     if ((motor == NULL) || motor->enable_requested)
     {
         return HAL_ERROR;
@@ -334,8 +355,13 @@ HAL_StatusTypeDef RsApp_SetZero(rs_app_t *app, uint8_t id)
 
 HAL_StatusTypeDef RsApp_ClearFault(rs_app_t *app, uint8_t id)
 {
-    rs_app_motor_t *motor = find_motor(app, id);
+    rs_app_motor_t *motor;
 
+    if ((app == NULL) || !app->ready)
+    {
+        return HAL_ERROR;
+    }
+    motor = find_motor(app, id);
     if (motor == NULL)
     {
         return HAL_ERROR;
@@ -377,9 +403,12 @@ bool RsApp_GetStatus(const rs_app_t *app, uint8_t id, uint32_t now_ms,
     memset(status, 0, sizeof(*status));
     (void)RsMotor_GetFeedback(&motor->motor, &driver_feedback);
     status->feedback.angle_deg =
-        driver_feedback.position_rad / RS_APP_RAD_PER_DEG;
-    status->feedback.speed_rad_s = driver_feedback.velocity_rad_s;
-    status->feedback.torque_nm = driver_feedback.torque_nm;
+        driver_feedback.position_rad / RS_APP_RAD_PER_DEG *
+        RS_APP_MOTOR_TO_OUTPUT_RATIO;
+    status->feedback.speed_rad_s = driver_feedback.velocity_rad_s *
+                                   RS_APP_MOTOR_TO_OUTPUT_RATIO;
+    status->feedback.torque_nm = driver_feedback.torque_nm *
+                                 RS_APP_OUTPUT_TO_MOTOR_RATIO;
     status->feedback.temperature_c = driver_feedback.temperature_c;
     status->feedback.fault = driver_feedback.fault;
     status->feedback.warning = driver_feedback.warning;

@@ -505,6 +505,16 @@
               <FileType>5</FileType>
               <FilePath>..\user\mymain.h</FilePath>
             </File>
+            <File>
+              <FileName>pnp.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../user/pnp.c</FilePath>
+            </File>
+            <File>
+              <FileName>pnp.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\pnp.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

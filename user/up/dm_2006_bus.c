@@ -169,16 +169,14 @@ HAL_StatusTypeDef StdCan_Send(std_can_t *bus, uint16_t id,
                               const uint8_t data[8])
 {
     FDCAN_TxHeaderTypeDef header = {0};
-    HAL_StatusTypeDef status;
 
-    if ((bus == NULL) || !bus->ready || (data == NULL) ||
+    if ((bus == NULL) || !bus->ready || bus->bus_off || (data == NULL) ||
         (id > STD_CAN_ID_MAX))
     {
         return HAL_ERROR;
     }
     if (HAL_FDCAN_GetTxFifoFreeLevel(bus->device) == 0U)
     {
-        bus->diag.tx_busy_count++;
         return HAL_BUSY;
     }
 
@@ -191,17 +189,7 @@ HAL_StatusTypeDef StdCan_Send(std_can_t *bus, uint16_t id,
     header.FDFormat = FDCAN_CLASSIC_CAN;
     header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
 
-    status = HAL_FDCAN_AddMessageToTxFifoQ(bus->device, &header, data);
-    if (status == HAL_OK)
-    {
-        bus->diag.tx_count++;
-    }
-    else
-    {
-        bus->diag.tx_error_count++;
-    }
-
-    return status;
+    return HAL_FDCAN_AddMessageToTxFifoQ(bus->device, &header, data);
 }
 
 void StdCan_HandleRxIsr(std_can_t *bus, uint32_t interrupt_flags)
@@ -223,7 +211,6 @@ void StdCan_HandleRxIsr(std_can_t *bus, uint32_t interrupt_flags)
         if (HAL_FDCAN_GetRxMessage(bus->device, FDCAN_RX_FIFO0, &header,
                                    data) != HAL_OK)
         {
-            bus->diag.rx_error_count++;
             return;
         }
         if ((header.IdType != FDCAN_STANDARD_ID) ||
@@ -237,7 +224,6 @@ void StdCan_HandleRxIsr(std_can_t *bus, uint32_t interrupt_flags)
         next = (uint8_t)((head + 1U) & STD_CAN_RX_QUEUE_MASK);
         if (next == bus->rx_tail)
         {
-            bus->diag.rx_overflow_count++;
             continue;
         }
 
@@ -246,7 +232,6 @@ void StdCan_HandleRxIsr(std_can_t *bus, uint32_t interrupt_flags)
         memcpy(bus->rx_queue[head].data, data, sizeof(data));
         __DMB();
         bus->rx_head = next;
-        bus->diag.rx_count++;
     }
 }
 
@@ -256,18 +241,15 @@ void StdCan_HandleErrorIsr(std_can_t *bus, uint32_t interrupt_flags)
     {
         return;
     }
-    if ((interrupt_flags & FDCAN_IT_ERROR_WARNING) != 0U)
-    {
-        bus->diag.error_warning_count++;
-    }
-    if ((interrupt_flags & FDCAN_IT_ERROR_PASSIVE) != 0U)
-    {
-        bus->diag.error_passive_count++;
-    }
     if ((interrupt_flags & FDCAN_IT_BUS_OFF) != 0U)
     {
-        bus->diag.bus_off_count++;
+        bus->bus_off = true;
     }
+}
+
+bool StdCan_BusOff(const std_can_t *bus)
+{
+    return (bus != NULL) && bus->bus_off;
 }
 
 void StdCan_ProcessRx(std_can_t *bus)
@@ -292,13 +274,5 @@ void StdCan_ProcessRx(std_can_t *bus)
             bus->handlers[i].callback(bus->handlers[i].context, frame.id,
                                       frame.data, frame.tick_ms);
         }
-    }
-}
-
-void StdCan_GetDiag(const std_can_t *bus, std_can_diag_t *diag)
-{
-    if ((bus != NULL) && (diag != NULL))
-    {
-        *diag = bus->diag;
     }
 }

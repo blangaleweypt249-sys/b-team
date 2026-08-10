@@ -72,21 +72,27 @@ typedef struct
     uint16_t master_id;
     uint8_t feedback_id;
     dm_limits_t limits;
-    volatile uint32_t state_seq; // 保证任务读取到完整反馈快照
-    volatile dm_state_t state;
+    dm_state_t state;
 } dm_motor_t;
 
+/** @brief 初始化一台 DM 电机及其反馈地址。 */
 dm_result_t DmMotor_Init(dm_motor_t *motor, uint16_t tx_id, uint16_t master_id,
                          uint8_t feedback_id);
+/** @brief 设置 MIT 指令的物理限幅。 */
 dm_result_t DmMotor_SetLimits(dm_motor_t *motor, float p_max, float v_max,
                               float t_max);
+/** @brief 构建使能帧。 */
 dm_result_t DmMotor_BuildEnable(const dm_motor_t *motor, dm_frame_t *frame);
+/** @brief 构建失能帧。 */
 dm_result_t DmMotor_BuildDisable(const dm_motor_t *motor, dm_frame_t *frame);
 /** @brief 构建机械零点写入帧，不用于普通位置回零 */
 dm_result_t DmMotor_BuildZero(const dm_motor_t *motor, dm_frame_t *frame);
+/** @brief 将 MIT 控制量编码为一帧标准 CAN 数据。 */
 dm_result_t DmMotor_BuildMit(const dm_motor_t *motor, const dm_mit_cmd_t *cmd,
                              dm_frame_t *frame);
+/** @brief 解析一帧 DM 反馈并更新状态。 */
 bool DmMotor_Parse(dm_motor_t *motor, uint16_t id, const uint8_t *data,
                    uint8_t length, uint32_t tick_ms);
+/** @brief 复制最近一次 DM 反馈。 */
 bool DmMotor_GetState(const dm_motor_t *motor, dm_state_t *state);
 #endif

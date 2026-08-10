@@ -1,12 +1,13 @@
-b-remote control\list.o: ../Middlewares/Third_Party/FreeRTOS/Source/list.c
-b-remote control\list.o: D:\keil5\core\ARM\ARMCC\Bin\..\include\stdlib.h
-b-remote control\list.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-b-remote control\list.o: D:\keil5\core\ARM\ARMCC\Bin\..\include\stddef.h
-b-remote control\list.o: D:\keil5\core\ARM\ARMCC\Bin\..\include\stdint.h
-b-remote control\list.o: ../Core/Inc/FreeRTOSConfig.h
-b-remote control\list.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
-b-remote control\list.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h
-b-remote control\list.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h
-b-remote control\list.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F/portmacro.h
-b-remote control\list.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h
-b-remote control\list.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h
+b-remote\ control/list.o: \
+  ..\Middlewares\Third_Party\FreeRTOS\Source\list.c \
+  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdlib.h \
+  ..\Middlewares\Third_Party\FreeRTOS\Source\include\FreeRTOS.h \
+  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stddef.h \
+  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdint.h \
+  ..\Core\Inc\FreeRTOSConfig.h \
+  ..\Middlewares\Third_Party\FreeRTOS\Source\include\projdefs.h \
+  ..\Middlewares\Third_Party\FreeRTOS\Source\include\portable.h \
+  ..\Middlewares\Third_Party\FreeRTOS\Source\include\deprecated_definitions.h \
+  ..\Middlewares\Third_Party\FreeRTOS\Source\portable\RVDS\ARM_CM4F\portmacro.h \
+  ..\Middlewares\Third_Party\FreeRTOS\Source\include\mpu_wrappers.h \
+  ..\Middlewares\Third_Party\FreeRTOS\Source\include\list.h

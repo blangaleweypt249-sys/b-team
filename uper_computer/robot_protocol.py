@@ -8,8 +8,14 @@ VELOCITY_HEADER = bytes((0xA5, 0x5A))
 ACTION_HEADER = bytes((0xA5, 0x5B))
 YAW_HEADER = bytes((0xA5, 0x5C))
 DT35_HEADER = bytes((0xAA,))
-DT35_ADDR_41 = 0x41
-DT35_ADDR_40 = 0x40
+PNP_HEADER = bytes((0xAB,))
+DT35_ADDR_F = 0x40
+DT35_ADDR_L = 0x41
+# Keep numeric aliases for callers that still use the original names.
+DT35_ADDR_40 = DT35_ADDR_F
+DT35_ADDR_41 = DT35_ADDR_L
+PNP_ADDR_F = 0x40
+PNP_ADDR_B = 0x41
 
 ACTION_LOWER = 0x00
 ACTION_LIFT = 0x01
@@ -24,6 +30,7 @@ ACTION_REAR_DOWN = 0x08
 YAW_FRAME_LENGTH = 5
 YAW_SCALE = 100.0
 DT35_FRAME_LENGTH = 5
+PNP_FRAME_LENGTH = 5
 
 
 @dataclass(frozen=True)
@@ -118,12 +125,50 @@ class Dt35FrameParser:
             checksum = 0
             for byte in frame[:4]:
                 checksum ^= byte
-            if frame[1] not in (DT35_ADDR_40, DT35_ADDR_41) or frame[4] != checksum:
+            if frame[1] not in (DT35_ADDR_F, DT35_ADDR_L) or frame[4] != checksum:
                 del self._buffer[0]
                 continue
 
             distance_cm = frame[2] | (frame[3] << 8)
             frames.append((frame[1], distance_cm))
             del self._buffer[:DT35_FRAME_LENGTH]
+
+        return frames
+
+
+class PnpFrameParser:
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+
+    def reset(self) -> None:
+        self._buffer.clear()
+
+    def feed(self, payload: bytes) -> list[tuple[int, int]]:
+        frames = []
+        self._buffer.extend(payload)
+
+        while len(self._buffer) >= PNP_FRAME_LENGTH:
+            header_index = self._buffer.find(PNP_HEADER)
+            if header_index < 0:
+                self._buffer.clear()
+                break
+            if header_index > 0:
+                del self._buffer[:header_index]
+            if len(self._buffer) < PNP_FRAME_LENGTH:
+                break
+
+            frame = self._buffer[:PNP_FRAME_LENGTH]
+            checksum = calculate_checksum(frame[:4])
+            trigger = frame[2] | (frame[3] << 8)
+            if (
+                frame[1] not in (PNP_ADDR_F, PNP_ADDR_B)
+                or trigger not in (0, 1)
+                or frame[4] != checksum
+            ):
+                del self._buffer[0]
+                continue
+
+            frames.append((frame[1], trigger))
+            del self._buffer[:PNP_FRAME_LENGTH]
 
         return frames

@@ -28,7 +28,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "computer_link.h"
-#include "dt35_link.h"
+#include "dt35_pnp_link.h"
 #include "imu_main.h"
 
 /* USER CODE END Includes */
@@ -233,7 +233,7 @@ void PeriphCommonClock_Config(void)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   ComputerLink_RxCplt(huart);
-  DT35Link_RxCplt(huart);
+  DT35PnpLink_RxCplt(huart);
 }
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
@@ -244,7 +244,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
   ComputerLink_Error(huart);
-  DT35Link_Error(huart);
+  DT35PnpLink_Error(huart);
   ImuMain_HandleUartError(huart);
 }
 

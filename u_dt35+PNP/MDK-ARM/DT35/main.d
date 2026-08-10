@@ -33,3 +33,4 @@ dt35\main.o: ../Core/Inc/usart.h
 dt35\main.o: ../Core/Inc/gpio.h
 dt35\main.o: ../user/mymain.h
 dt35\main.o: ../user/dt35.h
+dt35\main.o: ../user/pnp.h

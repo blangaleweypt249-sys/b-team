@@ -11,13 +11,13 @@
 /* 电机总线 ID 由当前接线固定。 */
 #define RS_HOST_ID       0xFDU
 #define RS_MOTOR_L_ID    39U
-#define RS_MOTOR_F_ID    40U
-#define DM_MOTOR_L_ID    0x05U
-#define DM_MOTOR_F_ID    0x07U
-#define DM_MOTOR_L_RX_ID 0x15U
-#define DM_MOTOR_F_RX_ID 0x17U
+#define RS_MOTOR_R_ID    40U
+#define DM_MOTOR_L_ID    0x07U
+#define DM_MOTOR_R_ID    0x05U
+#define DM_MOTOR_L_RX_ID 0x17U
+#define DM_MOTOR_R_RX_ID 0x15U
 #define M2006_MOTOR_L_ID 1U
-#define M2006_MOTOR_F_ID 2U
+#define M2006_MOTOR_R_ID 2U
 
 #define RS_HOME_ANGLE_DEG    0.0f
 #define RS_HOME_SPEED_RAD_S  9.5f
@@ -30,29 +30,15 @@
 #define M2006_PID_KP         45.0f
 #define M2006_PID_KI         0.0f
 #define M2006_PID_KD         5.0f
-#define MOTOR_MOVE_TIME_MS   2000U // 四台电机到达目标角度的总时间
+#define MOTOR_MOVE_TIME_MS   2000U
+#define MOTOR_RETRY_MS       500U
+#define MOTOR_DONE_ERROR_DEG 3.0f
 #define RAD_TO_DEG           57.2957795f
-#define RAD_TO_DEG       57.2957795f
-#define DM_MAX_ANGLE_DEG (DM_J4310_P_MAX * RAD_TO_DEG)
+/* DM 协议位置范围换算到输出轴后的角度上限。 */
+#define DM_MAX_OUTPUT_ANGLE_DEG (DM_J4310_P_MAX * RAD_TO_DEG * \
+                                 DM_APP_MOTOR_TO_OUTPUT_RATIO)
 
-typedef struct
-{
-    float rs_l_deg;
-    float rs_f_deg;
-    float dm_l_deg;
-    float dm_f_deg;
-} motor_angles_t;
-
-typedef struct
-{
-    motor_angles_t start;
-    motor_angles_t target;
-    motor_angles_t current;
-    uint32_t start_ms;
-    bool running;
-} motor_curve_t;
-
-// RS、DM 和 M2006 的接线 ID 与默认控制参数集中在本文件
+/* RS、DM 和 M2006 的接线 ID 与默认控制参数集中在本文件。 */
 static const rs_app_motor_config_t rs_motor_config[] = {
     {
         .id = RS_MOTOR_L_ID,
@@ -66,7 +52,7 @@ static const rs_app_motor_config_t rs_motor_config[] = {
         }
     },
     {
-        .id = RS_MOTOR_F_ID,
+        .id = RS_MOTOR_R_ID,
         .period_ms = RS_APP_CONTROL_PERIOD_MS,
         .command = {
             .mode = RS_CSP,
@@ -92,9 +78,9 @@ static const dm_app_motor_config_t dm_motor_config[] = {
         }
     },
     {
-        .tx_id = DM_MOTOR_F_ID,
-        .master_id = DM_MOTOR_F_RX_ID,
-        .feedback_id = DM_MOTOR_F_ID,
+        .tx_id = DM_MOTOR_R_ID,
+        .master_id = DM_MOTOR_R_RX_ID,
+        .feedback_id = DM_MOTOR_R_ID,
         .command = {
             .angle_deg = DM_HOME_ANGLE_DEG,
             .speed_rad_s = DM_HOME_SPEED_RAD_S,
@@ -116,7 +102,7 @@ static const m2006_config_t m2006_motor_config[] = {
         }
     },
     {
-        .id = M2006_MOTOR_F_ID,
+        .id = M2006_MOTOR_R_ID,
         .target_position_deg = M2006_HOME_ANGLE_DEG,
         .pid = {
             .kp = M2006_PID_KP,
@@ -126,12 +112,12 @@ static const m2006_config_t m2006_motor_config[] = {
     }
 };
 
-// FDCAN3 同时接收 DM 和 M2006 的标准帧反馈。
+/* FDCAN3 同时接收 DM 和 M2006 的标准帧反馈。 */
 static const uint16_t std_rx_ids[] = {
     DM_MOTOR_L_RX_ID,
-    DM_MOTOR_F_RX_ID,
+    DM_MOTOR_R_RX_ID,
     C610_FEEDBACK_ID(M2006_MOTOR_L_ID),
-    C610_FEEDBACK_ID(M2006_MOTOR_F_ID)
+    C610_FEEDBACK_ID(M2006_MOTOR_R_ID)
 };
 
 static const fdcan_config_t fdcan_config = {
@@ -144,46 +130,64 @@ static rs_app_t rs_app;
 static dm_app_t dm_app;
 static c610_bus_t c610_bus;
 static m2006_motor_t m2006_motors[ARRAY_SIZE(m2006_motor_config)];
-static motor_curve_t motor_curve;
-// 防止电机离线期间每 1 ms 重复发起重启。
-static bool rs_initialization_requested[ARRAY_SIZE(rs_motor_config)];
-static bool dm_initialization_requested[ARRAY_SIZE(dm_motor_config)];
-static bool app_ready;               // 所有总线和电机对象均初始化完成
-static bool auto_initialize_enabled; // StopAll 后禁止离线电机自动重启
-static bool motors_initialized;      // 区分首次使能和掉线后的重启
+static up_motor_angles_t curve_start_angles;
+static uint32_t curve_start_ms;
+static uint32_t rs_retry_ms[ARRAY_SIZE(rs_motor_config)];
+static uint32_t dm_retry_ms[ARRAY_SIZE(dm_motor_config)];
+static bool app_ready;
+static bool auto_initialize_enabled;
+static bool motors_initialized;
+static bool bus_off_handled;
 
-static bool motor_angles_valid(const motor_angles_t *angles)
+up_motor_angles_t up_target_angles;
+up_motor_angles_t up_command_angles;
+HAL_StatusTypeDef up_last_result = HAL_OK;
+bool up_curve_running;
+
+static bool finite_float(float value)
 {
-    if ((angles == NULL) ||
-        (angles->rs_l_deg != angles->rs_l_deg) ||
-        (angles->rs_f_deg != angles->rs_f_deg) ||
-        (angles->dm_l_deg != angles->dm_l_deg) ||
-        (angles->dm_f_deg != angles->dm_f_deg))
+    return (value == value) && (value <= FLT_MAX) && (value >= -FLT_MAX);
+}
+
+static bool time_reached(uint32_t now_ms, uint32_t due_ms)
+{
+    return (int32_t)(now_ms - due_ms) >= 0;
+}
+
+static float abs_float(float value)
+{
+    return (value < 0.0f) ? -value : value;
+}
+
+static bool motor_angles_valid(const up_motor_angles_t *angles)
+{
+    if ((angles == NULL) || !finite_float(angles->rs_l_deg) ||
+        !finite_float(angles->rs_r_deg) ||
+        !finite_float(angles->dm_l_deg) ||
+        !finite_float(angles->dm_r_deg))
     {
         return false;
     }
 
-    return (angles->rs_l_deg <= FLT_MAX) &&
-           (angles->rs_l_deg >= -FLT_MAX) &&
-           (angles->rs_f_deg <= FLT_MAX) &&
-           (angles->rs_f_deg >= -FLT_MAX) &&
-           (angles->dm_l_deg <= DM_MAX_ANGLE_DEG) &&
-           (angles->dm_l_deg >= -DM_MAX_ANGLE_DEG) &&
-           (angles->dm_f_deg <= DM_MAX_ANGLE_DEG) &&
-           (angles->dm_f_deg >= -DM_MAX_ANGLE_DEG);
+    return (angles->dm_l_deg <= DM_MAX_OUTPUT_ANGLE_DEG) &&
+           (angles->dm_l_deg >= -DM_MAX_OUTPUT_ANGLE_DEG) &&
+           (angles->dm_r_deg <= DM_MAX_OUTPUT_ANGLE_DEG) &&
+           (angles->dm_r_deg >= -DM_MAX_OUTPUT_ANGLE_DEG);
 }
 
-static HAL_StatusTypeDef start_motor_curve(const motor_angles_t *target)
+static HAL_StatusTypeDef start_motor_curve(const up_motor_angles_t *target)
 {
-    if (!app_ready || !motor_angles_valid(target))
+    if (!app_ready || Fdcan_BusOff() || !motor_angles_valid(target))
     {
+        up_last_result = HAL_ERROR;
         return HAL_ERROR;
     }
 
-    motor_curve.start = motor_curve.current;
-    motor_curve.target = *target;
-    motor_curve.start_ms = HAL_GetTick();
-    motor_curve.running = true;
+    curve_start_angles = up_command_angles;
+    up_target_angles = *target;
+    curve_start_ms = HAL_GetTick();
+    up_curve_running = true;
+    up_last_result = HAL_OK;
     return HAL_OK;
 }
 
@@ -197,7 +201,7 @@ static float curve_value(float start, float target, float progress)
     return start + (target - start) * blend;
 }
 
-static HAL_StatusTypeDef set_motor_angles(const motor_angles_t *angles)
+static HAL_StatusTypeDef set_motor_angles(const up_motor_angles_t *angles)
 {
     rs_command_t rs_command = rs_motor_config[0].command;
     dm_app_mit_command_t dm_command = dm_motor_config[0].command;
@@ -208,8 +212,8 @@ static HAL_StatusTypeDef set_motor_angles(const motor_angles_t *angles)
         return HAL_ERROR;
     }
     rs_command = rs_motor_config[1].command;
-    rs_command.data.csp.angle_deg = angles->rs_f_deg;
-    if (RsApp_SetCmd(&rs_app, RS_MOTOR_F_ID, &rs_command) != HAL_OK)
+    rs_command.data.csp.angle_deg = angles->rs_r_deg;
+    if (RsApp_SetCmd(&rs_app, RS_MOTOR_R_ID, &rs_command) != HAL_OK)
     {
         return HAL_ERROR;
     }
@@ -220,8 +224,8 @@ static HAL_StatusTypeDef set_motor_angles(const motor_angles_t *angles)
         return HAL_ERROR;
     }
     dm_command = dm_motor_config[1].command;
-    dm_command.angle_deg = angles->dm_f_deg;
-    if (DmApp_SetMitCmd(&dm_app, DM_MOTOR_F_ID, &dm_command) != DM_OK)
+    dm_command.angle_deg = angles->dm_r_deg;
+    if (DmApp_SetMitCmd(&dm_app, DM_MOTOR_R_ID, &dm_command) != DM_OK)
     {
         return HAL_ERROR;
     }
@@ -229,37 +233,64 @@ static HAL_StatusTypeDef set_motor_angles(const motor_angles_t *angles)
     return HAL_OK;
 }
 
+static void stop_outputs(void)
+{
+    uint32_t now_ms;
+
+    if (!app_ready)
+    {
+        return;
+    }
+
+    auto_initialize_enabled = false;
+    up_curve_running = false;
+    RsApp_StopAll(&rs_app);
+    DmApp_StopAll(&dm_app);
+    C610_StopAll(&c610_bus);
+
+    /* 正常总线下立即补发一次失能和零电流，减少停机延迟。 */
+    now_ms = HAL_GetTick();
+    RsApp_Run(&rs_app, now_ms);
+    DmApp_Run(&dm_app, now_ms);
+    C610_Run(&c610_bus, now_ms);
+}
+
 static void update_motor_curve(uint32_t now_ms)
 {
     uint32_t elapsed_ms;
     float progress;
 
-    if (!motor_curve.running)
+    if (!up_curve_running)
     {
         return;
     }
 
-    elapsed_ms = now_ms - motor_curve.start_ms;
+    elapsed_ms = now_ms - curve_start_ms;
     if (elapsed_ms >= MOTOR_MOVE_TIME_MS)
     {
         progress = 1.0f;
-        motor_curve.running = false;
+        up_curve_running = false;
     }
     else
     {
         progress = (float)elapsed_ms / (float)MOTOR_MOVE_TIME_MS;
     }
 
-    motor_curve.current.rs_l_deg = curve_value(
-        motor_curve.start.rs_l_deg, motor_curve.target.rs_l_deg, progress);
-    motor_curve.current.rs_f_deg = curve_value(
-        motor_curve.start.rs_f_deg, motor_curve.target.rs_f_deg, progress);
-    motor_curve.current.dm_l_deg = curve_value(
-        motor_curve.start.dm_l_deg, motor_curve.target.dm_l_deg, progress);
-    motor_curve.current.dm_f_deg = curve_value(
-        motor_curve.start.dm_f_deg, motor_curve.target.dm_f_deg, progress);
+    up_command_angles.rs_l_deg = curve_value(
+        curve_start_angles.rs_l_deg, up_target_angles.rs_l_deg, progress);
+    up_command_angles.rs_r_deg = curve_value(
+        curve_start_angles.rs_r_deg, up_target_angles.rs_r_deg, progress);
+    up_command_angles.dm_l_deg = curve_value(
+        curve_start_angles.dm_l_deg, up_target_angles.dm_l_deg, progress);
+    up_command_angles.dm_r_deg = curve_value(
+        curve_start_angles.dm_r_deg, up_target_angles.dm_r_deg, progress);
 
-    (void)set_motor_angles(&motor_curve.current);
+    up_last_result = set_motor_angles(&up_command_angles);
+    if (up_last_result != HAL_OK)
+    {
+        up_curve_running = false;
+        stop_outputs();
+    }
 }
 
 static HAL_StatusTypeDef initialize_rs_motor(uint8_t index, bool restart)
@@ -268,8 +299,8 @@ static HAL_StatusTypeDef initialize_rs_motor(uint8_t index, bool restart)
     rs_command_t command = config->command;
     HAL_StatusTypeDef status;
 
-    command.data.csp.angle_deg = (index == 0U) ? motor_curve.current.rs_l_deg
-                                               : motor_curve.current.rs_f_deg;
+    command.data.csp.angle_deg = (index == 0U) ? up_command_angles.rs_l_deg
+                                               : up_command_angles.rs_r_deg;
     if (RsApp_SetCmd(&rs_app, config->id, &command) != HAL_OK)
     {
         return HAL_ERROR;
@@ -281,7 +312,7 @@ static HAL_StatusTypeDef initialize_rs_motor(uint8_t index, bool restart)
         return HAL_ERROR;
     }
 
-    rs_initialization_requested[index] = true;
+    rs_retry_ms[index] = HAL_GetTick() + MOTOR_RETRY_MS;
     return HAL_OK;
 }
 
@@ -291,8 +322,8 @@ static HAL_StatusTypeDef initialize_dm_motor(uint8_t index, bool restart)
     dm_app_mit_command_t command = config->command;
     dm_result_t result;
 
-    command.angle_deg = (index == 0U) ? motor_curve.current.dm_l_deg
-                                      : motor_curve.current.dm_f_deg;
+    command.angle_deg = (index == 0U) ? up_command_angles.dm_l_deg
+                                      : up_command_angles.dm_r_deg;
     if (DmApp_SetMitCmd(&dm_app, config->tx_id, &command) != DM_OK)
     {
         return HAL_ERROR;
@@ -304,7 +335,7 @@ static HAL_StatusTypeDef initialize_dm_motor(uint8_t index, bool restart)
         return HAL_ERROR;
     }
 
-    dm_initialization_requested[index] = true;
+    dm_retry_ms[index] = HAL_GetTick() + MOTOR_RETRY_MS;
     return HAL_OK;
 }
 
@@ -317,7 +348,6 @@ static void initialize_offline_motors(uint32_t now_ms)
         return;
     }
 
-    // 恢复在线后清除锁存，允许下一次掉线重新触发一次。
     for (i = 0U; i < ARRAY_SIZE(rs_motor_config); i++)
     {
         rs_app_status_t status;
@@ -328,12 +358,16 @@ static void initialize_offline_motors(uint32_t now_ms)
         }
         if (status.online)
         {
-            rs_initialization_requested[i] = false;
+            rs_retry_ms[i] = now_ms + MOTOR_RETRY_MS;
         }
-        else if (!rs_initialization_requested[i] &&
+        else if (time_reached(now_ms, rs_retry_ms[i]) &&
                  (!status.has_feedback || (status.feedback.fault == 0U)))
         {
-            (void)initialize_rs_motor(i, true);
+            if (initialize_rs_motor(i, true) != HAL_OK)
+            {
+                up_last_result = HAL_ERROR;
+                rs_retry_ms[i] = now_ms + MOTOR_RETRY_MS;
+            }
         }
     }
 
@@ -348,15 +382,56 @@ static void initialize_offline_motors(uint32_t now_ms)
         }
         if (status.online)
         {
-            dm_initialization_requested[i] = false;
+            dm_retry_ms[i] = now_ms + MOTOR_RETRY_MS;
         }
-        else if (!dm_initialization_requested[i] &&
+        else if (time_reached(now_ms, dm_retry_ms[i]) &&
                  (!status.has_feedback ||
                   (status.feedback.fault == DM_FAULT_NONE)))
         {
-            (void)initialize_dm_motor(i, true);
+            if (initialize_dm_motor(i, true) != HAL_OK)
+            {
+                up_last_result = HAL_ERROR;
+                dm_retry_ms[i] = now_ms + MOTOR_RETRY_MS;
+            }
         }
     }
+}
+
+static bool motors_at_target(uint32_t now_ms)
+{
+    rs_app_status_t rs_l_status;
+    rs_app_status_t rs_r_status;
+    dm_app_status_t dm_l_status;
+    dm_app_status_t dm_r_status;
+
+    if (!RsApp_GetStatus(&rs_app, RS_MOTOR_L_ID, now_ms, &rs_l_status) ||
+        !RsApp_GetStatus(&rs_app, RS_MOTOR_R_ID, now_ms, &rs_r_status) ||
+        !DmApp_GetStatus(&dm_app, DM_MOTOR_L_ID, now_ms, &dm_l_status) ||
+        !DmApp_GetStatus(&dm_app, DM_MOTOR_R_ID, now_ms, &dm_r_status))
+    {
+        return false;
+    }
+
+    if (!rs_l_status.online || !rs_r_status.online ||
+        !dm_l_status.online || !dm_r_status.online ||
+        (rs_l_status.feedback.fault != 0U) ||
+        (rs_r_status.feedback.fault != 0U) ||
+        (dm_l_status.feedback.fault != DM_FAULT_NONE) ||
+        (dm_r_status.feedback.fault != DM_FAULT_NONE) ||
+        ((rs_l_status.feedback.valid & RS_FDB_POSITION) == 0U) ||
+        ((rs_r_status.feedback.valid & RS_FDB_POSITION) == 0U))
+    {
+        return false;
+    }
+
+    return (abs_float(rs_l_status.feedback.angle_deg -
+                      up_target_angles.rs_l_deg) <= MOTOR_DONE_ERROR_DEG) &&
+           (abs_float(rs_r_status.feedback.angle_deg -
+                      up_target_angles.rs_r_deg) <= MOTOR_DONE_ERROR_DEG) &&
+           (abs_float(dm_l_status.feedback.angle_deg -
+                      up_target_angles.dm_l_deg) <= MOTOR_DONE_ERROR_DEG) &&
+           (abs_float(dm_r_status.feedback.angle_deg -
+                      up_target_angles.dm_r_deg) <= MOTOR_DONE_ERROR_DEG);
 }
 
 HAL_StatusTypeDef Up_Init(void)
@@ -366,19 +441,24 @@ HAL_StatusTypeDef Up_Init(void)
         return HAL_OK;
     }
 
+    bus_off_handled = false;
+
     if (Fdcan_Init(&fdcan_config) != HAL_OK)
     {
+        up_last_result = HAL_ERROR;
         return HAL_ERROR;
     }
     if (RsApp_Init(&rs_app, Fdcan_GetRsBus(), rs_motor_config,
                    ARRAY_SIZE(rs_motor_config)) != HAL_OK)
     {
+        up_last_result = HAL_ERROR;
         Fdcan_Stop();
         return HAL_ERROR;
     }
     if (DmApp_Init(&dm_app, Fdcan_GetStdBus(), dm_motor_config,
                    ARRAY_SIZE(dm_motor_config)) != DM_OK)
     {
+        up_last_result = HAL_ERROR;
         Fdcan_Stop();
         return HAL_ERROR;
     }
@@ -386,18 +466,21 @@ HAL_StatusTypeDef Up_Init(void)
                   m2006_motor_config,
                   ARRAY_SIZE(m2006_motor_config)) != HAL_OK)
     {
+        up_last_result = HAL_ERROR;
         Fdcan_Stop();
         return HAL_ERROR;
     }
     app_ready = true;
     if (Up_HomeMotors() != HAL_OK)
     {
+        stop_outputs();
         app_ready = false;
         Fdcan_Stop();
         return HAL_ERROR;
     }
 
-    return HAL_OK;
+    up_last_result = HAL_OK;
+    return up_last_result;
 }
 
 HAL_StatusTypeDef Up_HomeMotors(void)
@@ -405,8 +488,9 @@ HAL_StatusTypeDef Up_HomeMotors(void)
     bool restart = motors_initialized;
     uint8_t i;
 
-    if (!app_ready)
+    if (!app_ready || Fdcan_BusOff())
     {
+        up_last_result = HAL_ERROR;
         return HAL_ERROR;
     }
 
@@ -415,6 +499,8 @@ HAL_StatusTypeDef Up_HomeMotors(void)
     {
         if (initialize_rs_motor(i, restart) != HAL_OK)
         {
+            up_last_result = HAL_ERROR;
+            stop_outputs();
             return HAL_ERROR;
         }
     }
@@ -422,69 +508,77 @@ HAL_StatusTypeDef Up_HomeMotors(void)
     {
         if (initialize_dm_motor(i, restart) != HAL_OK)
         {
+            up_last_result = HAL_ERROR;
+            stop_outputs();
             return HAL_ERROR;
         }
     }
     motors_initialized = true;
 
-    if (restart)
-    {
-        return Up_SetMotorPos(RS_HOME_ANGLE_DEG, RS_HOME_ANGLE_DEG,
-                              DM_HOME_ANGLE_DEG, DM_HOME_ANGLE_DEG);
-    }
-
-    return HAL_OK;
+    return Up_SetMotorPos(RS_HOME_ANGLE_DEG, RS_HOME_ANGLE_DEG,
+                          DM_HOME_ANGLE_DEG, DM_HOME_ANGLE_DEG);
 }
 
-HAL_StatusTypeDef Up_SetMotorPos(float rs_l_deg, float rs_f_deg,
-                                 float dm_l_deg, float dm_f_deg)
+HAL_StatusTypeDef Up_SetMotorPos(float rs_l_deg, float rs_r_deg,
+                                 float dm_l_deg, float dm_r_deg)
 {
-    motor_angles_t target = {
+    up_motor_angles_t target = {
         .rs_l_deg = rs_l_deg,
-        .rs_f_deg = rs_f_deg,
+        .rs_r_deg = rs_r_deg,
         .dm_l_deg = dm_l_deg,
-        .dm_f_deg = dm_f_deg
+        .dm_r_deg = dm_r_deg
     };
 
     return start_motor_curve(&target);
 }
 
+bool Up_MotorMoveDone(void)
+{
+    return app_ready && !Fdcan_BusOff() && !up_curve_running &&
+           motors_at_target(HAL_GetTick());
+}
+
 /**
- * @brief 设置两台 RS00 的目标角度
- * @param angle_deg 两台 RS00 的目标角度(deg)
+ * @brief 设置两台 RS00 的输出轴目标角度
+ * @param angle_deg 两台 RS00 的输出轴目标角度(deg)
  * @retval HAL 状态
  */
 HAL_StatusTypeDef Up_SetRsPos(float angle_deg)
 {
-    motor_angles_t target = motor_curve.target;
+    up_motor_angles_t target = up_target_angles;
 
     target.rs_l_deg = angle_deg;
-    target.rs_f_deg = angle_deg;
+    target.rs_r_deg = angle_deg;
     return start_motor_curve(&target);
 }
 
 /**
- * @brief 设置两台达妙电机的目标角度
- * @param angle_deg 两台达妙电机的目标角度(deg)
+ * @brief 设置两台达妙电机的输出轴目标角度
+ * @param angle_deg 两台达妙电机的输出轴目标角度(deg)
  * @retval HAL 状态
  */
 HAL_StatusTypeDef Up_SetDmPos(float angle_deg)
 {
-    motor_angles_t target = motor_curve.target;
+    up_motor_angles_t target = up_target_angles;
 
     target.dm_l_deg = angle_deg;
-    target.dm_f_deg = angle_deg;
+    target.dm_r_deg = angle_deg;
     return start_motor_curve(&target);
 }
 
 HAL_StatusTypeDef Up_SetM2006Pos(uint8_t id, float position_deg)
 {
-    if (!app_ready)
+    HAL_StatusTypeDef status;
+
+    if (!app_ready || Fdcan_BusOff())
     {
+        up_last_result = HAL_ERROR;
         return HAL_ERROR;
     }
 
-    return C610_SetPos(&c610_bus, id, position_deg);
+    status = C610_SetPos(&c610_bus, id, position_deg);
+    up_last_result = status;
+    return status;
 }
 
 /**
@@ -495,27 +589,31 @@ HAL_StatusTypeDef Up_SetM2006Pos(uint8_t id, float position_deg)
 HAL_StatusTypeDef Up_MoveM2006(float offset_deg)
 {
     m2006_status_t left_status;
-    m2006_status_t front_status;
+    m2006_status_t right_status;
 
-    if (!app_ready || (offset_deg != offset_deg) ||
+    if (!app_ready || Fdcan_BusOff() || (offset_deg != offset_deg) ||
         (offset_deg > FLT_MAX) || (offset_deg < -FLT_MAX))
     {
+        up_last_result = HAL_ERROR;
         return HAL_ERROR;
     }
     if (!C610_GetStatus(&c610_bus, M2006_MOTOR_L_ID, &left_status) ||
-        !C610_GetStatus(&c610_bus, M2006_MOTOR_F_ID, &front_status) ||
-        !left_status.online || !front_status.online)
+        !C610_GetStatus(&c610_bus, M2006_MOTOR_R_ID, &right_status) ||
+        !left_status.online || !right_status.online)
     {
+        up_last_result = HAL_ERROR;
         return HAL_ERROR;
     }
 
     if (C610_SetPos(&c610_bus, M2006_MOTOR_L_ID,
                     left_status.output_angle_deg + offset_deg) != HAL_OK)
     {
+        up_last_result = HAL_ERROR;
         return HAL_ERROR;
     }
-    return C610_SetPos(&c610_bus, M2006_MOTOR_F_ID,
-                       front_status.output_angle_deg + offset_deg);
+    up_last_result = C610_SetPos(&c610_bus, M2006_MOTOR_R_ID,
+                                 right_status.output_angle_deg + offset_deg);
+    return up_last_result;
 }
 
 void Up_Run1ms(void)
@@ -528,7 +626,18 @@ void Up_Run1ms(void)
     }
 
     now_ms = HAL_GetTick();
-    // 固定顺序：处理反馈，再恢复状态，最后按各自周期发送控制帧。
+    if (Fdcan_BusOff())
+    {
+        if (!bus_off_handled)
+        {
+            up_last_result = HAL_ERROR;
+            bus_off_handled = true;
+        }
+        stop_outputs();
+        return;
+    }
+
+    /* 固定顺序：处理反馈，再恢复状态，最后按各自周期发送控制帧。 */
     Fdcan_Run1ms();
     initialize_offline_motors(now_ms);
     update_motor_curve(now_ms);
@@ -539,16 +648,7 @@ void Up_Run1ms(void)
 
 void Up_StopAll(void)
 {
-    if (!app_ready)
-    {
-        return;
-    }
-
-    auto_initialize_enabled = false;
-    motor_curve.running = false;
-    RsApp_StopAll(&rs_app);
-    DmApp_StopAll(&dm_app);
-    C610_StopAll(&c610_bus);
+    stop_outputs();
 }
 
 bool Up_GetRsStatus(uint8_t id, rs_app_status_t *status)

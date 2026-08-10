@@ -26,7 +26,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "mymain.h"
-#include "Remote.h"
+#include "RemoteInput.h"
 
 /* USER CODE END Includes */
 
@@ -101,7 +101,10 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
+  /* creation of remoteTask */
   remoteTaskHandle = osThreadNew(StartRemoteTask, NULL, &remoteTask_attributes);
+
+  /* creation of debugTask */
   debugTaskHandle = osThreadNew(StartDebugTask, NULL, &debugTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -124,6 +127,8 @@ void MX_FREERTOS_Init(void) {
 void StartRemoteTask(void *argument)
 {
   /* USER CODE BEGIN StartRemoteTask */
+  (void)argument;
+
   /* Infinite loop */
   for(;;)
   {
@@ -133,18 +138,25 @@ void StartRemoteTask(void *argument)
   /* USER CODE END StartRemoteTask */
 }
 
+/* USER CODE BEGIN Header_StartDebugTask */
 /**
-  * @brief  Function implementing the debugTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
+* @brief Function implementing the debugTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartDebugTask */
 void StartDebugTask(void *argument)
 {
+  /* USER CODE BEGIN StartDebugTask */
+  (void)argument;
+
+  /* Infinite loop */
   for(;;)
   {
     MyMain_Debug();
-    osDelay(50);
+    osDelay(1);
   }
+  /* USER CODE END StartDebugTask */
 }
 
 /* Private application code --------------------------------------------------*/

@@ -5,8 +5,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-static rs_bus_t rs_bus; // FDCAN2：RS 扩展帧
-static std_can_t std_can; // FDCAN3：DM 与 M2006 标准帧
+static rs_bus_t rs_bus;  /* FDCAN2：RS 扩展帧。 */
+static std_can_t std_can; /* FDCAN3：DM 与 M2006 标准帧。 */
 static bool task_ready;
 
 HAL_StatusTypeDef Fdcan_Init(const fdcan_config_t *config)
@@ -72,7 +72,7 @@ std_can_t *Fdcan_GetStdBus(void)
 void Fdcan_HandleRxIsr(FDCAN_HandleTypeDef *hfdcan,
                        uint32_t interrupt_flags)
 {
-    // 中断只按总线取帧入队，协议解析留在 1 ms 调度中执行。
+    /* 中断只按总线取帧入队，协议解析留在 1 ms 调度中执行。 */
     if (hfdcan == &hfdcan2)
     {
         RsBus_HandleRxIsr(&rs_bus, interrupt_flags);
@@ -86,8 +86,17 @@ void Fdcan_HandleRxIsr(FDCAN_HandleTypeDef *hfdcan,
 void Fdcan_HandleErrorIsr(FDCAN_HandleTypeDef *hfdcan,
                           uint32_t interrupt_flags)
 {
-    if (hfdcan == &hfdcan3)
+    if (hfdcan == &hfdcan2)
+    {
+        RsBus_HandleErrorIsr(&rs_bus, interrupt_flags);
+    }
+    else if (hfdcan == &hfdcan3)
     {
         StdCan_HandleErrorIsr(&std_can, interrupt_flags);
     }
+}
+
+bool Fdcan_BusOff(void)
+{
+    return RsBus_BusOff(&rs_bus) || StdCan_BusOff(&std_can);
 }

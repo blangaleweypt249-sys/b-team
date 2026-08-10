@@ -4,8 +4,11 @@
 #include "stm32f1xx_hal.h"
 
 /* 两个距离传感器的固定 I2C 地址。 */
-#define DT35_ADDR_41 0x41U
-#define DT35_ADDR_40 0x40U
+#define DT35_ADDR_F 0x40U
+#define DT35_ADDR_L 0x41U
+/* Keep numeric aliases for the existing read API. */
+#define DT35_ADDR_40 DT35_ADDR_F
+#define DT35_ADDR_41 DT35_ADDR_L
 
 typedef struct
 {

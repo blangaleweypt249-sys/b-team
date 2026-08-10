@@ -2,7 +2,7 @@
 
 #include "action_api.h"
 #include "chassis_main.h"
-#include "dt35_link.h"
+#include "dt35_pnp_link.h"
 #include "imu_main.h"
 
 #include <stdbool.h>
@@ -252,7 +252,7 @@ void ComputerLink_Run(void)
     }
 
     (void)ImuMain_SendYaw(computer_uart);
-    DT35Link_Send(computer_uart);
+    DT35PnpLink_Send(computer_uart);
 
     now_ms = HAL_GetTick();
     if (link_online && ((now_ms - last_rx_ms) > COMPUTER_LINK_TIMEOUT_MS))

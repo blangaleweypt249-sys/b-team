@@ -6,9 +6,6 @@
 
 #define DM_APP_RAD_PER_DEG 0.01745329251994329577f
 
-static void handle_rx(void *context, uint16_t id, const uint8_t data[8],
-                      uint32_t tick_ms);
-
 static bool time_reached(uint32_t now_ms, uint32_t due_ms)
 {
     return (int32_t)(now_ms - due_ms) >= 0;
@@ -31,9 +28,12 @@ static dm_mit_cmd_t command_to_driver(const dm_app_mit_command_t *command)
 {
     dm_mit_cmd_t driver_command;
 
-    driver_command.position_rad = command->angle_deg * DM_APP_RAD_PER_DEG;
-    driver_command.velocity_rad_s = command->speed_rad_s;
-    driver_command.torque_nm = command->torque_nm;
+    driver_command.position_rad = command->angle_deg * DM_APP_RAD_PER_DEG *
+                                  DM_APP_OUTPUT_TO_MOTOR_RATIO;
+    driver_command.velocity_rad_s = command->speed_rad_s *
+                                    DM_APP_OUTPUT_TO_MOTOR_RATIO;
+    driver_command.torque_nm = command->torque_nm *
+                               DM_APP_MOTOR_TO_OUTPUT_RATIO;
     driver_command.kp = command->kp;
     driver_command.kd = command->kd;
     return driver_command;
@@ -42,9 +42,11 @@ static dm_mit_cmd_t command_to_driver(const dm_app_mit_command_t *command)
 static void feedback_from_driver(const dm_state_t *state,
                                  dm_app_feedback_t *feedback)
 {
-    feedback->angle_deg = state->position_rad / DM_APP_RAD_PER_DEG;
-    feedback->speed_rad_s = state->velocity_rad_s;
-    feedback->torque_nm = state->torque_nm;
+    feedback->angle_deg = state->position_rad / DM_APP_RAD_PER_DEG *
+                          DM_APP_MOTOR_TO_OUTPUT_RATIO;
+    feedback->speed_rad_s = state->velocity_rad_s *
+                            DM_APP_MOTOR_TO_OUTPUT_RATIO;
+    feedback->torque_nm = state->torque_nm * DM_APP_OUTPUT_TO_MOTOR_RATIO;
     feedback->mos_temp_c = state->mos_temp_c;
     feedback->rotor_temp_c = state->rotor_temp_c;
     feedback->fault = state->fault;
@@ -133,6 +135,35 @@ static dm_result_t send_control(dm_app_t *app, dm_app_motor_t *motor)
     return result;
 }
 
+static void handle_rx(void *context, uint16_t id, const uint8_t data[8],
+                      uint32_t tick_ms)
+{
+    dm_app_t *app = context;
+    uint8_t i;
+
+    if ((app == NULL) || !app->ready || (data == NULL))
+    {
+        return;
+    }
+
+    for (i = 0U; i < app->motor_count; i++)
+    {
+        dm_app_motor_t *motor = &app->motors[i];
+
+        if (DmMotor_Parse(&motor->motor, id, data, 8U, tick_ms))
+        {
+            dm_state_t state;
+
+            if (DmMotor_GetState(&motor->motor, &state) &&
+                (state.fault != DM_FAULT_NONE))
+            {
+                motor->enable_requested = false;
+            }
+            break;
+        }
+    }
+}
+
 dm_result_t DmApp_Init(dm_app_t *app, std_can_t *bus,
                        const dm_app_motor_config_t *config, uint8_t count)
 {
@@ -182,35 +213,6 @@ dm_result_t DmApp_Init(dm_app_t *app, std_can_t *bus,
     }
     app->ready = true;
     return DM_OK;
-}
-
-static void handle_rx(void *context, uint16_t id, const uint8_t data[8],
-                      uint32_t tick_ms)
-{
-    dm_app_t *app = context;
-    uint8_t i;
-
-    if ((app == NULL) || !app->ready || (data == NULL))
-    {
-        return;
-    }
-
-    for (i = 0U; i < app->motor_count; i++)
-    {
-        dm_app_motor_t *motor = &app->motors[i];
-
-        if (DmMotor_Parse(&motor->motor, id, data, 8U, tick_ms))
-        {
-            dm_state_t state;
-
-            if (DmMotor_GetState(&motor->motor, &state) &&
-                (state.fault != DM_FAULT_NONE))
-            {
-                motor->enable_requested = false;
-            }
-            break;
-        }
-    }
 }
 
 void DmApp_Run(dm_app_t *app, uint32_t now_ms)
@@ -274,9 +276,14 @@ dm_result_t DmApp_SetMitCmd(dm_app_t *app, uint16_t id,
 
 dm_result_t DmApp_Enable(dm_app_t *app, uint16_t id, bool enabled)
 {
-    dm_app_motor_t *motor = find_motor(app, id);
+    dm_app_motor_t *motor;
 
-    if ((app == NULL) || !app->ready || (motor == NULL))
+    if ((app == NULL) || !app->ready)
+    {
+        return DM_BAD_ARG;
+    }
+    motor = find_motor(app, id);
+    if (motor == NULL)
     {
         return DM_BAD_ARG;
     }
@@ -287,9 +294,14 @@ dm_result_t DmApp_Enable(dm_app_t *app, uint16_t id, bool enabled)
 
 dm_result_t DmApp_Restart(dm_app_t *app, uint16_t id)
 {
-    dm_app_motor_t *motor = find_motor(app, id);
+    dm_app_motor_t *motor;
 
-    if ((app == NULL) || !app->ready || (motor == NULL))
+    if ((app == NULL) || !app->ready)
+    {
+        return DM_BAD_ARG;
+    }
+    motor = find_motor(app, id);
+    if (motor == NULL)
     {
         return DM_BAD_ARG;
     }
@@ -302,11 +314,16 @@ dm_result_t DmApp_Restart(dm_app_t *app, uint16_t id)
 
 dm_result_t DmApp_SetZero(dm_app_t *app, uint16_t id)
 {
-    dm_app_motor_t *motor = find_motor(app, id);
+    dm_app_motor_t *motor;
     dm_frame_t frame;
     dm_result_t result;
 
-    if ((app == NULL) || !app->ready || (motor == NULL))
+    if ((app == NULL) || !app->ready)
+    {
+        return DM_BAD_ARG;
+    }
+    motor = find_motor(app, id);
+    if (motor == NULL)
     {
         return DM_BAD_ARG;
     }

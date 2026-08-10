@@ -46,7 +46,10 @@ HAL_StatusTypeDef RsBus_Init(rs_bus_t *bus, FDCAN_HandleTypeDef *device,
     if (status == HAL_OK)
     {
         status = HAL_FDCAN_ActivateNotification(
-            device, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0U);
+            device,
+            FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_ERROR_WARNING |
+                FDCAN_IT_ERROR_PASSIVE | FDCAN_IT_BUS_OFF,
+            0U);
     }
     if (status != HAL_OK)
     {
@@ -56,6 +59,24 @@ HAL_StatusTypeDef RsBus_Init(rs_bus_t *bus, FDCAN_HandleTypeDef *device,
 
     bus->ready = true;
     return HAL_OK;
+}
+
+void RsBus_HandleErrorIsr(rs_bus_t *bus, uint32_t interrupt_flags)
+{
+    if ((bus == NULL) || !bus->ready)
+    {
+        return;
+    }
+
+    if ((interrupt_flags & FDCAN_IT_BUS_OFF) != 0U)
+    {
+        bus->bus_off = true;
+    }
+}
+
+bool RsBus_BusOff(const rs_bus_t *bus)
+{
+    return (bus != NULL) && bus->bus_off;
 }
 
 void RsBus_Stop(rs_bus_t *bus)
@@ -88,7 +109,7 @@ HAL_StatusTypeDef RsBus_Send(rs_bus_t *bus, uint32_t id,
 {
     FDCAN_TxHeaderTypeDef header = { 0 };
 
-    if ((bus == NULL) || !bus->ready || (data == NULL))
+    if ((bus == NULL) || !bus->ready || bus->bus_off || (data == NULL))
     {
         return HAL_ERROR;
     }

@@ -20,7 +20,17 @@ typedef enum
 } action_cmd_t;
 
 extern volatile action_cmd_t action_pending;
+extern volatile uint8_t action_pnp_f_trigger;
+extern volatile uint8_t action_pnp_b_trigger;
 extern HAL_StatusTypeDef action_last_result;
+
+/**
+ * @brief 更新动作层使用的两个 PNP 触发状态
+ * @param trigger_f PNP_F 触发状态
+ * @param trigger_b PNP_B 触发状态
+ * @retval None
+ */
+void Action_UpdatePnp(uint8_t trigger_f, uint8_t trigger_b);
 
 /**
  * @brief 提交一个机构动作
