@@ -52,6 +52,7 @@ bool J4310_BuildMit(uint8_t motor_id,
                     float kd,
                     float torque_nm,
                     can_frame_t *frame);
+bool J4310_SetTorqueLimit(uint8_t motor_id, float torque_limit_nm);
 bool J4310_OnFrame(const can_frame_t *frame, uint32_t tick_ms);
 bool J4310_GetFeedback(uint8_t motor_id, j4310_feedback_t *feedback);
 bool J4310_SetOnlineMitEnabled(uint8_t motor_id, bool enabled);

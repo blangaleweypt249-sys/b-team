@@ -8,6 +8,14 @@
 #define UPPER_ENABLE_CONVEYOR  (1U << 1)
 #define UPPER_ENABLE_GRIPPER   (1U << 2)
 #define UPPER_STATE_PAYLOAD_SIZE 20U
+#define UPPER_PC_RPM_TO_RAD_S    0.10471975512f
+#define UPPER_PC_RAD_S_TO_RPM    9.54929658551f
+#define UPPER_PC_M3508_CURRENT_SCALE (20.0f / 16384.0f)
+#define UPPER_PC_M2006_CURRENT_SCALE (10.0f / 10000.0f)
+static const uint8_t UPPER_PC_HANDSHAKE_MAGIC[UPPER_PC_HANDSHAKE_PAYLOAD_SIZE] =
+{
+    'H', '7', '2', '3'
+};
 
 static uint16_t UpperPcLink_ReadU16(const uint8_t *data)
 {
@@ -46,34 +54,123 @@ static void UpperPcLink_WriteU32(uint8_t *data, uint32_t value)
     data[3] = (uint8_t)(value >> 24U);
 }
 
+static void UpperPcLink_ReadGuiPid(const uint8_t *data,
+                                   upper_pid_cfg_t *cfg,
+                                   bool m3508,
+                                   bool speed_loop)
+{
+    float current_scale;
+
+    current_scale = m3508 ? UPPER_PC_M3508_CURRENT_SCALE :
+                             UPPER_PC_M2006_CURRENT_SCALE;
+    if (speed_loop)
+    {
+        cfg->kp = UpperPcLink_ReadFloat(data + 0U) * current_scale *
+                  UPPER_PC_RAD_S_TO_RPM;
+        cfg->ki = UpperPcLink_ReadFloat(data + 4U) * current_scale *
+                  UPPER_PC_RAD_S_TO_RPM;
+        cfg->kd = UpperPcLink_ReadFloat(data + 8U) * current_scale *
+                  UPPER_PC_RAD_S_TO_RPM;
+        cfg->integral_limit = UpperPcLink_ReadFloat(data + 12U) *
+                              UPPER_PC_RPM_TO_RAD_S;
+        cfg->output_limit = UpperPcLink_ReadFloat(data + 16U) * current_scale;
+    }
+    else
+    {
+        cfg->kp = UpperPcLink_ReadFloat(data + 0U) * UPPER_PC_RPM_TO_RAD_S;
+        cfg->ki = UpperPcLink_ReadFloat(data + 4U) * UPPER_PC_RPM_TO_RAD_S;
+        cfg->kd = UpperPcLink_ReadFloat(data + 8U) * UPPER_PC_RPM_TO_RAD_S;
+        cfg->integral_limit = UpperPcLink_ReadFloat(data + 12U);
+        cfg->output_limit = UpperPcLink_ReadFloat(data + 16U) *
+                            UPPER_PC_RPM_TO_RAD_S;
+    }
+}
+
 static bool UpperPcLink_DecodeTarget(const pc_frame_t *frame,
                                      upper_target_t *target)
 {
     uint16_t enable_mask;
     const uint8_t *value;
+    bool extended;
+    bool position_mode;
 
     if ((frame == NULL) || (target == NULL) ||
-        (frame->payload_len != UPPER_PC_CMD_PAYLOAD_SIZE))
+        ((frame->type != PC_MSG_UPPER_CMD) &&
+         (frame->type != PC_MSG_UPPER_POSITION_CMD)) ||
+        ((frame->payload_len != UPPER_PC_CMD_PAYLOAD_SIZE) &&
+         (frame->payload_len != UPPER_PC_EXTENDED_POSITION_CMD_PAYLOAD_SIZE)))
     {
         return false;
     }
 
     (void)memset(target, 0, sizeof(*target));
+    position_mode = frame->type == PC_MSG_UPPER_POSITION_CMD;
+    extended = frame->payload_len == UPPER_PC_EXTENDED_POSITION_CMD_PAYLOAD_SIZE;
+    if (extended && !position_mode)
+    {
+        return false;
+    }
+    target->position_mode = position_mode;
     enable_mask = UpperPcLink_ReadU16(frame->payload);
     value = &frame->payload[2];
 
     target->arm.enabled = (enable_mask & UPPER_ENABLE_ARM) != 0U;
     target->conveyor.enabled = (enable_mask & UPPER_ENABLE_CONVEYOR) != 0U;
     target->gripper.enabled = (enable_mask & UPPER_ENABLE_GRIPPER) != 0U;
+    target->arm.position_mode = position_mode;
+    target->conveyor.position_mode = position_mode;
+    target->gripper.position_mode = position_mode;
+    target->arm.pid_update = extended;
+    target->conveyor.pid_update = extended;
+    target->gripper.pid_update = extended;
 
     target->arm.grip_pos_rad = UpperPcLink_ReadFloat(value + 0U);
     target->arm.grip_vel_rad_s = UpperPcLink_ReadFloat(value + 4U);
     target->arm.grip_kp = UpperPcLink_ReadFloat(value + 8U);
     target->arm.grip_kd = UpperPcLink_ReadFloat(value + 12U);
-    target->arm.m3508_vel_rad_s[0] = UpperPcLink_ReadFloat(value + 16U);
-    target->arm.m3508_vel_rad_s[1] = UpperPcLink_ReadFloat(value + 20U);
-    target->conveyor.m2006_vel_rad_s = UpperPcLink_ReadFloat(value + 24U);
-    target->gripper.m2006_vel_rad_s = UpperPcLink_ReadFloat(value + 28U);
+    target->arm.grip_torque_nm = extended ? UpperPcLink_ReadFloat(value + 16U) : 0.0f;
+    target->arm.grip_torque_limit_nm = extended ?
+                                       UpperPcLink_ReadFloat(value + 20U) :
+                                       UPPER_J4310_TORQUE_MAP_MAX_NM;
+    if (extended)
+    {
+        target->arm.m3508_pos_rad[0] = UpperPcLink_ReadFloat(value + 24U);
+        target->arm.m3508_pos_rad[1] = UpperPcLink_ReadFloat(value + 28U);
+        target->conveyor.m2006_pos_rad = UpperPcLink_ReadFloat(value + 32U);
+        target->gripper.m2006_pos_rad = UpperPcLink_ReadFloat(value + 36U);
+        UpperPcLink_ReadGuiPid(value + 40U,
+                               &target->arm.m3508_speed_pid,
+                               true,
+                               true);
+        UpperPcLink_ReadGuiPid(value + 60U,
+                               &target->arm.m3508_position_pid,
+                               true,
+                               false);
+        UpperPcLink_ReadGuiPid(value + 80U,
+                               &target->conveyor.m2006_speed_pid,
+                               false,
+                               true);
+        UpperPcLink_ReadGuiPid(value + 100U,
+                               &target->conveyor.m2006_position_pid,
+                               false,
+                               false);
+        target->gripper.m2006_speed_pid = target->conveyor.m2006_speed_pid;
+        target->gripper.m2006_position_pid = target->conveyor.m2006_position_pid;
+    }
+    else if (position_mode)
+    {
+        target->arm.m3508_pos_rad[0] = UpperPcLink_ReadFloat(value + 16U);
+        target->arm.m3508_pos_rad[1] = UpperPcLink_ReadFloat(value + 20U);
+        target->conveyor.m2006_pos_rad = UpperPcLink_ReadFloat(value + 24U);
+        target->gripper.m2006_pos_rad = UpperPcLink_ReadFloat(value + 28U);
+    }
+    else
+    {
+        target->arm.m3508_vel_rad_s[0] = UpperPcLink_ReadFloat(value + 16U);
+        target->arm.m3508_vel_rad_s[1] = UpperPcLink_ReadFloat(value + 20U);
+        target->conveyor.m2006_vel_rad_s = UpperPcLink_ReadFloat(value + 24U);
+        target->gripper.m2006_vel_rad_s = UpperPcLink_ReadFloat(value + 28U);
+    }
     return true;
 }
 
@@ -92,6 +189,18 @@ static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
 
     switch (frame->type)
     {
+    case PC_MSG_HANDSHAKE:
+        if ((frame->payload_len == UPPER_PC_HANDSHAKE_PAYLOAD_SIZE) &&
+            (memcmp(frame->payload,
+                    UPPER_PC_HANDSHAKE_MAGIC,
+                    UPPER_PC_HANDSHAKE_PAYLOAD_SIZE) == 0))
+        {
+            UpperPcLink_Accept(link, frame);
+            link->handshake_sequence = frame->sequence;
+            link->handshake_pending = true;
+        }
+        break;
+
     case PC_MSG_HEARTBEAT:
         if (frame->payload_len == 0U)
         {
@@ -109,6 +218,7 @@ static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
         break;
 
     case PC_MSG_UPPER_CMD:
+    case PC_MSG_UPPER_POSITION_CMD:
     {
         upper_target_t target;
 
@@ -172,6 +282,43 @@ bool UpperPcLink_IsTimedOut(const upper_pc_link_t *link, uint32_t tick_ms)
     }
 
     return (tick_ms - link->last_rx_tick_ms) > UPPER_PC_TIMEOUT_MS;
+}
+
+bool UpperPcLink_HasHandshakePending(const upper_pc_link_t *link)
+{
+    return (link != NULL) && link->handshake_pending;
+}
+
+uint16_t UpperPcLink_GetHandshakeSequence(const upper_pc_link_t *link)
+{
+    return (link != NULL) ? link->handshake_sequence : 0U;
+}
+
+size_t UpperPcLink_BuildHandshakeAck(const upper_pc_link_t *link,
+                                     uint8_t *output,
+                                     size_t output_size)
+{
+    if ((link == NULL) || !link->handshake_pending)
+    {
+        return 0U;
+    }
+
+    return PcProtocol_Encode(PC_MSG_ACK,
+                             link->handshake_sequence,
+                             UPPER_PC_HANDSHAKE_MAGIC,
+                             UPPER_PC_HANDSHAKE_PAYLOAD_SIZE,
+                             output,
+                             output_size);
+}
+
+void UpperPcLink_MarkHandshakeAckSent(upper_pc_link_t *link,
+                                      uint16_t sequence)
+{
+    if ((link != NULL) && link->handshake_pending &&
+        (link->handshake_sequence == sequence))
+    {
+        link->handshake_pending = false;
+    }
 }
 
 size_t UpperPcLink_BuildState(upper_pc_link_t *link,

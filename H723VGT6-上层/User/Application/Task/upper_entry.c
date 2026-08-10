@@ -108,6 +108,28 @@ static void UpperEntry_ProcessCmd(void)
     }
 }
 
+static void UpperEntry_SendHandshakeAck(void)
+{
+    size_t frame_size;
+    uint16_t sequence;
+
+    if (!UpperPcLink_HasHandshakePending(&upper_pc_link) ||
+        !CommRuntime_PcTxReady())
+    {
+        return;
+    }
+
+    sequence = UpperPcLink_GetHandshakeSequence(&upper_pc_link);
+    frame_size = UpperPcLink_BuildHandshakeAck(&upper_pc_link,
+                                               upper_tx_buffer,
+                                               sizeof(upper_tx_buffer));
+    if ((frame_size > 0U) &&
+        CommRuntime_PcTransmit(upper_tx_buffer, (uint16_t)frame_size))
+    {
+        UpperPcLink_MarkHandshakeAckSent(&upper_pc_link, sequence);
+    }
+}
+
 static void UpperEntry_SendState(uint32_t tick_ms)
 {
     size_t frame_size;
@@ -116,6 +138,7 @@ static void UpperEntry_SendState(uint32_t tick_ms)
     {
         return;
     }
+    UpperEntry_SendHandshakeAck();
     if ((tick_ms % UPPER_STATE_PERIOD_MS) != 0U)
     {
         return;

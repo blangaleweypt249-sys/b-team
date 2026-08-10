@@ -9,6 +9,7 @@
 #define J4310_FEEDBACK_ID_MAX 0x0FU
 #define J4310_KP_MAX          500.0f
 #define J4310_KD_MAX          5.0f
+#define J4310_TORQUE_MAX_NM   10.0f
 #define J4310_CMD_CLEAR_FAULT 0xFBU
 #define J4310_CMD_ENABLE      0xFCU
 #define J4310_CMD_DISABLE     0xFDU
@@ -322,6 +323,20 @@ bool J4310_BuildMit(uint8_t motor_id,
     frame->data[6] = (uint8_t)(((kd_raw & 0x0FU) << 4U) |
                                (torque >> 8U));
     frame->data[7] = (uint8_t)torque;
+    return true;
+}
+
+bool J4310_SetTorqueLimit(uint8_t motor_id, float torque_limit_nm)
+{
+    j4310_context_t *context;
+
+    context = J4310_Find(motor_id);
+    if ((context == NULL) || !J4310_IsFinite(torque_limit_nm) ||
+        (torque_limit_nm <= 0.0f) || (torque_limit_nm > J4310_TORQUE_MAX_NM))
+    {
+        return false;
+    }
+    context->limits.torque_max_nm = torque_limit_nm;
     return true;
 }
 

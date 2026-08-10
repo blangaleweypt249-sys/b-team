@@ -17,8 +17,11 @@ typedef enum
 {
     PC_MSG_HEARTBEAT = 0x01,
     PC_MSG_ESTOP = 0x02,
+    PC_MSG_HANDSHAKE = 0x03,
     PC_MSG_UPPER_CMD = 0x10,
     PC_MSG_LOWER_CMD = 0x11,
+    /* Position targets accept the legacy 34-byte and extended 122-byte layouts. */
+    PC_MSG_UPPER_POSITION_CMD = 0x12,
     PC_MSG_ROBOT_STATE = 0x20,
     PC_MSG_ACK = 0x7E,
     PC_MSG_FAULT = 0x7F

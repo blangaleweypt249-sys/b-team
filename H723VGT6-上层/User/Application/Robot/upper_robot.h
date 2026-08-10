@@ -11,6 +11,7 @@
 
 typedef struct
 {
+    bool position_mode;
     arm_target_t arm;
     conveyor_target_t conveyor;
     gripper_target_t gripper;

@@ -87,7 +87,8 @@ void UpperRobot_Control1ms(upper_robot_t *robot, uint32_t tick_ms)
         return;
     }
 
-    /* Fixed order: state/targets -> module control -> CAN scheduling. */
+    /* Build one target snapshot, stage every module, then dispatch CAN frames
+     * only after J4310/M3508/M2006 targets are all ready for this 1 ms cycle. */
     if (!Arm_Calc(&robot->target.arm, &arm_output) ||
         !Conveyor_Calc(&robot->target.conveyor, &conveyor_output) ||
         !Gripper_Calc(&robot->target.gripper, &gripper_output) ||
