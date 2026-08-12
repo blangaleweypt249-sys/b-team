@@ -1,0 +1,35 @@
+# 金色足球感知参数配置
+# 相机内参 (640x480, 来自 biaoding/camera.yaml)
+camera:
+  fx: 657.5551152642361
+  fy: 656.3202788734417
+  cx: 314.7869474017467
+  cy: 191.0288244576825
+  # 畸变系数
+  d0: 0.2552196052871585
+  d1: -1.0293197399852791
+  d2: -0.012673932388104929
+  d3: 0.0027336147522840394
+  d4: 1.5452004344167767
+
+# 外参: 相机相对于MID360雷达的位姿
+# 雷达坐标系: X前 Y左 Z上
+# 相机在雷达右侧198mm, 平行安装
+extrinsic:
+  x: 0.0        # 前后偏移(m)
+  y: -0.198     # 左右偏移(m), 右侧为负
+  z: 0.0        # 上下偏移(m)
+  roll: 0.0     # 旋转(弧度)
+  pitch: 0.0
+  yaw: 0.0
+
+# 距离滤波
+filter:
+  min_distance: 0.1    # 最小有效距离(m)
+  max_distance: 10.0   # 最大有效距离(m)
+  distance_alpha: 0.7  # EMA平滑系数 (越大越平滑)
+
+# YOLO检测
+detection:
+  model_path: /home/husky/Ling_shi/runs/segment/gold_ball/weights/best.pt
+  conf_threshold: 0.5
