@@ -39,7 +39,7 @@ class FieldLocalizer(Node):
         self.declare_parameter('allowed_max_x', 11.0)
         self.declare_parameter('allowed_min_y', 0.0)
         self.declare_parameter('allowed_max_y', 6.0)
-        self.declare_parameter('zones.names', [])
+        self.declare_parameter('zones.names', rclpy.Parameter.Type.STRING_ARRAY)
 
         # 多帧取均值可减小 FAST-LIO 刚启动时的短暂抖动对比赛原点的影响。
         self._sample_count = int(self.get_parameter('initial_sample_count').value)
@@ -62,7 +62,7 @@ class FieldLocalizer(Node):
         names = self.get_parameter('zones.names').value
         for name in names:
             # 每个区域使用 [min_x, max_x, min_y, max_y] 的四元素数组配置。
-            self.declare_parameter(f'zones.{name}', [])
+            self.declare_parameter(f'zones.{name}', rclpy.Parameter.Type.DOUBLE_ARRAY)
             bounds = self.get_parameter(f'zones.{name}').value
             if len(bounds) != 4:
                 self.get_logger().warning(f'区域 {name} 的边界参数无效，已忽略。')

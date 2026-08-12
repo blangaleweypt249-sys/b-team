@@ -2,6 +2,8 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -24,19 +26,22 @@ def generate_launch_description():
     )
 
     # 红蓝块检测+测距节点
+    block_model_path = PathJoinSubstitution([
+        FindPackageShare('block_perception'), 'models', 'best.pt',
+    ])
     distance_node = Node(
         package='block_perception',
         executable='block_distance_node',
         name='block_distance_node',
         output='screen',
         parameters=[{
-            'model_path': '/home/husky/TR/src/yolo/runs/segment/blue_red/weights/best.pt',
+            'model_path': block_model_path,
             'conf_threshold': 0.75,
             'iou_threshold': 0.45,
             'red_class_name': 'red',
             'blue_class_name': 'blue',
             'distance_alpha': 0.7,
-        }],    
+        }],
     )
 
     return LaunchDescription([

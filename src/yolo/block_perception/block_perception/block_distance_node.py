@@ -23,6 +23,8 @@
   Z: 上方为正
 """
 
+import os
+
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -32,6 +34,28 @@ from geometry_msgs.msg import PointStamped
 from cv_bridge import CvBridge
 import cv2
 from ultralytics import YOLO
+
+try:
+    from ament_index_python.packages import get_package_share_directory
+except ImportError:
+    get_package_share_directory = None
+
+
+def _default_model_path():
+    """优先查找随包安装的模型，fallback 到工作区源码目录。"""
+    if get_package_share_directory is not None:
+        try:
+            pkg = get_package_share_directory('block_perception')
+            path = os.path.join(pkg, 'models', 'best.pt')
+            if os.path.exists(path):
+                return path
+        except Exception:
+            pass
+    # Fallback: 工作区源码相对路径
+    src_root = os.path.normpath(os.path.join(
+        os.path.dirname(__file__), '..', '..', 'runs', 'segment',
+        'blue_red', 'weights', 'best.pt'))
+    return src_root
 
 
 # ---- 深度估计参数 ----
@@ -46,7 +70,7 @@ class BlockDistanceNode(Node):
         super().__init__('block_distance_node')
 
         # ---- 参数 ----
-        self.declare_parameter('model_path', '/home/husky/TR/src/yolo/blue_red/blue_red/runs/seg_train/weights/best.pt')
+        self.declare_parameter('model_path', _default_model_path())
         self.declare_parameter('conf_threshold', 0.5)
         self.declare_parameter('iou_threshold', 0.45)
         self.declare_parameter('red_class_name', 'red')

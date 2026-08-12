@@ -2,6 +2,8 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -22,13 +24,16 @@ def generate_launch_description():
     )
 
     # 球距离融合节点
+    ball_model_path = PathJoinSubstitution([
+        FindPackageShare('ball_perception'), 'models', 'best.pt',
+    ])
     distance_node = Node(
         package='ball_perception',
         executable='ball_distance_node',
         name='ball_distance_node',
         output='screen',
         parameters=[{
-            'model_path': '/home/husky/Ling_shi/runs/segment/gold_ball/weights/best.pt',
+            'model_path': ball_model_path,
             'conf_threshold': 0.5,
             # 外参: 相机在雷达右侧198mm
             'extrinsic_x': 0.0,

@@ -1,3 +1,0 @@
-[console_scripts]
-block_detector = yolo_3d_detect_pkg.block_detector:main
-vision_detector = yolo_3d_detect_pkg.vision_detector:main
