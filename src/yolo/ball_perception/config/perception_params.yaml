@@ -30,6 +30,8 @@ filter:
   distance_alpha: 0.7  # EMA平滑系数 (越大越平滑)
 
 # YOLO检测
+# 注意: 模型实际路径优先由 launch 文件通过参数传入
+# (share/ball_perception/models/best.pt)，此处为文档参考
 detection:
-  model_path: /home/husky/Ling_shi/runs/segment/gold_ball/weights/best.pt
+  model_path: models/best.pt
   conf_threshold: 0.5

@@ -10,8 +10,10 @@ camera:
   max_depth_mm: 10000.0
 
 # YOLO 检测
+# 注意: 模型实际路径优先由 launch 文件通过参数传入
+# (share/block_perception/models/best.pt)，此处为文档参考
 detection:
-  model_path: /home/husky/TR/src/yolo/runs/segment/blue_red/weights/best.pt
+  model_path: models/best.pt
   conf_threshold: 0.5
   iou_threshold: 0.45
   red_class_name: red

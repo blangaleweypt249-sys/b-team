@@ -5,13 +5,14 @@
 - **系统说明**：[系统说明.md](docs/系统说明.md)
 - **感知层框架说明**：[感知层框架说明.md](docs/感知层框架说明.md)
 - **串口通信协议**：[串口通信协议.md](docs/串口通信协议.md)
+- **克隆与部署指南**：[克隆与部署指南.md](docs/克隆与部署指南.md)
 - **构建与运行**：见下文
 
 ## 快速开始
 
 ```bash
 source /opt/ros/humble/setup.bash
-colcon build --packages-select competition_perception competition_gateway ball_perception --cmake-args -DBUILD_TESTING=OFF
+colcon build --symlink-install --cmake-args -DBUILD_TESTING=OFF
 source install/setup.bash
 ```
 
@@ -19,6 +20,7 @@ source install/setup.bash
 
 1. 启动 FAST-LIO 里程计与 RGB-D 相机
 2. 启动 MID360 雷达
-3. `ros2 launch competition_perception competition_stack.launch.py` - 比赛感知栈
-4. `ros2 launch ball_perception perception_launch.py` - 球感知栈
-5. `ros2 run competition_gateway serial_gateway` - 串口网关
+3. `ros2 launch common_launch_pkg common_launch.py` - 一键启动全部模块
+4. `ros2 launch common_launch_pkg lidar_driver.launch.py` - 仅雷达驱动+里程计
+5. `ros2 launch common_launch_pkg perception_nodes.launch.py` - 仅感知节点
+6. `ros2 launch common_launch_pkg serial_gateway.launch.py` - 仅串口网关

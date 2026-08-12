@@ -1,6 +1,12 @@
+import os
 from setuptools import setup
 
 package_name = 'block_perception'
+
+# 红蓝块 YOLO 模型文件（相对于本 setup.py 的位置）
+_blue_red_model = os.path.join(
+    os.path.dirname(__file__), '..', 'runs', 'segment',
+    'blue_red', 'weights', 'best.pt')
 
 setup(
     name=package_name,
@@ -12,6 +18,8 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config', ['config/perception_params.yaml']),
         ('share/' + package_name + '/launch', ['launch/perception_launch.py']),
+        # 安装红蓝块模型：share/block_perception/models/blue_red_best.pt
+        ('share/' + package_name + '/models', [_blue_red_model]),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

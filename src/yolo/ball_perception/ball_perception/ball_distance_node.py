@@ -17,6 +17,8 @@
   /perception/ball_overlay   (sensor_msgs/Image)       - 检测+测距叠加图
 """
 
+import os
+
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -28,13 +30,35 @@ from cv_bridge import CvBridge
 import cv2
 from ultralytics import YOLO
 
+try:
+    from ament_index_python.packages import get_package_share_directory
+except ImportError:
+    get_package_share_directory = None
+
+
+def _default_model_path():
+    """优先查找随包安装的模型，fallback 到工作区源码目录。"""
+    if get_package_share_directory is not None:
+        try:
+            pkg = get_package_share_directory('ball_perception')
+            path = os.path.join(pkg, 'models', 'best.pt')
+            if os.path.exists(path):
+                return path
+        except Exception:
+            pass
+    # Fallback: 工作区源码相对路径
+    src_root = os.path.normpath(os.path.join(
+        os.path.dirname(__file__), '..', '..', 'runs', 'segment',
+        'gold_ball', 'weights', 'best.pt'))
+    return src_root
+
 
 class BallDistanceNode(Node):
     def __init__(self):
         super().__init__('ball_distance_node')
 
         # ---- 参数 ----
-        self.declare_parameter('model_path', '/home/husky/Ling_shi/runs/segment/gold_ball/weights/best.pt')
+        self.declare_parameter('model_path', _default_model_path())
         self.declare_parameter('conf_threshold', 0.5)
         self.declare_parameter('camera_frame', 'camera_link')
         self.declare_parameter('lidar_frame', 'livox_frame')
