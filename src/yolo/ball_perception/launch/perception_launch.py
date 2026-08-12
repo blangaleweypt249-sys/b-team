@@ -1,0 +1,50 @@
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    pkg_dir = get_package_share_directory('ball_perception')
+
+    # USB相机节点
+    camera_node = Node(
+        package='ball_perception',
+        executable='usb_camera_node',
+        name='usb_camera_node',
+        output='screen',
+        parameters=[{
+            'device_id': 2,
+            'width': 640,
+            'height': 480,
+            'fps': 30,
+        }],
+    )
+
+    # 球距离融合节点
+    distance_node = Node(
+        package='ball_perception',
+        executable='ball_distance_node',
+        name='ball_distance_node',
+        output='screen',
+        parameters=[{
+            'model_path': '/home/husky/Ling_shi/runs/segment/gold_ball/weights/best.pt',
+            'conf_threshold': 0.5,
+            # 外参: 相机在雷达右侧198mm
+            'extrinsic_x': 0.0,
+            'extrinsic_y': -0.198,
+            'extrinsic_z': 0.0,
+            'extrinsic_roll': 0.0,
+            'extrinsic_pitch': 0.0,
+            'extrinsic_yaw': 0.0,
+            # 距离滤波
+            'min_distance': 0.1,
+            'max_distance': 10.0,
+            'distance_alpha': 0.7,
+        }],
+    )
+
+    return LaunchDescription([
+        camera_node,
+        distance_node,
+    ])

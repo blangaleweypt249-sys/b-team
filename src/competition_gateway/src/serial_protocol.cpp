@@ -12,17 +12,23 @@ constexpr std::size_t k_type_offset = 2;
 constexpr std::size_t k_sequence_offset = 3;
 constexpr std::size_t k_flags_offset = 4;
 constexpr std::size_t k_payload_offset = 5;
-constexpr std::size_t k_checksum_offset = 29;
-constexpr std::size_t k_tail_0_offset = 30;
-constexpr std::size_t k_tail_1_offset = 31;
+
+// 感知帧 (44 字节) 偏移
+constexpr std::size_t k_perception_checksum_offset = 41;
+constexpr std::size_t k_perception_tail_0_offset = 42;
+constexpr std::size_t k_perception_tail_1_offset = 43;
+
+// 位置帧 (24 字节) 偏移
+constexpr std::size_t k_position_checksum_offset = 21;
+constexpr std::size_t k_position_tail_0_offset = 22;
+constexpr std::size_t k_position_tail_1_offset = 23;
 
 void SerialProtocol_WriteFloat(
-  std::array<uint8_t, k_tx_frame_size> * frame,
+  uint8_t * data,
   std::size_t offset,
   float value)
 {
-  // 使用 memcpy 避免通过指针类型转换访问 float 产生未定义行为。
-  std::memcpy(frame->data() + offset, &value, sizeof(value));
+  std::memcpy(data + offset, &value, sizeof(value));
 }
 
 }  // namespace
@@ -48,19 +54,46 @@ std::array<uint8_t, k_tx_frame_size> SerialProtocol_EncodePerception(
   frame[k_sequence_offset] = sequence;
   frame[k_flags_offset] = data.flags;
 
-  SerialProtocol_WriteFloat(&frame, k_payload_offset, data.field_x_m);
-  SerialProtocol_WriteFloat(&frame, k_payload_offset + 4, data.field_y_m);
-  SerialProtocol_WriteFloat(&frame, k_payload_offset + 8, data.field_z_m);
-  SerialProtocol_WriteFloat(&frame, k_payload_offset + 12, data.target_x_m);
-  SerialProtocol_WriteFloat(&frame, k_payload_offset + 16, data.target_y_m);
-  SerialProtocol_WriteFloat(&frame, k_payload_offset + 20, data.target_z_m);
+  // 块在球前面
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset, data.red_x_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 4, data.red_y_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 8, data.red_z_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 12, data.blue_x_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 16, data.blue_y_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 20, data.blue_z_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 24, data.ball_x_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 28, data.ball_y_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 32, data.ball_z_m);
 
-  // 校验范围不含帧头、校验位和帧尾，便于下位机使用同一算法验证。
-  frame[k_checksum_offset] = SerialProtocol_Checksum(
+  frame[k_perception_checksum_offset] = SerialProtocol_Checksum(
     frame.data() + k_type_offset,
-    k_checksum_offset - k_type_offset);
-  frame[k_tail_0_offset] = k_frame_tail_0;
-  frame[k_tail_1_offset] = k_frame_tail_1;
+    k_perception_checksum_offset - k_type_offset);
+  frame[k_perception_tail_0_offset] = k_frame_tail_0;
+  frame[k_perception_tail_1_offset] = k_frame_tail_1;
+  return frame;
+}
+
+std::array<uint8_t, k_tx_position_frame_size> SerialProtocol_EncodePosition(
+  const position_data_t & data,
+  uint8_t sequence)
+{
+  std::array<uint8_t, k_tx_position_frame_size> frame{};
+  frame[0] = k_tx_header_0;
+  frame[1] = k_tx_header_1;
+  frame[k_type_offset] = k_tx_position_type;
+  frame[k_sequence_offset] = sequence;
+  frame[k_flags_offset] = data.flags;
+
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset, data.field_x_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 4, data.field_y_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 8, data.field_z_m);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 12, data.field_w);
+
+  frame[k_position_checksum_offset] = SerialProtocol_Checksum(
+    frame.data() + k_type_offset,
+    k_position_checksum_offset - k_type_offset);
+  frame[k_position_tail_0_offset] = k_frame_tail_0;
+  frame[k_position_tail_1_offset] = k_frame_tail_1;
   return frame;
 }
 

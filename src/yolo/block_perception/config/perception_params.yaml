@@ -1,0 +1,22 @@
+# 红蓝块感知参数配置
+
+# Orbbec 相机配置
+camera:
+  color_width: 1280
+  color_height: 720
+  depth_width: 0          # 0 = 使用默认
+  depth_height: 0
+  min_depth_mm: 20.0
+  max_depth_mm: 10000.0
+
+# YOLO 检测
+detection:
+  model_path: /home/husky/TR/src/yolo/runs/segment/blue_red/weights/best.pt
+  conf_threshold: 0.5
+  iou_threshold: 0.45
+  red_class_name: red
+  blue_class_name: blue
+
+# 距离滤波
+filter:
+  distance_alpha: 0.7     # EMA 平滑系数
