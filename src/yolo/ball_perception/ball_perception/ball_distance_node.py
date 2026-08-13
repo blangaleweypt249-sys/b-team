@@ -76,16 +76,24 @@ class BallDistanceNode(Node):
         self.declare_parameter('d3', 0.0027336147522840394)
         self.declare_parameter('d4', 1.5452004344167767)
 
-        # 外参: 相机在雷达右侧198mm, 平行安装
+        # 外参: 相机在雷达右侧17.3cm、后方3.5cm, 平行安装
         # 雷达坐标系: X前 Y左 Z上 (ROS标准)
         # 相机坐标系: Z前 X右 Y下 (OpenCV标准)
-        # 相机在雷达坐标系中的位置: (0, -0.198, 0)
-        self.declare_parameter('extrinsic_x', 0.0)      # 相机在雷达坐标系中的x位置
-        self.declare_parameter('extrinsic_y', -0.198)   # 相机在雷达坐标系中的y位置 (右侧为负)
+        # 相机在雷达坐标系中的位置: (-0.035, -0.173, 0)
+        self.declare_parameter('extrinsic_x', -0.035)   # 相机在雷达坐标系中的x位置 (后方为负)
+        self.declare_parameter('extrinsic_y', -0.173)   # 相机在雷达坐标系中的y位置 (右侧为负)
         self.declare_parameter('extrinsic_z', 0.0)      # 相机在雷达坐标系中的z位置
         self.declare_parameter('extrinsic_roll', 0.0)   # 旋转(弧度)
         self.declare_parameter('extrinsic_pitch', 0.0)
         self.declare_parameter('extrinsic_yaw', 0.0)
+
+        # 输出坐标转换: 雷达坐标系 → 夹爪坐标系
+        # 雷达在夹爪后方17.4cm、左方17.3cm，雷达朝向夹爪右方(约-90°)
+        # 夹爪坐标系: X前 Y左 Z上 (与车体一致)
+        self.declare_parameter('output_to_gripper', True)
+        self.declare_parameter('lidar_to_gripper_x', -0.174)   # 雷达在夹爪坐标系中的x(后方为负)
+        self.declare_parameter('lidar_to_gripper_y', 0.173)    # 雷达在夹爪坐标系中的y(左方为正)
+        self.declare_parameter('lidar_to_gripper_yaw_deg', -90.0)  # 雷达相对于夹爪的偏航角
 
         # 距离滤波参数
         self.declare_parameter('min_distance', 0.1)     # 最小有效距离(m)
@@ -162,6 +170,27 @@ class BallDistanceNode(Node):
             f'外参矩阵 (雷达->相机):\n{self.T_lidar_to_cam}\n'
             f'相机位置(雷达系): ({ext_x}, {ext_y}, {ext_z})'
         )
+
+        # 输出坐标转换: 雷达 → 夹爪
+        self.output_to_gripper = bool(self.get_parameter('output_to_gripper').value)
+        if self.output_to_gripper:
+            gx = self.get_parameter('lidar_to_gripper_x').value
+            gy = self.get_parameter('lidar_to_gripper_y').value
+            gyaw = radians(float(self.get_parameter('lidar_to_gripper_yaw_deg').value))
+            # 旋转矩阵: 雷达坐标系→夹爪坐标系 (绕Z轴旋转)
+            self.R_lidar_to_gripper = np.array([
+                [np.cos(gyaw), -np.sin(gyaw), 0],
+                [np.sin(gyaw),  np.cos(gyaw), 0],
+                [0, 0, 1],
+            ], dtype=np.float64)
+            self.t_lidar_to_gripper = np.array([gx, gy, 0.0], dtype=np.float64)
+            self.get_logger().info(
+                f'输出坐标系: 夹爪 (雷达在夹爪系: x={gx}, y={gy}, yaw={np.degrees(gyaw):.1f}°)'
+            )
+        else:
+            self.R_lidar_to_gripper = None
+            self.t_lidar_to_gripper = None
+            self.get_logger().info('输出坐标系: 雷达')
 
         # 距离滤波
         self.min_dist = self.get_parameter('min_distance').value
@@ -330,18 +359,26 @@ class BallDistanceNode(Node):
         ball_3d_cam_h = np.array([ball_3d_cam[0], ball_3d_cam[1], ball_3d_cam[2], 1.0])
         ball_3d_lidar = (T_cam_to_lidar @ ball_3d_cam_h)[:3]
 
+        # 坐标转换: 雷达坐标系 → 夹爪坐标系 (输出用)
+        if self.output_to_gripper:
+            ball_3d_output = self.R_lidar_to_gripper @ ball_3d_lidar + self.t_lidar_to_gripper
+            output_frame = 'gripper'
+        else:
+            ball_3d_output = ball_3d_lidar
+            output_frame = 'livox_frame'
+
         # 发布距离
         dist_msg = Float32()
         dist_msg.data = final_dist
         self.dist_pub.publish(dist_msg)
 
-        # 发布3D位置 (雷达坐标系)
+        # 发布3D位置
         pos_msg = PointStamped()
-        pos_msg.header.frame_id = 'livox_frame'
+        pos_msg.header.frame_id = output_frame
         pos_msg.header.stamp = self.get_clock().now().to_msg()
-        pos_msg.point.x = float(ball_3d_lidar[0])
-        pos_msg.point.y = float(ball_3d_lidar[1])
-        pos_msg.point.z = float(ball_3d_lidar[2])
+        pos_msg.point.x = float(ball_3d_output[0])
+        pos_msg.point.y = float(ball_3d_output[1])
+        pos_msg.point.z = float(ball_3d_output[2])
         self.pos_pub.publish(pos_msg)
 
         # 绘制叠加图
@@ -349,7 +386,7 @@ class BallDistanceNode(Node):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         cv2.putText(overlay, f'Points: {len(mask_depths)}', (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-        cv2.putText(overlay, f'Pos: ({ball_3d_lidar[0]:.2f}, {ball_3d_lidar[1]:.2f}, {ball_3d_lidar[2]:.2f})',
+        cv2.putText(overlay, f'Pos({output_frame}): ({ball_3d_output[0]:.2f}, {ball_3d_output[1]:.2f}, {ball_3d_output[2]:.2f})',
                     (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
         # 标记球中心

@@ -34,14 +34,19 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'model_path': ball_model_path,
-            'conf_threshold': 0.5,
-            # 外参: 相机在雷达右侧198mm
-            'extrinsic_x': 0.0,
-            'extrinsic_y': -0.198,
+                            'conf_threshold': 0.5,
+            # 相机外参: 相机在雷达右侧17.3cm、后方3.5cm
+            'extrinsic_x': -0.035,
+            'extrinsic_y': -0.173,
             'extrinsic_z': 0.0,
             'extrinsic_roll': 0.0,
             'extrinsic_pitch': 0.0,
             'extrinsic_yaw': 0.0,
+            # 输出坐标转换: 雷达→夹爪
+            'output_to_gripper': True,
+            'lidar_to_gripper_x': -0.174,
+            'lidar_to_gripper_y': 0.173,
+            'lidar_to_gripper_yaw_deg': -90.0,
             # 距离滤波
             'min_distance': 0.1,
             'max_distance': 10.0,

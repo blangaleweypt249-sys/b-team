@@ -27,18 +27,32 @@
 """
 
 from launch import LaunchDescription
-from launch.actions import LogInfo, RegisterEventHandler, TimerAction
+from launch.actions import DeclareLaunchArgument, LogInfo, RegisterEventHandler, TimerAction
 from launch.event_handlers import OnProcessExit
-from launch.substitutions import PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    # ---- 配置文件路径 ----
-    fyt_pos_config = PathJoinSubstitution([
-        FindPackageShare('fyt_pos'), 'config', 'field.yaml',
+    # ---- 队伍参数 → 配置文件 ----
+    team = LaunchConfiguration('team')
+
+    declare_team_cmd = DeclareLaunchArgument(
+        'team', default_value='blue',
+        description='队伍选择: blue=蓝方(bottom_left) red=红方(bottom_right)'
+    )
+
+    # 根据队伍选择配置文件
+    from launch.substitutions import PythonExpression
+    config_file = PythonExpression([
+        "'", FindPackageShare('fyt_pos'), "/config/",
+        "('field_red.yaml' if '", team, "' == 'red' else 'field.yaml')",
+        "'"
     ])
+
+    # ---- 配置文件路径 ----
+    fyt_pos_config = config_file
 
     # ---- fyt_pos: 场地定位节点 ----
     field_localizer = Node(
@@ -82,12 +96,20 @@ def generate_launch_description():
         parameters=[{
             'model_path': ball_model_path,
             'conf_threshold': 0.5,
-            'extrinsic_x': 0.0,
-            'extrinsic_y': -0.198,
+            # 相机外参: 相机在雷达右侧17.3cm、后方3.5cm
+            'extrinsic_x': -0.035,
+            'extrinsic_y': -0.173,
             'extrinsic_z': 0.0,
             'extrinsic_roll': 0.0,
             'extrinsic_pitch': 0.0,
             'extrinsic_yaw': 0.0,
+            # 输出坐标转换: 雷达→夹爪
+            # 雷达在夹爪后方17.4cm、左方17.3cm，雷达朝向夹爪右方
+            'output_to_gripper': True,
+            'lidar_to_gripper_x': -0.174,
+            'lidar_to_gripper_y': 0.173,
+            'lidar_to_gripper_yaw_deg': -90.0,
+            # 距离滤波
             'min_distance': 0.1,
             'max_distance': 10.0,
             'distance_alpha': 0.7,
@@ -139,6 +161,9 @@ def generate_launch_description():
         )
 
     ld = LaunchDescription()
+
+    # 声明参数
+    ld.add_action(declare_team_cmd)
 
     # 阶段 1: 启动相机节点（无外部依赖）
     ld.add_action(LogInfo(msg='[感知节点] 正在启动 USB 相机 (金球检测)...'))

@@ -48,19 +48,18 @@ def start_corner_transform(
     field_length_m: float,
     field_width_m: float,
 ) -> Point2D:
-    """将里程计局部坐标映射为以本方下角为原点的第一象限坐标。"""
-    transforms = {
-        # 两种起点均从本方下角开始：前进和朝赛场中线移动都为正。
-        'bottom_left': 0.0,
-        'bottom_right': 0.0,
-    }
-    if start_corner not in transforms:
+    """将里程计局部坐标映射为以本方起点为原点的队伍相对坐标。
+
+    bottom_left:  蓝方，原点在左下角，X 向右增大（机器人右方 = +X）。
+    bottom_right: 红方，原点在右下角，X 向左增大（机器人左方 = +X），翻转 X 轴。
+    两种起点的前进方向均为 +Y。
+    """
+    if start_corner == 'bottom_left':
+        return local_point
+    elif start_corner == 'bottom_right':
+        return Point2D(-local_point.x, local_point.y)
+    else:
         raise ValueError(f'未知起始角: {start_corner}')
-    rotation = transforms[start_corner]
-    return Point2D(
-        cos(rotation) * local_point.x - sin(rotation) * local_point.y,
-        sin(rotation) * local_point.x + cos(rotation) * local_point.y,
-    )
 
 
 def lidar_to_base_pose(

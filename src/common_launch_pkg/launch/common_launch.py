@@ -60,6 +60,7 @@ def generate_launch_description():
     xfer_format = LaunchConfiguration('xfer_format')
     serial_device = LaunchConfiguration('serial_device')
     baudrate = LaunchConfiguration('baudrate')
+    team = LaunchConfiguration('team')
 
     # ---- 声明启动参数 ----
     declare_rviz_cmd = DeclareLaunchArgument(
@@ -77,6 +78,10 @@ def generate_launch_description():
     declare_baudrate_cmd = DeclareLaunchArgument(
         'baudrate', default_value='115200',
         description='串口波特率'
+    )
+    declare_team_cmd = DeclareLaunchArgument(
+        'team', default_value='blue',
+        description='队伍选择: blue=蓝方(bottom_left) red=红方(bottom_right)'
     )
 
     # ---- 模块 launch 文件路径 ----
@@ -108,7 +113,10 @@ def generate_launch_description():
         period=6.0,
         actions=[
             LogInfo(msg='========== [集成启动] 阶段 2/3: 启动感知节点模块 =========='),
-            IncludeLaunchDescription(perception_launch),
+            IncludeLaunchDescription(
+                perception_launch,
+                launch_arguments={'team': team}.items(),
+            ),
         ],
     )
 
@@ -135,6 +143,7 @@ def generate_launch_description():
     ld.add_action(declare_xfer_format_cmd)
     ld.add_action(declare_serial_cmd)
     ld.add_action(declare_baudrate_cmd)
+    ld.add_action(declare_team_cmd)
 
     # 启动概要日志
     ld.add_action(LogInfo(msg=''))

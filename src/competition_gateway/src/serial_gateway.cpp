@@ -224,8 +224,8 @@ private:
     }
 
     SerialGateway_Read();
-    SerialGateway_SendPerception();
     SerialGateway_SendPosition();
+    SerialGateway_SendPerception();
     SerialGateway_PublishConnectionTimeout();
   }
 

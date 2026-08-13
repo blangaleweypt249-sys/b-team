@@ -32,13 +32,16 @@ def test_converts_lidar_pose_to_base_pose_using_extrinsics():
 
 
 def test_maps_each_bottom_start_to_its_local_first_quadrant():
+    # 蓝方 bottom_left: 坐标不变
     left_position = start_corner_transform(
-        Point2D(2.0, 0.0), 'bottom_right', 11.0, 6.0
-    )
-    right_position = start_corner_transform(
-        Point2D(2.0, 1.0), 'bottom_right', 11.0, 6.0
+        Point2D(2.0, 0.0), 'bottom_left', 11.0, 6.0
     )
     assert left_position.x == pytest.approx(2.0)
     assert left_position.y == pytest.approx(0.0)
-    assert right_position.x == pytest.approx(2.0)
+
+    # 红方 bottom_right: 翻转 X 轴
+    right_position = start_corner_transform(
+        Point2D(2.0, 1.0), 'bottom_right', 11.0, 6.0
+    )
+    assert right_position.x == pytest.approx(-2.0)
     assert right_position.y == pytest.approx(1.0)
