@@ -120,6 +120,8 @@ class FieldLocalizer(Node):
             field_position = local_position
         field_x = field_position.x
         field_y = field_position.y
+        # 场地坐标系下的朝向：车体 yaw 减去场地旋转基准。
+        field_yaw = yaw - heading
         pose = PoseStamped()
         pose.header = message.header
         # 该 frame 只表示平面比赛场地，不替代 TF 树中的全局地图坐标系。
@@ -127,7 +129,9 @@ class FieldLocalizer(Node):
         pose.pose.position.x = field_x
         pose.pose.position.y = field_y
         pose.pose.position.z = message.pose.pose.position.z
-        pose.pose.orientation = message.pose.pose.orientation
+        # 将 field_yaw 编码为绕 Z 轴的四元数，供串口网关提取。
+        pose.pose.orientation.z = sin(field_yaw / 2.0)
+        pose.pose.orientation.w = cos(field_yaw / 2.0)
         self._pose_pub.publish(pose)
 
         # 先按业务区域分类，再将超出全场边界的结果提升为明确的安全告警。

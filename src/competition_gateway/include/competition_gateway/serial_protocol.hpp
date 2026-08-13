@@ -50,13 +50,13 @@ struct perception_data_t
   uint8_t flags = 0U;
 };
 
-// 位置帧数据: 机器人赛场坐标 + 旋转角度
+// 位置帧数据: 机器人赛场坐标 + 偏航角
 struct position_data_t
 {
   float field_x_m = 0.0F;
   float field_y_m = 0.0F;
   float field_z_m = 0.0F;
-  float field_w = 0.0F;
+  float field_yaw = 0.0F;
   uint8_t flags = 0U;
 };
 

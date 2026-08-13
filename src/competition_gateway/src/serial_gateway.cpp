@@ -8,6 +8,7 @@
 #include <array>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -179,7 +180,12 @@ private:
     position_cache_.data.field_x_m = static_cast<float>(message->pose.position.x);
     position_cache_.data.field_y_m = static_cast<float>(message->pose.position.y);
     position_cache_.data.field_z_m = static_cast<float>(message->pose.position.z);
-    position_cache_.data.field_w = static_cast<float>(message->pose.orientation.w);
+    // 从四元数提取绕 Z 轴的偏航角（弧度），场地坐标系下的机器人朝向。
+    const float w = static_cast<float>(message->pose.orientation.w);
+    const float x = static_cast<float>(message->pose.orientation.x);
+    const float y = static_cast<float>(message->pose.orientation.y);
+    const float z = static_cast<float>(message->pose.orientation.z);
+    position_cache_.data.field_yaw = std::atan2(2.0F * (w * z + x * y), 1.0F - 2.0F * (y * y + z * z));
     position_cache_.field_pose_time = this->now();
     position_cache_.field_pose_received = true;
   }
