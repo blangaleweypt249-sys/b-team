@@ -87,7 +87,7 @@ std::array<uint8_t, k_tx_position_frame_size> SerialProtocol_EncodePosition(
   SerialProtocol_WriteFloat(frame.data(), k_payload_offset, data.field_x_m);
   SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 4, data.field_y_m);
   SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 8, data.field_z_m);
-  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 12, data.field_w);
+  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 12, data.field_yaw);
 
   frame[k_position_checksum_offset] = SerialProtocol_Checksum(
     frame.data() + k_type_offset,
