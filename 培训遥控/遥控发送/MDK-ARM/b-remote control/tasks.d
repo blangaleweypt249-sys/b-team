@@ -1,0 +1,16 @@
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/tasks.c
+b-remote control\tasks.o: D:\keil5\ARM\ARMCC\Bin\..\include\stdlib.h
+b-remote control\tasks.o: D:\keil5\ARM\ARMCC\Bin\..\include\string.h
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
+b-remote control\tasks.o: D:\keil5\ARM\ARMCC\Bin\..\include\stddef.h
+b-remote control\tasks.o: D:\keil5\ARM\ARMCC\Bin\..\include\stdint.h
+b-remote control\tasks.o: ../Core/Inc/FreeRTOSConfig.h
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F/portmacro.h
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/timers.h
+b-remote control\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/stack_macros.h

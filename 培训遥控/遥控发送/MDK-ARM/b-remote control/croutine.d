@@ -1,0 +1,14 @@
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/croutine.c
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
+b-remote control\croutine.o: D:\keil5\ARM\ARMCC\Bin\..\include\stddef.h
+b-remote control\croutine.o: D:\keil5\ARM\ARMCC\Bin\..\include\stdint.h
+b-remote control\croutine.o: ../Core/Inc/FreeRTOSConfig.h
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F/portmacro.h
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/croutine.h
+b-remote control\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h

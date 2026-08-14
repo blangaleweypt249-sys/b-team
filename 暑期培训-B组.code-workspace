@@ -1,0 +1,50 @@
+{
+    "folders": [
+        {
+            "name": "上层",
+            "path": "上层分支/H723VGT6-上层"
+        },
+        {
+            "name": "底盘",
+            "path": "底盘分支/chassis"
+        },
+        {
+            "name": "底盘解算",
+            "path": "底盘分支/底盘解算"
+        },
+        {
+            "name": "抬升",
+            "path": "抬升分支"
+        },
+        {
+            "name": "培训遥控",
+            "path": "培训遥控"
+        },
+        {
+            "name": "小电脑",
+            "path": "小电脑分支"
+        }
+    ],
+    "settings": {
+        "git.autoRepositoryDetection": "subFolders",
+        "git.openRepositoryInParentFolders": "always",
+        "git.repositoryScanMaxDepth": 2,
+        "scm.alwaysShowRepositories": true,
+        "stm32cube-ide-clangd.enable": false,
+        "cmake.cmakePath": "cube-cmake",
+        "cmake.preferredGenerators": [
+            "Ninja"
+        ],
+        "cmake.exclude": [
+            "D:/桌面/暑期培训/暑期培训-B组/上层分支/H723VGT6-上层",
+            "D:/桌面/暑期培训/暑期培训-B组/底盘分支/底盘解算",
+            "D:/桌面/暑期培训/暑期培训-B组/抬升分支",
+            "D:/桌面/暑期培训/暑期培训-B组/培训遥控",
+            "D:/桌面/暑期培训/暑期培训-B组/小电脑分支"
+        ],
+        "C_Cpp.default.compileCommands": [
+            "${workspaceFolder:上层}/../../.vscode/compile_commands_upper.json",
+            "${workspaceFolder:底盘}/build/Debug/compile_commands.json"
+        ]
+    }
+}
