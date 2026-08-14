@@ -87,6 +87,14 @@ void Error_Handler(void);
 #define KEY_8_GPIO_Port GPIOD
 #define KEY_7_Pin GPIO_PIN_13
 #define KEY_7_GPIO_Port GPIOD
+#define SW_6_Pin GPIO_PIN_5
+#define SW_6_GPIO_Port GPIOD
+#define SW_5_Pin GPIO_PIN_6
+#define SW_5_GPIO_Port GPIOD
+#define SW_4_Pin GPIO_PIN_0
+#define SW_4_GPIO_Port GPIOE
+#define SW_3_Pin GPIO_PIN_1
+#define SW_3_GPIO_Port GPIOE
 #define LORA_M0_Pin GPIO_PIN_14
 #define LORA_M0_GPIO_Port GPIOD
 #define LORA_M1_Pin GPIO_PIN_15
@@ -97,14 +105,6 @@ void Error_Handler(void);
 #define LORA_RX_GPIO_Port GPIOC
 #define LORA_AUX_Pin GPIO_PIN_8
 #define LORA_AUX_GPIO_Port GPIOC
-#define SW_6_Pin GPIO_PIN_5
-#define SW_6_GPIO_Port GPIOD
-#define SW_5_Pin GPIO_PIN_6
-#define SW_5_GPIO_Port GPIOD
-#define SW_4_Pin GPIO_PIN_0
-#define SW_4_GPIO_Port GPIOE
-#define SW_3_Pin GPIO_PIN_1
-#define SW_3_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
 

@@ -3,8 +3,10 @@
 
 #include "main.h"
 
-#define REMOTE_LINK_FRAME_SIZE 16U
-#define REMOTE_LINK_TIMEOUT_MS 500U
+#define REMOTE_LINK_FRAME_OVERHEAD 7U
+#define REMOTE_LINK_MAX_PAYLOAD_SIZE 6U
+#define REMOTE_LINK_MAX_FRAME_SIZE (REMOTE_LINK_FRAME_OVERHEAD + REMOTE_LINK_MAX_PAYLOAD_SIZE)
+#define REMOTE_LINK_TIMEOUT_MS 200U
 #define REMOTE_LINK_SWITCH_COUNT 6U
 #define REMOTE_LINK_KEY_COUNT 12U
 #define REMOTE_LINK_LORA_CONFIG_SIZE 6U
@@ -44,6 +46,7 @@ extern volatile uint32_t remote_link_uart_errors;
 extern volatile uint32_t remote_link_rx_bytes;
 extern volatile uint32_t remote_link_rx_callbacks;
 extern volatile uint32_t remote_link_rx_arm_errors;
+extern volatile uint32_t remote_link_forward_errors;
 extern volatile uint32_t remote_link_lora_config_attempts;
 extern volatile remote_link_lora_config_status_t remote_link_lora_config_status;
 extern volatile uint8_t remote_link_lora_config_readback[REMOTE_LINK_LORA_CONFIG_SIZE];

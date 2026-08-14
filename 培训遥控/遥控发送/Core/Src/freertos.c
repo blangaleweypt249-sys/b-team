@@ -26,7 +26,6 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "mymain.h"
-#include "Remote.h"
 #include "RemoteInput.h"
 
 /* USER CODE END Includes */
@@ -48,12 +47,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-osThreadId_t loraTaskHandle;
-const osThreadAttr_t loraTask_attributes = {
-  .name = "loraTask",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
 
 /* USER CODE END Variables */
 /* Definitions for remoteTask */
@@ -73,7 +66,6 @@ const osThreadAttr_t debugTask_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-void StartLoraTask(void *argument);
 
 /* USER CODE END FunctionPrototypes */
 
@@ -116,7 +108,7 @@ void MX_FREERTOS_Init(void) {
   debugTaskHandle = osThreadNew(StartDebugTask, NULL, &debugTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  loraTaskHandle = osThreadNew(StartLoraTask, NULL, &loraTask_attributes);
+  /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -141,7 +133,8 @@ void StartRemoteTask(void *argument)
   for(;;)
   {
     Remote_Update();
-    osDelay(5);
+    Remote_Send();
+    osDelay(1);
   }
   /* USER CODE END StartRemoteTask */
 }
@@ -161,29 +154,14 @@ void StartDebugTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    /* VOFA output disabled: USART2 on the receiver forwards raw LoRa frames. */
-    /* MyMain_Debug(); */
-    osDelay(50);
+    MyMain_Debug();
+    osDelay(1);
   }
   /* USER CODE END StartDebugTask */
 }
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
-void StartLoraTask(void *argument)
-{
-  uint32_t next_wake_tick;
-
-  (void)argument;
-  next_wake_tick = osKernelGetTickCount();
-
-  for (;;)
-  {
-    Remote_SendLoRa();
-    next_wake_tick += REMOTE_LINK_PERIOD_MS;
-    (void)osDelayUntil(next_wake_tick);
-  }
-}
 
 /* USER CODE END Application */
 

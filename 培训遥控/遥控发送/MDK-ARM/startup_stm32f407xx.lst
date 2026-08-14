@@ -854,9 +854,10 @@ er/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Middlewares/Third_Part
 y/FreeRTOS/Source/include -I../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RT
 OS_V2 -I../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F -I../
 Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -I.\RTE\_b
--remote_control -ID:\keil5\ARM\PACK\ARM\CMSIS\5.0.1\CMSIS\Include --predefine="
-__UVISION_VERSION SETA 543" --predefine="STM32F407xx SETA 1" --predefine="_RTE_
- SETA 1" --list=startup_stm32f407xx.lst startup_stm32f407xx.s
+-remote_control -ID:\keil5\pack\ARM\CMSIS\5.9.0\CMSIS\Core\Include --predefine=
+"__UVISION_VERSION SETA 537" --predefine="_RTE_ SETA 1" --predefine="STM32F407x
+x SETA 1" --predefine="_RTE_ SETA 1" --list=startup_stm32f407xx.lst startup_stm
+32f407xx.s
 
 
 

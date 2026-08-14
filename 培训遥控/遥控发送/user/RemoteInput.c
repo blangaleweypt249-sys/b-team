@@ -2,11 +2,14 @@
 #include "adc.h"
 #include "gpio.h"
 
-#define REMOTE_DEBOUNCE_SAMPLES 4U
-
 #define REMOTE_AXIS_MAX 255U        /* 摇杆输出最大值 */
 #define REMOTE_AXIS_CENTER 128U     /* 摇杆输出中心值 */
+#define REMOTE_SHOULDER_RAW_MIN 675U
+#define REMOTE_SHOULDER_RAW_IDLE_MIN 2030U
+#define REMOTE_SHOULDER_RAW_IDLE_MAX 2070U
+#define REMOTE_SHOULDER_RAW_MAX 3722U
 #define REMOTE_ADC_MARGIN 10U       /* 模拟量抗抖余量 */
+#define REMOTE_DEBOUNCE_SAMPLES 10U /* 数字输入稳定 10 ms 后生效 */
 #define REMOTE_BEEP_MS 30U          /* 按键提示音时长(ms) */
 #define REMOTE_BEEP_GAP_MS 100U     /* 上电提示音间隔(ms) */
 
@@ -56,10 +59,10 @@ static uint8_t remote_last_sw[REMOTE_SWITCH_COUNT];
 static uint8_t remote_last_key[REMOTE_KEY_COUNT];
 static uint8_t remote_sw_candidate[REMOTE_SWITCH_COUNT];
 static uint8_t remote_key_candidate[REMOTE_KEY_COUNT];
-static uint8_t remote_sw_debounce[REMOTE_SWITCH_COUNT];
-static uint8_t remote_key_debounce[REMOTE_KEY_COUNT];
-static uint8_t remote_buzzer_active;
-static uint32_t remote_buzzer_deadline;
+static uint8_t remote_sw_count[REMOTE_SWITCH_COUNT];
+static uint8_t remote_key_count[REMOTE_KEY_COUNT];
+static uint32_t remote_beep_stop_ms;
+static uint8_t remote_beep_active;
 
 /**
  * @brief 将输入数值线性映射到指定范围
@@ -141,6 +144,31 @@ static uint16_t Remote_FilterAdc(uint16_t val, uint16_t prev)
 }
 
 /**
+ * @brief 将肩键两个方向的 ADC 行程转换为无方向的按动幅度
+ * @param raw 12 位 ADC 原始值
+ * @retval 肩键幅度，松开为 0，任一方向按到底为 1000
+ */
+static uint16_t Remote_ConvertShoulder(uint16_t raw)
+{
+    if (raw < REMOTE_SHOULDER_RAW_IDLE_MIN)
+    {
+        return (uint16_t)(REMOTE_SHOULDER_MAX -
+                          Remote_MapValue(raw,
+                                          REMOTE_SHOULDER_RAW_MIN,
+                                          REMOTE_SHOULDER_RAW_IDLE_MIN,
+                                          0U, REMOTE_SHOULDER_MAX));
+    }
+    if (raw > REMOTE_SHOULDER_RAW_IDLE_MAX)
+    {
+        return (uint16_t)Remote_MapValue(raw,
+                                         REMOTE_SHOULDER_RAW_IDLE_MAX,
+                                         REMOTE_SHOULDER_RAW_MAX,
+                                         0U, REMOTE_SHOULDER_MAX);
+    }
+    return 0U;
+}
+
+/**
  * @brief 根据单轴标定点将 ADC 原始值转换为 0 到 255
  * @param axis 摇杆轴序号
  * @param raw ADC 原始值
@@ -182,30 +210,8 @@ static uint8_t Remote_ReadLow(GPIO_TypeDef *port, uint16_t pin)
     return (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET) ? 1U : 0U;
 }
 
-/**
- * @brief 控制蜂鸣器输出一个短音
- * @param ms 提示音时长(ms)
- * @retval None
- */
-static void Remote_RequestBeep(uint32_t ms)
-{
-    HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
-    remote_buzzer_deadline = HAL_GetTick() + ms;
-    remote_buzzer_active = 1U;
-}
-
-static void Remote_UpdateBuzzer(void)
-{
-    if ((remote_buzzer_active != 0U) &&
-        ((int32_t)(HAL_GetTick() - remote_buzzer_deadline) >= 0))
-    {
-        HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);
-        remote_buzzer_active = 0U;
-    }
-}
-
-static uint8_t Remote_UpdateDebounced(uint8_t raw, uint8_t *stable,
-                                      uint8_t *candidate, uint8_t *count)
+static uint8_t Remote_Debounce(uint8_t raw, uint8_t *stable,
+                               uint8_t *candidate, uint8_t *count)
 {
     if (raw == *stable)
     {
@@ -213,25 +219,53 @@ static uint8_t Remote_UpdateDebounced(uint8_t raw, uint8_t *stable,
         *count = 0U;
         return 0U;
     }
-
     if (raw != *candidate)
     {
         *candidate = raw;
         *count = 1U;
         return 0U;
     }
-
     if (*count < REMOTE_DEBOUNCE_SAMPLES)
     {
         (*count)++;
     }
-    if (*count >= REMOTE_DEBOUNCE_SAMPLES)
+    if (*count < REMOTE_DEBOUNCE_SAMPLES)
     {
-        *stable = raw;
-        *count = 0U;
-        return 1U;
+        return 0U;
     }
-    return 0U;
+
+    *stable = raw;
+    *count = 0U;
+    return 1U;
+}
+
+static void Remote_StartBeep(void)
+{
+    HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
+    remote_beep_stop_ms = HAL_GetTick() + REMOTE_BEEP_MS;
+    remote_beep_active = 1U;
+}
+
+static void Remote_UpdateBeep(void)
+{
+    if ((remote_beep_active != 0U) &&
+        ((int32_t)(HAL_GetTick() - remote_beep_stop_ms) >= 0))
+    {
+        HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);
+        remote_beep_active = 0U;
+    }
+}
+
+/**
+ * @brief 控制蜂鸣器输出一个短音
+ * @param ms 提示音时长(ms)
+ * @retval None
+ */
+static void Remote_Beep(uint32_t ms)
+{
+    HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
+    HAL_Delay(ms);
+    HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);
 }
 
 /**
@@ -247,16 +281,17 @@ void Remote_Init(void)
     {
         remote_last_sw[i] = Remote_ReadLow(remote_sw_ports[i], remote_sw_pins[i]);
         remote_sw_candidate[i] = remote_last_sw[i];
-        remote_sw_debounce[i] = 0U;
+        remote_sw_count[i] = 0U;
         remote_data.switch_state[i] = remote_last_sw[i];
     }
     for (i = 0U; i < REMOTE_KEY_COUNT; i++)
     {
         remote_last_key[i] = Remote_ReadLow(remote_key_ports[i], remote_key_pins[i]);
         remote_key_candidate[i] = remote_last_key[i];
-        remote_key_debounce[i] = 0U;
+        remote_key_count[i] = 0U;
         remote_data.key_state[i] = remote_last_key[i];
     }
+    remote_beep_active = 0U;
 
     remote_adc_state = REMOTE_ADC_OK;
     if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)remote_shoulder_adc,
@@ -276,7 +311,12 @@ void Remote_Init(void)
     }
     __HAL_DMA_DISABLE_IT(hadc2.DMA_Handle, DMA_IT_HT | DMA_IT_TC);
 
-    Remote_RequestBeep(60U);
+    Remote_Beep(REMOTE_BEEP_MS);
+    HAL_Delay(REMOTE_BEEP_GAP_MS);
+    Remote_Beep(REMOTE_BEEP_MS);
+    HAL_Delay(REMOTE_BEEP_GAP_MS);
+    Remote_Beep(REMOTE_BEEP_MS);
+    HAL_Delay(REMOTE_BEEP_GAP_MS);
 }
 
 /**
@@ -290,7 +330,7 @@ void Remote_Update(void)
     uint8_t raw;
     uint8_t changed = 0U;
 
-    Remote_UpdateBuzzer();
+    Remote_UpdateBeep();
 
     if (remote_adc_state == REMOTE_ADC_OK)
     {
@@ -311,8 +351,8 @@ void Remote_Update(void)
             }
         }
 
-        remote_data.left_shoulder = remote_shoulder[0];
-        remote_data.right_shoulder = remote_shoulder[1];
+        remote_data.left_shoulder = Remote_ConvertShoulder(remote_shoulder[0]);
+        remote_data.right_shoulder = Remote_ConvertShoulder(remote_shoulder[1]);
         remote_data.right_x = Remote_ConvertAxis(0U, remote_axis_adc[0]);
         remote_data.right_y = Remote_ConvertAxis(1U, remote_axis_adc[1]);
         remote_data.left_x = Remote_ConvertAxis(2U, remote_axis_adc[2]);
@@ -322,9 +362,8 @@ void Remote_Update(void)
     for (i = 0U; i < REMOTE_SWITCH_COUNT; i++)
     {
         raw = Remote_ReadLow(remote_sw_ports[i], remote_sw_pins[i]);
-        if (Remote_UpdateDebounced(raw, &remote_last_sw[i],
-                                   &remote_sw_candidate[i],
-                                   &remote_sw_debounce[i]) != 0U)
+        if (Remote_Debounce(raw, &remote_last_sw[i],
+                            &remote_sw_candidate[i], &remote_sw_count[i]) != 0U)
         {
             changed = 1U;
         }
@@ -333,9 +372,8 @@ void Remote_Update(void)
     for (i = 0U; i < REMOTE_KEY_COUNT; i++)
     {
         raw = Remote_ReadLow(remote_key_ports[i], remote_key_pins[i]);
-        if (Remote_UpdateDebounced(raw, &remote_last_key[i],
-                                   &remote_key_candidate[i],
-                                   &remote_key_debounce[i]) != 0U)
+        if (Remote_Debounce(raw, &remote_last_key[i],
+                            &remote_key_candidate[i], &remote_key_count[i]) != 0U)
         {
             changed = 1U;
         }
@@ -343,6 +381,6 @@ void Remote_Update(void)
     }
     if (changed != 0U)
     {
-        Remote_RequestBeep(REMOTE_BEEP_MS);
+        Remote_StartBeep();
     }
 }

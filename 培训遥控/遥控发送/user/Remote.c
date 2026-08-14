@@ -1,27 +1,46 @@
 #include "Remote.h"
-#include "RemoteInput.h"
 #include "usart.h"
 
+#include <string.h>
+
+#define REMOTE_FRAME_HEADER_0       0xA5U
+#define REMOTE_FRAME_HEADER_1       0x5AU
+#define REMOTE_ID_LOCAL             0x01U
+#define REMOTE_ID_SECONDARY         0x02U
+#define REMOTE_TYPE_CONTROL         0x01U
+#define REMOTE_LOCAL_PAYLOAD_SIZE   6U
+#define REMOTE_SECOND_PAYLOAD_SIZE  2U
+#define REMOTE_FRAME_OVERHEAD       7U
+#define REMOTE_TX_BUFFER_SIZE       22U
+#define REMOTE_TX_PERIOD_LONG_MS    67U
+#define REMOTE_TX_PERIOD_SHORT_MS   66U
+#define REMOTE_TX_TIMEOUT_MS        10U
+#define REMOTE_SHOULDER_RELEASE_THRESHOLD 550U
+#define REMOTE_PE0_SWITCH_INDEX     3U
+#define E32_CONFIG_BAUDRATE         9600U
+#define E32_NORMAL_BAUDRATE         115200U
+#define E32_AUX_TIMEOUT_MS          3000U
+#define E32_UART_TIMEOUT_MS         300U
+#define E32_CONFIG_RETRY_COUNT      3U
+#define E32_MODE_SETTLE_MS          10U
+#define E32_COMMAND_SETTLE_MS       20U
+
+/* 遥控器输入数据，供后续下位机通信模块读取 */
 volatile remote_data_t remote_data;
-volatile uint32_t remote_tx_frames;
-volatile uint32_t remote_tx_attempts;
-volatile uint32_t remote_tx_busy_skips;
-volatile uint32_t remote_tx_errors;
-volatile uint32_t remote_tx_config_skips;
+volatile uint32_t remote_tx_error_count;
+volatile uint32_t remote_tx_frame_count;
+volatile uint32_t remote_tx_busy_skip_count;
+volatile uint32_t remote_tx_config_skip_count;
 volatile uint32_t remote_lora_config_attempts;
 volatile remote_lora_config_status_t remote_lora_config_status;
 volatile uint8_t remote_lora_config_readback[REMOTE_LORA_CONFIG_SIZE];
 
-static uint8_t remote_tx_sequence;
+static uint8_t remote_sequence;
+static uint32_t remote_next_tx_ms;
+static uint8_t remote_tx_phase;
+static uint8_t left_shoulder_pressed;
+static uint8_t right_shoulder_pressed;
 static uint8_t remote_lora_ready;
-
-#define E32_CONFIG_BAUDRATE 9600U
-#define E32_NORMAL_BAUDRATE 115200U
-#define E32_AUX_TIMEOUT_MS 3000U
-#define E32_UART_TIMEOUT_MS 300U
-#define E32_CONFIG_RETRY_COUNT 3U
-#define E32_MODE_SETTLE_MS 10U
-#define E32_COMMAND_SETTLE_MS 20U
 
 /* Address 6, 115200 8N1, 9.6 kbps air rate,
  * transparent mode, channel 6. */
@@ -67,6 +86,16 @@ static void Remote_LoRaFlushRx(void)
     }
 }
 
+static void Remote_LoRaSaveReadback(const uint8_t *config)
+{
+    uint8_t i;
+
+    for (i = 0U; i < REMOTE_LORA_CONFIG_SIZE; i++)
+    {
+        remote_lora_config_readback[i] = config[i];
+    }
+}
+
 static uint8_t Remote_LoRaConfigMatches(const uint8_t *config)
 {
     uint8_t i;
@@ -81,22 +110,13 @@ static uint8_t Remote_LoRaConfigMatches(const uint8_t *config)
     return 1U;
 }
 
-static void Remote_LoRaSaveReadback(const uint8_t *config)
-{
-    uint8_t i;
-
-    for (i = 0U; i < REMOTE_LORA_CONFIG_SIZE; i++)
-    {
-        remote_lora_config_readback[i] = config[i];
-    }
-}
-
 static uint8_t Remote_LoRaReadConfig(uint8_t *config)
 {
     uint8_t command[3] = {0xC1U, 0xC1U, 0xC1U};
 
     Remote_LoRaFlushRx();
-    if (HAL_UART_Transmit(&huart6, command, sizeof(command), E32_UART_TIMEOUT_MS) != HAL_OK)
+    if (HAL_UART_Transmit(&huart6, command, sizeof(command),
+                          E32_UART_TIMEOUT_MS) != HAL_OK)
     {
         return 0U;
     }
@@ -119,7 +139,8 @@ static uint8_t Remote_LoRaWriteConfig(void)
         command[i] = remote_lora_expected_config[i];
     }
     Remote_LoRaFlushRx();
-    if (HAL_UART_Transmit(&huart6, command, sizeof(command), E32_UART_TIMEOUT_MS) != HAL_OK)
+    if (HAL_UART_Transmit(&huart6, command, sizeof(command),
+                          E32_UART_TIMEOUT_MS) != HAL_OK)
     {
         return 0U;
     }
@@ -210,10 +231,31 @@ static void Remote_LoRaConfigure(void)
     remote_lora_config_status = REMOTE_LORA_CONFIG_READY;
 }
 
-static uint8_t Remote_Crc8(const uint8_t *data, uint32_t length)
+void Remote_LoRaInit(void)
+{
+    remote_sequence = 0U;
+    remote_next_tx_ms = HAL_GetTick();
+    remote_tx_phase = 0U;
+    left_shoulder_pressed = 0U;
+    right_shoulder_pressed = 0U;
+    remote_tx_error_count = 0U;
+    remote_tx_frame_count = 0U;
+    remote_tx_busy_skip_count = 0U;
+    remote_tx_config_skip_count = 0U;
+    remote_lora_config_attempts = 0U;
+    remote_lora_config_status = REMOTE_LORA_CONFIG_NOT_STARTED;
+    Remote_LoRaConfigure();
+}
+
+uint8_t Remote_LoRaReady(void)
+{
+    return remote_lora_ready;
+}
+
+static uint8_t Remote_Crc8(const uint8_t *data, uint8_t length)
 {
     uint8_t crc = 0U;
-    uint32_t i;
+    uint8_t i;
     uint8_t bit;
 
     for (i = 0U; i < length; i++)
@@ -228,101 +270,107 @@ static uint8_t Remote_Crc8(const uint8_t *data, uint32_t length)
     return crc;
 }
 
-void Remote_GetSnapshot(remote_data_t *snapshot)
+static uint8_t Remote_PackFrame(uint8_t *frame, uint8_t target_id,
+                                const uint8_t *payload, uint8_t payload_size)
 {
-    uint32_t primask;
+    frame[0] = REMOTE_FRAME_HEADER_0;
+    frame[1] = REMOTE_FRAME_HEADER_1;
+    frame[2] = target_id;
+    frame[3] = REMOTE_TYPE_CONTROL;
+    frame[4] = payload_size;
+    frame[5] = remote_sequence;
+    (void)memcpy(&frame[6], payload, payload_size);
+    frame[6U + payload_size] = Remote_Crc8(&frame[2],
+                                            (uint8_t)(4U + payload_size));
+    return (uint8_t)(REMOTE_FRAME_OVERHEAD + payload_size);
+}
 
-    if (snapshot == NULL)
+static uint8_t Remote_UpdateShoulder(uint16_t value, uint8_t pressed)
+{
+    if (pressed != 0U)
+    {
+        return (value > REMOTE_SHOULDER_RELEASE_THRESHOLD) ? 1U : 0U;
+    }
+    return (value >= REMOTE_SHOULDER_TRIGGER_THRESHOLD) ? 1U : 0U;
+}
+
+void Remote_Send(void)
+{
+    uint8_t tx_buffer[REMOTE_TX_BUFFER_SIZE];
+    uint8_t local_payload[REMOTE_LOCAL_PAYLOAD_SIZE];
+    uint8_t second_payload[REMOTE_SECOND_PAYLOAD_SIZE];
+    uint8_t local_buttons = 0U;
+    uint8_t local_switches = 0U;
+    uint8_t second_keys = 0U;
+    uint8_t second_switches = 0U;
+    uint8_t tx_length;
+    uint8_t i;
+    uint32_t now_ms = HAL_GetTick();
+
+    if ((int32_t)(now_ms - remote_next_tx_ms) < 0)
     {
         return;
     }
-
-    primask = __get_PRIMASK();
-    __disable_irq();
-    *snapshot = remote_data;
-    if (primask == 0U)
+    if (remote_tx_phase < 2U)
     {
-        __enable_irq();
+        remote_next_tx_ms = now_ms + REMOTE_TX_PERIOD_LONG_MS;
+        remote_tx_phase++;
     }
-}
-
-void Remote_LoRaInit(void)
-{
-    remote_tx_sequence = 0U;
-    remote_tx_frames = 0U;
-    remote_tx_attempts = 0U;
-    remote_tx_busy_skips = 0U;
-    remote_tx_errors = 0U;
-    remote_tx_config_skips = 0U;
-    remote_lora_config_attempts = 0U;
-    remote_lora_config_status = REMOTE_LORA_CONFIG_NOT_STARTED;
-    Remote_LoRaConfigure();
-}
-
-uint8_t Remote_LoRaReady(void)
-{
-    return remote_lora_ready;
-}
-
-void Remote_SendLoRa(void)
-{
-    remote_data_t snapshot;
-    uint8_t frame[REMOTE_LINK_FRAME_SIZE];
-    uint8_t switch_mask = 0U;
-    uint16_t key_mask = 0U;
-    uint8_t i;
-
-    remote_tx_attempts++;
+    else
+    {
+        remote_next_tx_ms = now_ms + REMOTE_TX_PERIOD_SHORT_MS;
+        remote_tx_phase = 0U;
+    }
 
     if (Remote_LoRaReady() == 0U)
     {
-        remote_tx_config_skips++;
+        remote_tx_config_skip_count++;
         return;
     }
     if (HAL_GPIO_ReadPin(LORA_AUX_GPIO_Port, LORA_AUX_Pin) == GPIO_PIN_RESET)
     {
-        remote_tx_busy_skips++;
+        remote_tx_busy_skip_count++;
         return;
     }
 
-    Remote_GetSnapshot(&snapshot);
-    for (i = 0U; i < REMOTE_SWITCH_COUNT; i++)
+    left_shoulder_pressed = Remote_UpdateShoulder(remote_data.left_shoulder,
+                                                   left_shoulder_pressed);
+    right_shoulder_pressed = Remote_UpdateShoulder(remote_data.right_shoulder,
+                                                    right_shoulder_pressed);
+    for (i = 0U; i < 6U; i++)
     {
-        switch_mask |= (uint8_t)((snapshot.switch_state[i] & 1U) << i);
+        local_buttons |= (uint8_t)(remote_data.key_state[i] << i);
+        second_keys |= (uint8_t)(remote_data.key_state[i + 6U] << i);
+        if (i != REMOTE_PE0_SWITCH_INDEX)
+        {
+            second_switches |= (uint8_t)(remote_data.switch_state[i] << i);
+        }
     }
-    for (i = 0U; i < REMOTE_KEY_COUNT; i++)
-    {
-        key_mask |= (uint16_t)((uint16_t)(snapshot.key_state[i] & 1U) << i);
-    }
+    local_buttons |= (uint8_t)(left_shoulder_pressed << 6U);
+    local_buttons |= (uint8_t)(right_shoulder_pressed << 7U);
+    local_switches = (uint8_t)(remote_data.switch_state[REMOTE_PE0_SWITCH_INDEX] & 1U);
 
-    frame[0] = 0xA5U;
-    frame[1] = 0x5AU;
-    frame[2] = 0x01U;
-    frame[3] = remote_tx_sequence;
-    frame[4] = (uint8_t)snapshot.left_shoulder;
-    frame[5] = (uint8_t)(snapshot.left_shoulder >> 8U);
-    frame[6] = (uint8_t)snapshot.right_shoulder;
-    frame[7] = (uint8_t)(snapshot.right_shoulder >> 8U);
-    frame[8] = snapshot.left_x;
-    frame[9] = snapshot.left_y;
-    frame[10] = snapshot.right_x;
-    frame[11] = snapshot.right_y;
-    frame[12] = switch_mask;
-    frame[13] = (uint8_t)key_mask;
-    frame[14] = (uint8_t)((key_mask >> 8U) & 0x0FU);
-    if (remote_adc_state != REMOTE_ADC_OK)
-    {
-        frame[14] |= 0x80U;
-    }
-    frame[15] = Remote_Crc8(frame, REMOTE_LINK_FRAME_SIZE - 1U);
+    local_payload[0] = remote_data.left_x;
+    local_payload[1] = remote_data.left_y;
+    local_payload[2] = remote_data.right_x;
+    local_payload[3] = remote_data.right_y;
+    local_payload[4] = local_buttons;
+    local_payload[5] = local_switches;
+    second_payload[0] = second_keys;
+    second_payload[1] = second_switches;
 
-    if (HAL_UART_Transmit(&huart6, frame, REMOTE_LINK_FRAME_SIZE, 10U) == HAL_OK)
+    tx_length = Remote_PackFrame(tx_buffer, REMOTE_ID_LOCAL,
+                                 local_payload, REMOTE_LOCAL_PAYLOAD_SIZE);
+    tx_length += Remote_PackFrame(&tx_buffer[tx_length], REMOTE_ID_SECONDARY,
+                                  second_payload, REMOTE_SECOND_PAYLOAD_SIZE);
+    if (HAL_UART_Transmit(&huart6, tx_buffer, tx_length,
+                          REMOTE_TX_TIMEOUT_MS) == HAL_OK)
     {
-        remote_tx_sequence++;
-        remote_tx_frames++;
+        remote_sequence++;
+        remote_tx_frame_count++;
     }
     else
     {
-        remote_tx_errors++;
+        remote_tx_error_count++;
     }
 }
