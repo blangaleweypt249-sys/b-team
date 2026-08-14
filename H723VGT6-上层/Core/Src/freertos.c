@@ -26,9 +26,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "comm_runtime.h"
-#include "flash_tool.h"
 #include "freertos_app.h"
 #include "upper_entry.h"
+#include "W25Qxx.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -55,6 +55,7 @@ volatile uint32_t freertos_heap_free_bytes;
 volatile uint32_t freertos_heap_min_ever_free_bytes;
 volatile uint32_t freertos_malloc_failed_count;
 volatile const char *freertos_stack_overflow_task_name;
+volatile w25q_status_t w25q_init_status = W25Q_ERROR_NOT_INIT;
 /* USER CODE END Variables */
 /* Definitions for appTask */
 osThreadId_t appTaskHandle;
@@ -211,9 +212,8 @@ void StartCommRxTask(void *argument)
   HAL_StatusTypeDef comm_status;
 
   (void)argument;
-  FlashTool_Init();
+  w25q_init_status = W25Q_PortInit();
   comm_status = CommRuntime_Init(commRxTaskHandle);
-  FlashTool_SendReady(comm_status == HAL_OK);
   if (comm_status != HAL_OK)
   {
     Error_Handler();

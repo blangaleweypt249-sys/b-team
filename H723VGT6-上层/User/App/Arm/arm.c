@@ -8,16 +8,19 @@
 #include "m3508.h"
 #include "upper_config.h"
 
+/* 功能：检查数值是否有限且位于正负限制内；用途：校验机械臂目标；返回 true 表示输入安全有效。 */
 static bool Arm_ValueWithin(float value, float limit)
 {
     return isfinite(value) && (value >= -limit) && (value <= limit);
 }
 
+/* 功能：检查数值是否为有限浮点数；用途：过滤机械臂命令中的异常值；返回 true 表示数值有效。 */
 static bool Arm_ValueFinite(float value)
 {
     return isfinite(value);
 }
 
+/* 功能：校验机械臂 PID 参数及上下限；用途：防止非法参数写入电机驱动；返回 true 表示配置可用。 */
 static bool Arm_PidValid(const upper_pid_cfg_t *cfg)
 {
     return (cfg != NULL) && isfinite(cfg->kp) && isfinite(cfg->ki) &&
@@ -27,12 +30,14 @@ static bool Arm_PidValid(const upper_pid_cfg_t *cfg)
            (cfg->integral_limit >= 0.0f) && (cfg->output_limit > 0.0f);
 }
 
+/* 功能：比较两组机械臂 PID 配置是否完全相同；用途：避免重复下发未变化的参数；返回 true 表示一致。 */
 static bool Arm_PidEqual(const upper_pid_cfg_t *left,
                          const upper_pid_cfg_t *right)
 {
     return memcmp(left, right, sizeof(*left)) == 0;
 }
 
+/* 功能：校验机械臂目标并转换为各电机命令；用途：生成单周期可统一下发的输出快照；返回 true 表示目标合法且转换完成。 */
 bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
 {
     uint32_t index;
@@ -82,6 +87,7 @@ bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
     }
 
     output->enabled = target->enabled;
+    output->m3508_enabled = target->m3508_enabled;
     output->j4310 = (motor_cmd_t)
     {
         .mode = MOTOR_CMD_MIT,
@@ -107,6 +113,7 @@ bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
     return true;
 }
 
+/* 功能：应用机械臂输出及可选 PID 更新；用途：把 J4310 和 M3508 命令提交给电机管理器；返回 true 表示全部设置成功。 */
 bool Arm_Apply(motor_manager_t *manager, const arm_output_t *output)
 {
     uint32_t index;
@@ -192,9 +199,9 @@ bool Arm_Apply(motor_manager_t *manager, const arm_output_t *output)
     for (index = 0U; index < UPPER_ARM_M3508_COUNT; index++)
     {
         success = MotorManager_SetEnabled(
-                      manager,
-                      (size_t)UPPER_MOTOR_ARM_M3508_1 + index,
-                      output->enabled) && success;
+            manager,
+            (size_t)UPPER_MOTOR_ARM_M3508_1 + index,
+                      output->m3508_enabled) && success;
     }
     return success;
 }

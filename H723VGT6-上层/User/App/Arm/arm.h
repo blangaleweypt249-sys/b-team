@@ -9,6 +9,8 @@
 typedef struct
 {
     bool enabled;
+    bool j4310_commanded;
+    bool m3508_enabled;
     bool position_mode;
     float grip_pos_rad;
     float grip_vel_rad_s;
@@ -26,6 +28,7 @@ typedef struct
 typedef struct
 {
     bool enabled;
+    bool m3508_enabled;
     motor_cmd_t j4310;
     motor_cmd_t m3508[UPPER_ARM_M3508_COUNT];
     bool pid_update;

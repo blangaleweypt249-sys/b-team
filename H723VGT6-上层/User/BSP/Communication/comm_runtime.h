@@ -81,8 +81,12 @@ void DmaCache_PrepareRx(void *buffer, size_t size);
 void DmaCache_CompleteRx(void *buffer, size_t size);
 
 extern volatile uint32_t comm_uart_rx_bytes[COMM_UART_CHANNEL_COUNT];
+extern volatile uint32_t comm_uart_rx_isr_bytes[COMM_UART_CHANNEL_COUNT];
+extern volatile uint32_t comm_uart_rx_event_count[COMM_UART_CHANNEL_COUNT];
 extern volatile uint32_t comm_uart_overrun_count[COMM_UART_CHANNEL_COUNT];
 extern volatile uint32_t comm_uart_error_count[COMM_UART_CHANNEL_COUNT];
+extern volatile uint32_t comm_uart_restart_count[COMM_UART_CHANNEL_COUNT];
+extern volatile uint32_t comm_uart_started_mask;
 extern volatile uint32_t comm_fdcan_rx_count[3];
 extern volatile uint32_t comm_notify_error_count;
 

@@ -24,8 +24,8 @@ const motor_cfg_t upper_motor_cfg[UPPER_MOTOR_COUNT] =
     },
     [UPPER_MOTOR_CONVEYOR_M2006] =
     {
-        "conveyor_m2006", MOTOR_MODEL_M2006,
-        CAN_BUS_AUX, NODE_CONVEYOR_M2006, UPPER_CONTROL_PERIOD_MS, 0U, true
+        "gate_m2006", MOTOR_MODEL_M2006,
+        CAN_BUS_AUX, NODE_GATE_M2006, UPPER_CONTROL_PERIOD_MS, 0U, true
     },
     [UPPER_MOTOR_GRIPPER_M2006] =
     {

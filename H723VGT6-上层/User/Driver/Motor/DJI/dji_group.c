@@ -5,6 +5,7 @@
 #define DJI_GROUP_ID_1_TO_4  0x200U
 #define DJI_GROUP_ID_5_TO_8  0x1FFU
 
+/* 功能：把 16 位有符号数写成大端字节；用途：编码 DJI 电机电流字段；无返回值表示结果写入 data。 */
 static void DjiGroup_WriteI16Be(uint8_t *data, int16_t value)
 {
     uint16_t raw;
@@ -14,6 +15,7 @@ static void DjiGroup_WriteI16Be(uint8_t *data, int16_t value)
     data[1] = (uint8_t)raw;
 }
 
+/* 功能：把四路电流命令打包为 DJI 分组 CAN 帧；用途：控制 1-4 或 5-8 号电机；返回 true 表示构帧成功。 */
 bool DjiGroup_BuildFrame(uint8_t start_motor_id,
                          const int16_t current_raw[DJI_GROUP_MOTOR_COUNT],
                          can_frame_t *frame)

@@ -23,9 +23,11 @@ typedef enum
 typedef enum
 {
     MOTOR_CMD_STOP,
+    MOTOR_CMD_GLOBAL_STOP,
     MOTOR_CMD_CURRENT,
     MOTOR_CMD_VELOCITY,
     MOTOR_CMD_POSITION,
+    MOTOR_CMD_POSITION_VELOCITY,
     MOTOR_CMD_MIT
 } motor_cmd_mode_t;
 

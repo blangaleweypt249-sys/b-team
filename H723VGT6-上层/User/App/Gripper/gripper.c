@@ -7,6 +7,7 @@
 #include "m2006.h"
 #include "upper_config.h"
 
+/* 功能：校验夹爪 PID 参数；用途：阻止非法增益进入 M2006 控制器；返回 true 表示配置有效。 */
 static bool Gripper_PidValid(const upper_pid_cfg_t *cfg)
 {
     return (cfg != NULL) && isfinite(cfg->kp) && isfinite(cfg->ki) &&
@@ -16,12 +17,14 @@ static bool Gripper_PidValid(const upper_pid_cfg_t *cfg)
            (cfg->integral_limit >= 0.0f) && (cfg->output_limit > 0.0f);
 }
 
+/* 功能：比较两组夹爪 PID 配置；用途：判断是否需要重复下发参数；返回 true 表示两者相同。 */
 static bool Gripper_PidEqual(const upper_pid_cfg_t *left,
                              const upper_pid_cfg_t *right)
 {
     return memcmp(left, right, sizeof(*left)) == 0;
 }
 
+/* 功能：校验夹爪目标并生成 M2006 命令；用途：把位置或速度目标转换为驱动输入；返回 true 表示转换完成。 */
 bool Gripper_Calc(const gripper_target_t *target,
                   gripper_output_t *output)
 {
@@ -32,7 +35,9 @@ bool Gripper_Calc(const gripper_target_t *target,
 
     if (target->position_mode)
     {
-        if (!isfinite(target->m2006_pos_rad))
+        if (!isfinite(target->m2006_pos_rad) ||
+            (target->m2006_pos_rad < -UPPER_M2006_POSITION_LIMIT_RAD) ||
+            (target->m2006_pos_rad > UPPER_M2006_POSITION_LIMIT_RAD))
         {
             return false;
         }
@@ -64,6 +69,7 @@ bool Gripper_Calc(const gripper_target_t *target,
     return true;
 }
 
+/* 功能：应用夹爪命令和可选 PID 参数；用途：向电机管理器提交目标与使能状态；返回 true 表示全部设置成功。 */
 bool Gripper_Apply(motor_manager_t *manager,
                    const gripper_output_t *output)
 {

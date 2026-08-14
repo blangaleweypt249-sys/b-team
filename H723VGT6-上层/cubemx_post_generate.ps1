@@ -12,15 +12,21 @@ $text = [IO.File]::ReadAllText($projectFile)
 $freertosFile = Join-Path $projectRoot 'Core\Src\freertos.c'
 $gccInclude = '../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1'
 $cmsisRtos2Include = '../Drivers/CMSIS/RTOS2/Include'
-$vofaInclude = '../User/Application/Vofa'
 $rvdsInclude = '../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F'
 $localGccInclude = '../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F'
 $localGccM7Include = '../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1'
+$obsoleteVofaInclude = '../User/Application/Vofa'
 
 # Keep the include paths aligned with the actual source tree.
 $text = $text.Replace(";$rvdsInclude", '')
 $text = $text.Replace(";$localGccInclude", '')
 $text = $text.Replace(";$localGccM7Include", '')
+$text = $text.Replace(";$obsoleteVofaInclude", '')
+$text = $text.Replace("$obsoleteVofaInclude;", '')
+
+# Motor movement test/debug code is not part of the production target.
+$vofaGroupPattern = '(?s)\s*<Group>\s*<GroupName>User/Application/Vofa</GroupName>.*?</Group>'
+$text = [regex]::Replace($text, $vofaGroupPattern, '', 1)
 
 # Remove any RVDS or locally generated ARM_CM4F/ARM_CM7 port entry.
 $portPaths = @(
@@ -39,36 +45,15 @@ $includePattern = '(?s)<IncludePath>([^<]*FreeRTOS/Source/include[^<]*)</Include
 $text = [regex]::Replace($text, $includePattern, {
     param($match)
     $value = $match.Groups[1].Value
-    $value = $value.Replace(";$rvdsInclude", '').Replace(";$localGccInclude", '').Replace(";$localGccM7Include", '')
+    $value = $value.Replace(";$rvdsInclude", '').Replace(";$localGccInclude", '').Replace(";$localGccM7Include", '').Replace(";$obsoleteVofaInclude", '').Replace("$obsoleteVofaInclude;", '')
     if ($value -notlike "*$gccInclude*") {
         $value += ";$gccInclude"
     }
     if ($value -notlike "*$cmsisRtos2Include*") {
         $value = "$cmsisRtos2Include;$value"
     }
-    if ($value -notlike "*$vofaInclude*") {
-        $value = "$vofaInclude;$value"
-    }
     "<IncludePath>$value</IncludePath>"
 })
-
-# Keep the VOFA bridge in the target after CubeMX regenerates the project groups.
-$vofaFilePath = '../User/Application/Vofa/vofa_bridge.c'
-if ($text -notlike "*$vofaFilePath*") {
-    $vofaGroup = @'
-        <Group>
-          <GroupName>User/Application/Vofa</GroupName>
-          <Files>
-            <File>
-              <FileName>vofa_bridge.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../User/Application/Vofa/vofa_bridge.c</FilePath>
-            </File>
-          </Files>
-        </Group>
-'@
-    $text = $text.Replace('      </Groups>', "$vofaGroup      </Groups>")
-}
 
 # Add the single GCC ARM_CM7 port to the FreeRTOS group.
 $gccPort = @'

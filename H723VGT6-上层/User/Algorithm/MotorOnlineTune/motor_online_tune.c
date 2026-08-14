@@ -4,11 +4,13 @@
 #include <math.h>
 #include <stddef.h>
 
+/* 功能：判断浮点数是否有限；用途：拦截 NaN 和无穷值；返回 true 表示该值可参与调参计算。 */
 static bool MotorOnline_IsFinite(float value)
 {
     return (value == value) && (value <= FLT_MAX) && (value >= -FLT_MAX);
 }
 
+/* 功能：把数值限制在给定区间；用途：约束在线调参的增益和比例；返回值表示限幅结果。 */
 static float MotorOnline_Clamp(float value, float min, float max)
 {
     if (value < min)
@@ -22,11 +24,13 @@ static float MotorOnline_Clamp(float value, float min, float max)
     return value;
 }
 
+/* 功能：按比例将当前值平滑逼近目标值；用途：避免在线增益突变；返回值表示本周期的新值。 */
 static float MotorOnline_Approach(float current, float target, float alpha)
 {
     return current + (target - current) * alpha;
 }
 
+/* 功能：检查一组 PID 增益是否均为有限数；用途：验证调参输入；返回 true 表示 kp、ki、kd 都有效。 */
 static bool MotorOnline_GainsFinite(motor_online_gains_t gains)
 {
     return MotorOnline_IsFinite(gains.kp) &&
@@ -34,6 +38,7 @@ static bool MotorOnline_GainsFinite(motor_online_gains_t gains)
            MotorOnline_IsFinite(gains.kd);
 }
 
+/* 功能：按配置上下限约束 PID 增益；用途：保证在线调整不越过安全范围；返回值表示约束后的增益组。 */
 static motor_online_gains_t MotorOnline_ClampGains(
     motor_online_gains_t gains,
     const motor_online_pid_cfg_t *cfg)
@@ -50,6 +55,7 @@ static motor_online_gains_t MotorOnline_ClampGains(
     return gains;
 }
 
+/* 功能：完整校验 PID 在线调参配置；用途：在初始化前拒绝矛盾或非法参数；返回 true 表示配置可用。 */
 static bool MotorOnline_PidCfgValid(const motor_online_pid_cfg_t *cfg)
 {
     if ((cfg == NULL) ||
@@ -101,6 +107,7 @@ static bool MotorOnline_PidCfgValid(const motor_online_pid_cfg_t *cfg)
     return true;
 }
 
+/* 功能：初始化 PID 在线调参器；用途：装载策略、边界和初始增益；返回 true 表示初始化成功。 */
 bool MotorOnlinePid_Init(motor_online_pid_t *tuner,
                          const motor_online_pid_cfg_t *cfg,
                          bool enabled)
@@ -117,6 +124,7 @@ bool MotorOnlinePid_Init(motor_online_pid_t *tuner,
     return true;
 }
 
+/* 功能：更新 PID 在线调参器的基准增益；用途：更换控制器标称参数并重置学习状态；返回 true 表示参数被接受。 */
 bool MotorOnlinePid_SetBaseGains(motor_online_pid_t *tuner,
                                  motor_online_gains_t gains)
 {
@@ -135,6 +143,7 @@ bool MotorOnlinePid_SetBaseGains(motor_online_pid_t *tuner,
     return true;
 }
 
+/* 功能：启用或关闭 PID 在线调参；用途：在固定增益与自动调整之间切换；执行后调参状态会复位。 */
 void MotorOnlinePid_SetEnabled(motor_online_pid_t *tuner, bool enabled)
 {
     if (tuner == NULL)
@@ -145,6 +154,7 @@ void MotorOnlinePid_SetEnabled(motor_online_pid_t *tuner, bool enabled)
     MotorOnlinePid_Reset(tuner, true);
 }
 
+/* 功能：重置 PID 在线调参历史；用途：清除误差积分、变化率和活动规则；restore_gains 表示是否同时恢复基准增益。 */
 void MotorOnlinePid_Reset(motor_online_pid_t *tuner, bool restore_gains)
 {
     if (tuner == NULL)
@@ -163,6 +173,7 @@ void MotorOnlinePid_Reset(motor_online_pid_t *tuner, bool restore_gains)
     tuner->active_rule = MOTOR_ONLINE_RULE_NORMAL;
 }
 
+/* 功能：依据误差梯度自适应修正 PID 增益；用途：实现在线学习和增益回泄；结果写入调参器的 learned_gains。 */
 static void MotorOnline_Adapt(motor_online_pid_t *tuner,
                               float error,
                               float error_rate,
@@ -212,6 +223,7 @@ static void MotorOnline_Adapt(motor_online_pid_t *tuner,
     tuner->learned_gains = MotorOnline_ClampGains(gains, &tuner->cfg);
 }
 
+/* 功能：按误差工况应用专家规则；用途：针对大误差、过零和快速变化调整增益；返回值表示规则处理后的目标增益。 */
 static motor_online_gains_t MotorOnline_ApplyExpert(
     motor_online_pid_t *tuner,
     motor_online_gains_t source,
@@ -265,6 +277,7 @@ static motor_online_gains_t MotorOnline_ApplyExpert(
     return MotorOnline_ClampGains(target, &tuner->cfg);
 }
 
+/* 功能：执行一次 PID 在线调参更新；用途：组合自适应与专家策略生成当前增益；返回值表示本周期实际应用的增益。 */
 motor_online_gains_t MotorOnlinePid_Update(motor_online_pid_t *tuner,
                                             float error,
                                             float dt_s)
@@ -325,6 +338,7 @@ motor_online_gains_t MotorOnlinePid_Update(motor_online_pid_t *tuner,
     return tuner->applied_gains;
 }
 
+/* 功能：校验 MIT 在线调参配置；用途：检查增益边界、误差阈值和滤波参数；返回 true 表示配置可用。 */
 static bool MotorOnline_MitCfgValid(const motor_online_mit_cfg_t *cfg)
 {
     return (cfg != NULL) && MotorOnline_IsFinite(cfg->minimum_kp) &&
@@ -350,6 +364,7 @@ static bool MotorOnline_MitCfgValid(const motor_online_mit_cfg_t *cfg)
            (cfg->smoothing > 0.0f) && (cfg->smoothing <= 1.0f);
 }
 
+/* 功能：初始化 MIT 在线调参器；用途：装载位置刚度和阻尼的调整规则；返回 true 表示初始化成功。 */
 bool MotorOnlineMit_Init(motor_online_mit_t *tuner,
                          const motor_online_mit_cfg_t *cfg,
                          bool enabled)
@@ -368,6 +383,7 @@ bool MotorOnlineMit_Init(motor_online_mit_t *tuner,
     return true;
 }
 
+/* 功能：设置 MIT 控制的基准 kp、kd；用途：确定在线调整的出发点；返回 true 表示命令在允许范围内。 */
 bool MotorOnlineMit_SetCommand(motor_online_mit_t *tuner,
                                float kp,
                                float kd)
@@ -387,6 +403,7 @@ bool MotorOnlineMit_SetCommand(motor_online_mit_t *tuner,
     return true;
 }
 
+/* 功能：启用或关闭 MIT 在线调参；用途：切换动态增益与原始命令增益；执行后历史状态被重置。 */
 void MotorOnlineMit_SetEnabled(motor_online_mit_t *tuner, bool enabled)
 {
     if (tuner == NULL)
@@ -399,6 +416,7 @@ void MotorOnlineMit_SetEnabled(motor_online_mit_t *tuner, bool enabled)
     MotorOnlineMit_Reset(tuner);
 }
 
+/* 功能：清空 MIT 调参器的误差和收敛历史；用途：开始新的控制过程；执行后下一次更新按首帧处理。 */
 void MotorOnlineMit_Reset(motor_online_mit_t *tuner)
 {
     if (tuner == NULL)
@@ -411,6 +429,7 @@ void MotorOnlineMit_Reset(motor_online_mit_t *tuner)
     tuner->started = 0U;
 }
 
+/* 功能：根据位置误差、速度误差和收敛趋势更新 MIT 增益；用途：在线改善响应与阻尼；kp、kd 输出本周期应用值。 */
 void MotorOnlineMit_Update(motor_online_mit_t *tuner,
                            float position_error,
                            float velocity_error,

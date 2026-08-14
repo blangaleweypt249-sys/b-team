@@ -9,7 +9,6 @@
 #define J4310_FEEDBACK_ID_MAX 0x0FU
 #define J4310_KP_MAX          500.0f
 #define J4310_KD_MAX          5.0f
-#define J4310_TORQUE_MAX_NM   10.0f
 #define J4310_CMD_CLEAR_FAULT 0xFBU
 #define J4310_CMD_ENABLE      0xFCU
 #define J4310_CMD_DISABLE     0xFDU
@@ -21,7 +20,10 @@ typedef struct
     uint8_t motor_id;
     uint16_t master_id;
     uint8_t feedback_id;
+    j4310_mode_t mode;
+    /* Protocol mappings stored in the motor, not editable safety limits. */
     j4310_limits_t limits;
+    float software_torque_limit_nm;
     motor_online_mit_t mit_tuner;
     uint32_t online_last_feedback_ms;
     volatile uint32_t sequence;
@@ -29,12 +31,48 @@ typedef struct
 } j4310_context_t;
 
 static j4310_context_t j4310_context[J4310_MAX_MOTOR_COUNT];
+static volatile uint32_t j4310_rx_diagnostic_sequence;
+static volatile j4310_rx_diagnostics_t j4310_rx_diagnostics;
 
+/* 功能：记录达妙解析结果和最近一帧帧头；用途：区分物理收帧与协议匹配失败；无返回值表示诊断快照已更新。 */
+static void J4310_RecordRxDiagnostic(const can_frame_t *frame,
+                                     j4310_rx_result_t result)
+{
+    uint32_t sequence;
+
+    sequence = j4310_rx_diagnostic_sequence;
+    j4310_rx_diagnostic_sequence = sequence + 1U;
+    j4310_rx_diagnostics.frames_seen++;
+    if (result == J4310_RX_ACCEPTED)
+    {
+        j4310_rx_diagnostics.accepted_frames++;
+    }
+    else if (result == J4310_RX_REJECTED_FORMAT)
+    {
+        j4310_rx_diagnostics.rejected_format_frames++;
+    }
+    else if (result == J4310_RX_REJECTED_MASTER_ID)
+    {
+        j4310_rx_diagnostics.rejected_master_id_frames++;
+    }
+    else if (result == J4310_RX_REJECTED_FEEDBACK_ID)
+    {
+        j4310_rx_diagnostics.rejected_feedback_id_frames++;
+    }
+    j4310_rx_diagnostics.last_can_id = (uint16_t)frame->id;
+    j4310_rx_diagnostics.last_dlc = frame->dlc;
+    j4310_rx_diagnostics.last_data0 = frame->data[0];
+    j4310_rx_diagnostics.last_result = result;
+    j4310_rx_diagnostic_sequence = sequence + 2U;
+}
+
+/* 功能：判断浮点数是否有限；用途：过滤 J4310 命令中的 NaN 和无穷值；返回 true 表示数值可用。 */
 static bool J4310_IsFinite(float value)
 {
     return (value == value) && (value <= FLT_MAX) && (value >= -FLT_MAX);
 }
 
+/* 功能：把数值限制在给定区间；用途：约束位置、速度、转矩和增益；返回值表示限幅结果。 */
 static float J4310_Clamp(float value, float min, float max)
 {
     if (value < min)
@@ -48,6 +86,15 @@ static float J4310_Clamp(float value, float min, float max)
     return value;
 }
 
+/* 功能：检查 J4310 控制模式枚举；用途：拒绝驱动不支持的模式；返回 true 表示模式合法。 */
+static bool J4310_ModeValid(j4310_mode_t mode)
+{
+    return (mode == J4310_MODE_MIT) ||
+           (mode == J4310_MODE_POSITION_VELOCITY) ||
+           (mode == J4310_MODE_VELOCITY);
+}
+
+/* 功能：将物理浮点量线性映射为指定比特的无符号整数；用途：编码 MIT 控制字段；返回值表示量化后的协议值。 */
 static uint16_t J4310_FloatToUint(float value,
                                   float min,
                                   float max,
@@ -59,9 +106,22 @@ static uint16_t J4310_FloatToUint(float value,
     scale = (1UL << bits) - 1UL;
     value = J4310_Clamp(value, min, max);
     normalized = (value - min) * (float)scale / (max - min);
-    return (uint16_t)(normalized + 0.5f);
+    return (uint16_t)normalized;
 }
 
+/* 功能：把单精度浮点数按小端位模式写入字节；用途：编码位置速度和速度模式帧；结果写入 data。 */
+static void J4310_WriteFloatLe(uint8_t *data, float value)
+{
+    uint32_t raw;
+
+    (void)memcpy(&raw, &value, sizeof(raw));
+    data[0] = (uint8_t)raw;
+    data[1] = (uint8_t)(raw >> 8U);
+    data[2] = (uint8_t)(raw >> 16U);
+    data[3] = (uint8_t)(raw >> 24U);
+}
+
+/* 功能：将协议无符号整数线性还原为物理浮点量；用途：解析 MIT 反馈；返回值表示对应的物理值。 */
 static float J4310_UintToFloat(uint16_t value,
                                float min,
                                float max,
@@ -73,6 +133,7 @@ static float J4310_UintToFloat(uint16_t value,
     return ((float)value * (max - min) / (float)scale) + min;
 }
 
+/* 功能：按节点号查找已注册的 J4310 上下文；用途：访问模式、限制和反馈；返回 NULL 表示电机未注册。 */
 static j4310_context_t *J4310_Find(uint8_t motor_id)
 {
     uint32_t index;
@@ -88,6 +149,7 @@ static j4310_context_t *J4310_Find(uint8_t motor_id)
     return NULL;
 }
 
+/* 功能：根据电机限制配置 MIT 在线调参器；用途：建立刚度和阻尼的动态调整边界；返回 true 表示配置成功。 */
 static bool J4310_ConfigureOnlineMit(j4310_context_t *context,
                                      bool enabled)
 {
@@ -117,6 +179,7 @@ static bool J4310_ConfigureOnlineMit(j4310_context_t *context,
     return MotorOnlineMit_Init(&context->mit_tuner, &cfg, enabled);
 }
 
+/* 功能：构造 J4310 使能、停机、清错或置零特殊帧；用途：复用特殊命令格式；返回 true 表示构帧成功。 */
 static bool J4310_BuildSpecial(uint8_t motor_id,
                                uint8_t command,
                                can_frame_t *frame)
@@ -130,21 +193,28 @@ static bool J4310_BuildSpecial(uint8_t motor_id,
     }
 
     (void)memset(frame, 0, sizeof(*frame));
-    frame->id = context->motor_id;
+    frame->id = (uint32_t)context->motor_id + (uint32_t)context->mode;
     frame->dlc = 8U;
     (void)memset(frame->data, 0xFF, 7U);
     frame->data[7] = command;
     return true;
 }
 
+/* 功能：清空全部 J4310 驱动上下文；用途：在注册电机前复位驱动状态；无返回值表示上下文表已初始化。 */
 void J4310_Init(void)
 {
     (void)memset(j4310_context, 0, sizeof(j4310_context));
+    j4310_rx_diagnostic_sequence = 0U;
+    (void)memset((void *)&j4310_rx_diagnostics,
+                 0,
+                 sizeof(j4310_rx_diagnostics));
 }
 
+/* 功能：注册一台 J4310 及其模式和物理限制；用途：建立节点运行上下文；返回 true 表示注册成功。 */
 bool J4310_AddMotor(uint8_t motor_id,
                     uint16_t master_id,
                     uint8_t feedback_id,
+                    j4310_mode_t mode,
                     const j4310_limits_t *limits)
 {
     uint32_t index;
@@ -152,6 +222,8 @@ bool J4310_AddMotor(uint8_t motor_id,
     if ((motor_id == 0U) || (motor_id > J4310_FEEDBACK_ID_MAX) ||
         (master_id > J4310_CAN_STD_ID_MAX) ||
         (feedback_id > J4310_FEEDBACK_ID_MAX) ||
+        !J4310_ModeValid(mode) ||
+        ((uint32_t)motor_id + (uint32_t)mode > J4310_CAN_STD_ID_MAX) ||
         (limits == NULL) ||
         !J4310_IsFinite(limits->position_max_rad) ||
         !J4310_IsFinite(limits->velocity_max_rad_s) ||
@@ -172,8 +244,11 @@ bool J4310_AddMotor(uint8_t motor_id,
             j4310_context[index].motor_id = motor_id;
             j4310_context[index].master_id = master_id;
             j4310_context[index].feedback_id = feedback_id;
+            j4310_context[index].mode = mode;
             j4310_context[index].limits = *limits;
-            if (!J4310_ConfigureOnlineMit(&j4310_context[index], true))
+            j4310_context[index].software_torque_limit_nm =
+                limits->torque_max_nm;
+            if (!J4310_ConfigureOnlineMit(&j4310_context[index], false))
             {
                 (void)memset(&j4310_context[index],
                              0,
@@ -186,11 +261,29 @@ bool J4310_AddMotor(uint8_t motor_id,
     return false;
 }
 
+/* 功能：修改已注册 J4310 的控制模式；用途：切换 MIT、位置速度或速度控制；返回 true 表示模式已接受。 */
+bool J4310_SetMode(uint8_t motor_id, j4310_mode_t mode)
+{
+    j4310_context_t *context;
+
+    context = J4310_Find(motor_id);
+    if ((context == NULL) || !J4310_ModeValid(mode) ||
+        ((uint32_t)motor_id + (uint32_t)mode > J4310_CAN_STD_ID_MAX))
+    {
+        return false;
+    }
+    context->mode = mode;
+    context->online_last_feedback_ms = 0U;
+    return true;
+}
+
+/* 功能：构造 J4310 使能帧；用途：让目标节点进入可控状态；返回 true 表示构帧成功。 */
 bool J4310_BuildEnable(uint8_t motor_id, can_frame_t *frame)
 {
     return J4310_BuildSpecial(motor_id, J4310_CMD_ENABLE, frame);
 }
 
+/* 功能：构造 J4310 失能帧并复位在线调参；用途：安全停止目标节点；返回 true 表示构帧成功。 */
 bool J4310_BuildDisable(uint8_t motor_id, can_frame_t *frame)
 {
     j4310_context_t *context;
@@ -205,16 +298,19 @@ bool J4310_BuildDisable(uint8_t motor_id, can_frame_t *frame)
     return J4310_BuildSpecial(motor_id, J4310_CMD_DISABLE, frame);
 }
 
+/* 功能：构造 J4310 清除故障帧；用途：请求节点退出故障状态；返回 true 表示构帧成功。 */
 bool J4310_BuildClearFault(uint8_t motor_id, can_frame_t *frame)
 {
     return J4310_BuildSpecial(motor_id, J4310_CMD_CLEAR_FAULT, frame);
 }
 
+/* 功能：构造 J4310 保存当前位置为零点的帧；用途：执行机械零点标定；返回 true 表示构帧成功。 */
 bool J4310_BuildSaveZero(uint8_t motor_id, can_frame_t *frame)
 {
     return J4310_BuildSpecial(motor_id, J4310_CMD_SAVE_ZERO, frame);
 }
 
+/* 功能：构造 J4310 MIT 五参数控制帧；用途：发送位置、速度、刚度、阻尼和转矩目标；返回 true 表示参数有效并构帧完成。 */
 bool J4310_BuildMit(uint8_t motor_id,
                     float position_rad,
                     float velocity_rad_s,
@@ -235,6 +331,7 @@ bool J4310_BuildMit(uint8_t motor_id,
 
     context = J4310_Find(motor_id);
     if ((context == NULL) || (frame == NULL) ||
+        (context->mode != J4310_MODE_MIT) ||
         !J4310_IsFinite(position_rad) ||
         !J4310_IsFinite(velocity_rad_s) || !J4310_IsFinite(kp) ||
         !J4310_IsFinite(kd) || !J4310_IsFinite(torque_nm))
@@ -249,8 +346,8 @@ bool J4310_BuildMit(uint8_t motor_id,
                                  -context->limits.velocity_max_rad_s,
                                  context->limits.velocity_max_rad_s);
     torque_nm = J4310_Clamp(torque_nm,
-                            -context->limits.torque_max_nm,
-                            context->limits.torque_max_nm);
+                             -context->software_torque_limit_nm,
+                             context->software_torque_limit_nm);
     kp = J4310_Clamp(kp, 0.0f, J4310_KP_MAX);
     kd = J4310_Clamp(kd, 0.0f, J4310_KD_MAX);
     if ((kp != context->mit_tuner.base_kp) ||
@@ -311,7 +408,7 @@ bool J4310_BuildMit(uint8_t motor_id,
                                12U);
 
     (void)memset(frame, 0, sizeof(*frame));
-    frame->id = context->motor_id;
+    frame->id = (uint32_t)context->motor_id + (uint32_t)context->mode;
     frame->dlc = 8U;
     frame->data[0] = (uint8_t)(position >> 8U);
     frame->data[1] = (uint8_t)position;
@@ -326,20 +423,68 @@ bool J4310_BuildMit(uint8_t motor_id,
     return true;
 }
 
+/* 功能：构造 J4310 位置速度模式帧；用途：发送位置与速度上限目标；返回 true 表示构帧成功。 */
+bool J4310_BuildPositionVelocity(uint8_t motor_id,
+                                 float position_rad,
+                                 float velocity_rad_s,
+                                 can_frame_t *frame)
+{
+    j4310_context_t *context;
+
+    context = J4310_Find(motor_id);
+    if ((context == NULL) || (frame == NULL) ||
+        (context->mode != J4310_MODE_POSITION_VELOCITY) ||
+        !J4310_IsFinite(position_rad) ||
+        !J4310_IsFinite(velocity_rad_s))
+    {
+        return false;
+    }
+    (void)memset(frame, 0, sizeof(*frame));
+    frame->id = (uint32_t)context->motor_id + (uint32_t)context->mode;
+    frame->dlc = 8U;
+    J4310_WriteFloatLe(&frame->data[0], position_rad);
+    J4310_WriteFloatLe(&frame->data[4], velocity_rad_s);
+    return true;
+}
+
+/* 功能：构造 J4310 纯速度模式帧；用途：发送目标转速；返回 true 表示构帧成功。 */
+bool J4310_BuildVelocity(uint8_t motor_id,
+                         float velocity_rad_s,
+                         can_frame_t *frame)
+{
+    j4310_context_t *context;
+
+    context = J4310_Find(motor_id);
+    if ((context == NULL) || (frame == NULL) ||
+        (context->mode != J4310_MODE_VELOCITY) ||
+        !J4310_IsFinite(velocity_rad_s))
+    {
+        return false;
+    }
+    (void)memset(frame, 0, sizeof(*frame));
+    frame->id = (uint32_t)context->motor_id + (uint32_t)context->mode;
+    frame->dlc = 4U;
+    J4310_WriteFloatLe(frame->data, velocity_rad_s);
+    return true;
+}
+
+/* 功能：设置 J4310 软件转矩限制；用途：在构造控制帧时进一步约束输出；返回 true 表示限制合法并已保存。 */
 bool J4310_SetTorqueLimit(uint8_t motor_id, float torque_limit_nm)
 {
     j4310_context_t *context;
 
     context = J4310_Find(motor_id);
     if ((context == NULL) || !J4310_IsFinite(torque_limit_nm) ||
-        (torque_limit_nm <= 0.0f) || (torque_limit_nm > J4310_TORQUE_MAX_NM))
+        (torque_limit_nm <= 0.0f) ||
+        (torque_limit_nm > context->limits.torque_max_nm))
     {
         return false;
     }
-    context->limits.torque_max_nm = torque_limit_nm;
+    context->software_torque_limit_nm = torque_limit_nm;
     return true;
 }
 
+/* 功能：解析 J4310 CAN 反馈并更新时间和故障信息；用途：维护闭环反馈快照；返回 true 表示该帧属于已注册节点且解析成功。 */
 bool J4310_OnFrame(const can_frame_t *frame, uint32_t tick_ms)
 {
     j4310_context_t *context;
@@ -349,19 +494,31 @@ bool J4310_OnFrame(const can_frame_t *frame, uint32_t tick_ms)
     uint16_t torque;
     uint32_t index;
     uint32_t sequence;
+    bool master_id_matched;
 
-    if ((frame == NULL) || frame->extended || (frame->dlc != 8U))
+    if (frame == NULL)
     {
+        return false;
+    }
+    if (frame->extended || (frame->dlc != 8U) ||
+        (frame->id > J4310_CAN_STD_ID_MAX))
+    {
+        J4310_RecordRxDiagnostic(frame, J4310_RX_REJECTED_FORMAT);
         return false;
     }
 
     context = NULL;
+    master_id_matched = false;
     for (index = 0U; index < J4310_MAX_MOTOR_COUNT; index++)
     {
-        if (j4310_context[index].used &&
-            (frame->id == j4310_context[index].master_id) &&
-            ((frame->data[0] & 0x0FU) ==
-             j4310_context[index].feedback_id))
+        if (!j4310_context[index].used ||
+            (frame->id != j4310_context[index].master_id))
+        {
+            continue;
+        }
+        master_id_matched = true;
+        if ((frame->data[0] & 0x0FU) ==
+            j4310_context[index].feedback_id)
         {
             context = &j4310_context[index];
             break;
@@ -369,6 +526,10 @@ bool J4310_OnFrame(const can_frame_t *frame, uint32_t tick_ms)
     }
     if (context == NULL)
     {
+        J4310_RecordRxDiagnostic(
+            frame,
+            master_id_matched ? J4310_RX_REJECTED_FEEDBACK_ID :
+                                J4310_RX_REJECTED_MASTER_ID);
         return false;
     }
 
@@ -397,9 +558,11 @@ bool J4310_OnFrame(const can_frame_t *frame, uint32_t tick_ms)
     feedback->updated_at_ms = tick_ms;
     feedback->rx_frames++;
     context->sequence = sequence + 2U;
+    J4310_RecordRxDiagnostic(frame, J4310_RX_ACCEPTED);
     return true;
 }
 
+/* 功能：读取指定 J4310 的最新反馈快照；用途：供控制、诊断和在线调参使用；返回 true 表示已有有效反馈。 */
 bool J4310_GetFeedback(uint8_t motor_id, j4310_feedback_t *feedback)
 {
     const j4310_context_t *context;
@@ -430,6 +593,45 @@ bool J4310_GetFeedback(uint8_t motor_id, j4310_feedback_t *feedback)
     return feedback->rx_frames != 0U;
 }
 
+/* 功能：读取达妙接收诊断快照；用途：向上位机报告有效帧和具体拒绝原因；返回 true 表示参数有效。 */
+bool J4310_GetRxDiagnostics(j4310_rx_diagnostics_t *diagnostics)
+{
+    uint32_t before;
+    uint32_t after;
+
+    if (diagnostics == NULL)
+    {
+        return false;
+    }
+    for (;;)
+    {
+        before = j4310_rx_diagnostic_sequence;
+        if ((before & 1U) != 0U)
+        {
+            continue;
+        }
+        diagnostics->frames_seen = j4310_rx_diagnostics.frames_seen;
+        diagnostics->accepted_frames =
+            j4310_rx_diagnostics.accepted_frames;
+        diagnostics->rejected_format_frames =
+            j4310_rx_diagnostics.rejected_format_frames;
+        diagnostics->rejected_master_id_frames =
+            j4310_rx_diagnostics.rejected_master_id_frames;
+        diagnostics->rejected_feedback_id_frames =
+            j4310_rx_diagnostics.rejected_feedback_id_frames;
+        diagnostics->last_can_id = j4310_rx_diagnostics.last_can_id;
+        diagnostics->last_dlc = j4310_rx_diagnostics.last_dlc;
+        diagnostics->last_data0 = j4310_rx_diagnostics.last_data0;
+        diagnostics->last_result = j4310_rx_diagnostics.last_result;
+        after = j4310_rx_diagnostic_sequence;
+        if ((before == after) && ((after & 1U) == 0U))
+        {
+            return true;
+        }
+    }
+}
+
+/* 功能：启用或关闭指定 J4310 的 MIT 在线调参；用途：切换固定和动态 kp、kd；返回 true 表示设置成功。 */
 bool J4310_SetOnlineMitEnabled(uint8_t motor_id, bool enabled)
 {
     j4310_context_t *context;
@@ -444,6 +646,7 @@ bool J4310_SetOnlineMitEnabled(uint8_t motor_id, bool enabled)
     return true;
 }
 
+/* 功能：读取指定 J4310 的 MIT 在线调参状态；用途：诊断当前增益和收敛情况；返回 true 表示状态已写出。 */
 bool J4310_GetOnlineMitState(uint8_t motor_id,
                              j4310_online_mit_state_t *state)
 {

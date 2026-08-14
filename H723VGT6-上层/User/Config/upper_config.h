@@ -15,10 +15,15 @@
 #define UPPER_J4310_POSITION_MAX_RAD           12.5f
 #define UPPER_J4310_VELOCITY_MAX_RAD_S         30.0f
 #define UPPER_J4310_TORQUE_MAP_MAX_NM          10.0f
+/* Positive mechanism motion is opposite to the J4310 protocol direction. */
+#define UPPER_J4310_DIRECTION_SIGN              (-1.0f)
 
-/* Conservative initial M3508 limits. Tune the PID values on the mechanism. */
+/* Fixed production limits. The PC angle command cannot replace these PIDs. */
 #define UPPER_M3508_CURRENT_LIMIT_A             3.0f
 #define UPPER_M3508_POSITION_VEL_LIMIT_RAD_S    15.708f
+#define UPPER_M3508_POSITION_PID_OUTPUT_LIMIT_RAD_S \
+    UPPER_M3508_POSITION_VEL_LIMIT_RAD_S
+#define UPPER_M3508_ACCEL_LIMIT_RAD_S2          31.416f
 #define UPPER_M3508_SPEED_KP                    0.9325f
 #define UPPER_M3508_SPEED_KI                    0.4663f
 #define UPPER_M3508_SPEED_KD                    0.0f
@@ -28,9 +33,13 @@
 #define UPPER_M3508_POSITION_KD                 0.0f
 #define UPPER_M3508_POSITION_I_LIMIT            0.0f
 
-/* Conservative initial M2006/C610 limits. Tune on the real mechanism. */
 #define UPPER_M2006_CURRENT_LIMIT_A             2.0f
+#define UPPER_M2006_POSITION_LIMIT_RAD          1.57079632679f
+#define UPPER_M2006_POSITION_CUTOFF_RAD         1.74532925199f
 #define UPPER_M2006_POSITION_VEL_LIMIT_RAD_S    10.472f
+#define UPPER_M2006_POSITION_PID_OUTPUT_LIMIT_RAD_S \
+    UPPER_M2006_POSITION_VEL_LIMIT_RAD_S
+#define UPPER_M2006_ACCEL_LIMIT_RAD_S2          31.416f
 #define UPPER_M2006_SPEED_KP                    0.2865f
 #define UPPER_M2006_SPEED_KI                    0.0955f
 #define UPPER_M2006_SPEED_KD                    0.0f
@@ -52,6 +61,8 @@ typedef enum
     UPPER_MOTOR_GRIPPER_M2006,
     UPPER_MOTOR_COUNT
 } upper_motor_id_t;
+
+#define UPPER_MOTOR_GATE_M2006 UPPER_MOTOR_CONVEYOR_M2006
 
 extern const motor_cfg_t upper_motor_cfg[UPPER_MOTOR_COUNT];
 

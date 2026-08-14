@@ -227,7 +227,7 @@ __Vectors       DCD     __initial_sp                      ; Top of Stack
                 DCD     WAKEUP_PIN_IRQHandler             ; Interrupt for all 6 wake-up pins 
                 DCD     OCTOSPI2_IRQHandler               ; OCTOSPI2 Interrupt
                 DCD     0                                 ; Reserved                
-                DCD     0                                 ; Reserved
+                DCD     0                                   ; Reserved
                 DCD     FMAC_IRQHandler                   ; FMAC Interrupt
                 DCD     CORDIC_IRQHandler                 ; CORDIC Interrupt
                 DCD     UART9_IRQHandler                  ; UART9 Interrupt

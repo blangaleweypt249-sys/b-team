@@ -6,6 +6,7 @@
 #include "W25Qxx.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 #define W25Q_CMD_WRITE_ENABLE          0x06U
 #define W25Q_CMD_READ_STATUS_REG1      0x05U
@@ -177,6 +178,7 @@ static bool W25Q_SpiRwByte(uint8_t tx_data, uint8_t *rx_data)
     return W25Q_MCU_SPI_RW_BYTE(&tx_data, rx_data);
 }
 
+/* 功能：通过端口层执行一段 SPI 全双工传输；用途：为 Flash 驱动提供批量收发适配；返回 true 表示底层传输成功。 */
 static bool W25Q_SpiTransfer(const uint8_t *tx_data,
                              uint8_t *rx_data,
                              uint16_t data_len_byte)

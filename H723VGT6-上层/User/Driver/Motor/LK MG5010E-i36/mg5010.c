@@ -52,17 +52,20 @@ typedef struct
 
 static mg5010_context_t mg5010_context[MG5010_MOTOR_ID_MAX];
 
+/* 功能：判断浮点数是否有限；用途：过滤 MG5010 控制参数中的异常值；返回 true 表示数值可用。 */
 static bool Mg5010_IsFinite(float value)
 {
     return (value == value) && (value <= FLT_MAX) && (value >= -FLT_MAX);
 }
 
+/* 功能：检查 MG5010 节点号范围；用途：保护固定上下文数组索引；返回 true 表示节点号合法。 */
 static bool Mg5010_IsValidId(uint8_t motor_id)
 {
     return (motor_id >= MG5010_MOTOR_ID_MIN) &&
            (motor_id <= MG5010_MOTOR_ID_MAX);
 }
 
+/* 功能：把浮点数限制在给定区间；用途：约束电流、积分和在线增益；返回值表示限幅结果。 */
 static float Mg5010_Clamp(float value, float min, float max)
 {
     if (value < min)
@@ -76,16 +79,19 @@ static float Mg5010_Clamp(float value, float min, float max)
     return value;
 }
 
+/* 功能：读取小端 16 位无符号数；用途：解析 MG5010 反馈字段；返回值表示解码结果。 */
 static uint16_t Mg5010_ReadU16Le(const uint8_t *data)
 {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8U);
 }
 
+/* 功能：读取小端 16 位有符号数；用途：解析电流和速度反馈；返回值表示解码结果。 */
 static int16_t Mg5010_ReadI16Le(const uint8_t *data)
 {
     return (int16_t)Mg5010_ReadU16Le(data);
 }
 
+/* 功能：读取小端 56 位有符号数并进行符号扩展；用途：解析多圈角度反馈；返回值表示原始角度计数。 */
 static int64_t Mg5010_ReadI56Le(const uint8_t *data)
 {
     uint64_t value;
@@ -103,12 +109,14 @@ static int64_t Mg5010_ReadI56Le(const uint8_t *data)
     return (int64_t)value;
 }
 
+/* 功能：将 16 位整数写成小端字节；用途：编码 MG5010 电流或速度字段；结果写入 data。 */
 static void Mg5010_WriteU16Le(uint8_t *data, uint16_t value)
 {
     data[0] = (uint8_t)value;
     data[1] = (uint8_t)(value >> 8U);
 }
 
+/* 功能：将 32 位整数写成小端字节；用途：编码 MG5010 速度或位置字段；结果写入 data。 */
 static void Mg5010_WriteU32Le(uint8_t *data, uint32_t value)
 {
     data[0] = (uint8_t)value;
@@ -117,11 +125,13 @@ static void Mg5010_WriteU32Le(uint8_t *data, uint32_t value)
     data[3] = (uint8_t)(value >> 24U);
 }
 
+/* 功能：将浮点数四舍五入为 32 位有符号整数；用途：把物理量量化为协议字段；返回值表示量化结果。 */
 static int32_t Mg5010_RoundI32(float value)
 {
     return (int32_t)((value >= 0.0f) ? (value + 0.5f) : (value - 0.5f));
 }
 
+/* 功能：初始化 MG5010 命令帧的标识符和命令字；用途：复用各种命令的公共构帧步骤；返回 true 表示节点和缓冲区有效。 */
 static bool Mg5010_PrepareFrame(uint8_t motor_id,
                                 uint8_t command,
                                 can_frame_t *frame)
@@ -138,6 +148,7 @@ static bool Mg5010_PrepareFrame(uint8_t motor_id,
     return true;
 }
 
+/* 功能：将安培值换算为 MG5010 原始电流字段；用途：编码电流命令和限制；返回 true 表示输入可表示。 */
 static bool Mg5010_CurrentToRaw(float current_a, int16_t *raw)
 {
     int32_t scaled;
@@ -158,6 +169,7 @@ static bool Mg5010_CurrentToRaw(float current_a, int16_t *raw)
     return true;
 }
 
+/* 功能：配置 MG5010 外部速度环的在线 PID 调参器；用途：为受控速度模式建立增益边界；返回 true 表示初始化成功。 */
 static bool Mg5010_ConfigureOnlinePid(mg5010_context_t *context,
                                       bool enabled)
 {
@@ -183,6 +195,7 @@ static bool Mg5010_ConfigureOnlinePid(mg5010_context_t *context,
     return MotorOnlinePid_Init(&context->speed_online_pid, &cfg, enabled);
 }
 
+/* 功能：复位 MG5010 外部速度 PID 状态；用途：模式切换或重新使能时清除积分和历史误差；reset_tuner 表示是否同时复位在线调参。 */
 static void Mg5010_ResetOuterPid(mg5010_context_t *context,
                                  bool restore_gains)
 {
@@ -194,6 +207,7 @@ static void Mg5010_ResetOuterPid(mg5010_context_t *context,
     MotorOnlinePid_Reset(&context->speed_online_pid, restore_gains);
 }
 
+/* 功能：停用 MG5010 外部速度 PID；用途：切换到电机内置模式时避免遗留状态；无返回值表示必要时完成复位。 */
 static void Mg5010_DeactivateOuterPid(mg5010_context_t *context)
 {
     if (context->speed_control_active)
@@ -205,6 +219,7 @@ static void Mg5010_DeactivateOuterPid(mg5010_context_t *context)
     }
 }
 
+/* 功能：构造 MG5010 电流闭环命令帧；用途：作为直接电流和外部速度环的底层输出；返回 true 表示构帧成功。 */
 static bool Mg5010_BuildCurrentFrame(uint8_t motor_id,
                                      float current_a,
                                      can_frame_t *frame)
@@ -220,6 +235,7 @@ static bool Mg5010_BuildCurrentFrame(uint8_t motor_id,
     return true;
 }
 
+/* 功能：初始化全部 MG5010 上下文和默认 PID；用途：建立反馈、位置请求和外环控制状态；无返回值表示驱动已复位。 */
 void Mg5010_Init(void)
 {
     uint32_t index;
@@ -235,15 +251,17 @@ void Mg5010_Init(void)
         context->speed_pid_base.ki = MG5010_SPEED_KI;
         context->speed_pid_base.kd = MG5010_SPEED_KD;
         context->integral_limit = MG5010_SPEED_I_LIMIT;
-        (void)Mg5010_ConfigureOnlinePid(context, true);
+        (void)Mg5010_ConfigureOnlinePid(context, false);
     }
 }
 
+/* 功能：构造 MG5010 运行命令帧；用途：让指定电机恢复输出；返回 true 表示构帧成功。 */
 bool Mg5010_BuildRun(uint8_t motor_id, can_frame_t *frame)
 {
     return Mg5010_PrepareFrame(motor_id, MG5010_CMD_RUN, frame);
 }
 
+/* 功能：构造 MG5010 停止命令并停用外环 PID；用途：安全关闭电机输出；返回 true 表示构帧成功。 */
 bool Mg5010_BuildStop(uint8_t motor_id, can_frame_t *frame)
 {
     if (Mg5010_IsValidId(motor_id))
@@ -253,11 +271,13 @@ bool Mg5010_BuildStop(uint8_t motor_id, can_frame_t *frame)
     return Mg5010_PrepareFrame(motor_id, MG5010_CMD_STOP, frame);
 }
 
+/* 功能：构造 MG5010 多圈位置读取命令；用途：请求后续位置反馈；返回 true 表示构帧成功。 */
 bool Mg5010_BuildReadPosition(uint8_t motor_id, can_frame_t *frame)
 {
     return Mg5010_PrepareFrame(motor_id, MG5010_CMD_MULTI_TURN, frame);
 }
 
+/* 功能：构造直接电流控制命令并停用外环 PID；用途：按安培值控制转矩；返回 true 表示构帧成功。 */
 bool Mg5010_BuildCurrent(uint8_t motor_id,
                          float current_a,
                          can_frame_t *frame)
@@ -269,6 +289,7 @@ bool Mg5010_BuildCurrent(uint8_t motor_id,
     return Mg5010_BuildCurrentFrame(motor_id, current_a, frame);
 }
 
+/* 功能：用软件速度 PID 计算电流并构帧；用途：以反馈闭环控制输出轴速度；返回 true 表示计算及构帧成功。 */
 bool Mg5010_BuildControlledVelocity(uint8_t motor_id,
                                     float output_vel_rad_s,
                                     float current_limit_a,
@@ -361,6 +382,7 @@ bool Mg5010_BuildControlledVelocity(uint8_t motor_id,
     return Mg5010_BuildCurrentFrame(motor_id, current_command, frame);
 }
 
+/* 功能：构造电机内置速度闭环命令；用途：发送电机侧速度、最大电流和加速度；返回 true 表示构帧成功。 */
 bool Mg5010_BuildVelocity(uint8_t motor_id,
                           float output_vel_rad_s,
                           float current_limit_a,
@@ -391,6 +413,7 @@ bool Mg5010_BuildVelocity(uint8_t motor_id,
     return true;
 }
 
+/* 功能：构造 MG5010 单圈或多圈位置命令；用途：发送角度、限速和方向要求；返回 true 表示构帧成功。 */
 bool Mg5010_BuildPosition(uint8_t motor_id,
                           float output_pos_rad,
                           float max_output_vel_rad_s,
@@ -450,6 +473,7 @@ bool Mg5010_BuildPosition(uint8_t motor_id,
     return true;
 }
 
+/* 功能：按命令类型解析 MG5010 CAN 反馈；用途：更新状态、电流、速度、编码器和多圈位置；返回 true 表示帧有效。 */
 bool Mg5010_OnFrame(uint8_t motor_id,
                      const can_frame_t *frame,
                      uint32_t tick_ms)
@@ -533,6 +557,7 @@ bool Mg5010_OnFrame(uint8_t motor_id,
     return true;
 }
 
+/* 功能：查询指定 MG5010 是否已取得多圈位置；用途：在位置控制前确认反馈就绪；返回 true 表示位置有效。 */
 bool Mg5010_PositionReady(uint8_t motor_id)
 {
     if (!Mg5010_IsValidId(motor_id))
@@ -542,6 +567,7 @@ bool Mg5010_PositionReady(uint8_t motor_id)
     return mg5010_context[motor_id - 1U].software_zero_valid;
 }
 
+/* 功能：读取指定 MG5010 的最新反馈快照；用途：供控制和诊断使用；返回 true 表示已收到有效反馈。 */
 bool Mg5010_GetFeedback(uint8_t motor_id, mg5010_feedback_t *feedback)
 {
     const mg5010_context_t *context;
@@ -572,6 +598,7 @@ bool Mg5010_GetFeedback(uint8_t motor_id, mg5010_feedback_t *feedback)
     return feedback->rx_frames != 0U;
 }
 
+/* 功能：设置 MG5010 软件速度环 PID、积分限幅和在线调参开关；用途：配置受控速度模式；返回 true 表示参数被接受。 */
 bool Mg5010_SetOuterSpeedPid(uint8_t motor_id,
                              motor_online_gains_t gains,
                              float integral_limit)
@@ -600,6 +627,7 @@ bool Mg5010_SetOuterSpeedPid(uint8_t motor_id,
     return true;
 }
 
+/* 功能：启用或关闭 MG5010 外部速度环在线调参；用途：切换固定与动态 PID 增益；返回 true 表示设置成功。 */
 bool Mg5010_SetOnlinePidEnabled(uint8_t motor_id, bool enabled)
 {
     mg5010_context_t *context;
@@ -614,6 +642,7 @@ bool Mg5010_SetOnlinePidEnabled(uint8_t motor_id, bool enabled)
     return true;
 }
 
+/* 功能：读取 MG5010 外部速度环在线调参状态；用途：观察当前增益和活动规则；返回 true 表示状态已写出。 */
 bool Mg5010_GetOnlinePidState(uint8_t motor_id,
                               mg5010_online_pid_state_t *state)
 {

@@ -36,9 +36,12 @@
 #define VOFA_STATUS_INVALID       (-1)
 #define VOFA_STATUS_BUSY          (-2)
 #define VOFA_STATUS_EXITING       (-3)
+#define VOFA_STATUS_TUNE_FAILED   (-4)
 #define VOFA_STATUS_TIMEOUT       (-5)
 #define VOFA_STATUS_OFFLINE         0
 #define VOFA_STATUS_ONLINE          1
+#define VOFA_STATUS_TUNING          4
+#define VOFA_STATUS_TUNED           5
 
 typedef enum
 {
@@ -71,11 +74,9 @@ typedef struct
     float target_position_rad;
     float position_speed_rpm;
     float acceleration_rpm_s;
-    float reference_position_rad[VOFA_DJI_MOTOR_COUNT];
-    float reference_speed_rpm[VOFA_DJI_MOTOR_COUNT];
-    float reference_acceleration_rpm_s[VOFA_DJI_MOTOR_COUNT];
     int16_t current_raw[VOFA_DJI_MOTOR_COUNT];
     int32_t command_status;
+    bool auto_tune_active;
 } vofa_session_t;
 
 #define VOFA_SESSION_COUNT (VOFA_FAMILY_COUNT * VOFA_CAN_BUS_COUNT)
@@ -93,6 +94,7 @@ static uint8_t vofa_telemetry_frame[
     VOFA_DJI_MOTOR_COUNT * VOFA_CHANNEL_COUNT * sizeof(float) +
     sizeof(uint32_t)];
 
+/* 功能：忽略字母大小写比较两个字符串；用途：识别 VOFA 文本命令关键字；返回 true 表示内容相同。 */
 static bool Vofa_StringEquals(const char *left, const char *right)
 {
     char left_value;
@@ -124,6 +126,7 @@ static bool Vofa_StringEquals(const char *left, const char *right)
     return (*left == '\0') && (*right == '\0');
 }
 
+/* 功能：将文本解析为指定范围内的无符号整数；用途：读取总线号、电机号和周期；返回 true 表示格式及范围合法。 */
 static bool Vofa_ParseU32(const char *text,
                           uint32_t minimum,
                           uint32_t maximum,
@@ -145,6 +148,7 @@ static bool Vofa_ParseU32(const char *text,
     return true;
 }
 
+/* 功能：将文本解析为有限浮点数；用途：读取目标值和 PID 参数；返回 true 表示整段文本均为合法数值。 */
 static bool Vofa_ParseFloat(const char *text, float *value)
 {
     char *end;
@@ -164,6 +168,7 @@ static bool Vofa_ParseFloat(const char *text, float *value)
     return true;
 }
 
+/* 功能：按空格和制表符拆分命令行；用途：为命令解析建立参数数组；返回值表示得到的字段数量。 */
 static uint8_t Vofa_Tokenize(char *line, char *tokens[VOFA_TOKEN_COUNT])
 {
     uint8_t count;
@@ -183,11 +188,13 @@ static uint8_t Vofa_Tokenize(char *line, char *tokens[VOFA_TOKEN_COUNT])
     return count;
 }
 
+/* 功能：取得指定电机族的默认 CAN 总线；用途：简化未显式指定总线的 VOFA 命令；返回值为默认总线号。 */
 static uint8_t Vofa_DefaultCanBus(vofa_family_t family)
 {
     return (family == VOFA_FAMILY_M2006) ? 3U : 2U;
 }
 
+/* 功能：定位电机族与 CAN 总线对应的 VOFA 会话；用途：访问固定会话表；返回值为该会话对象。 */
 static vofa_session_t *Vofa_GetSession(vofa_family_t family,
                                        uint8_t can_bus)
 {
@@ -197,18 +204,21 @@ static vofa_session_t *Vofa_GetSession(vofa_family_t family,
     return &vofa_sessions[index];
 }
 
+/* 功能：取得电机族允许的最大物理电流；用途：校验命令并换算原始电流；返回值单位为安培。 */
 static float Vofa_CurrentMaximum(vofa_family_t family)
 {
     return (family == VOFA_FAMILY_M2006) ?
            VOFA_M2006_CURRENT_MAX_A : VOFA_M3508_CURRENT_MAX_A;
 }
 
+/* 功能：取得电机族协议中的最大原始电流值；用途：在安培和 CAN 原始量之间换算；返回值为协议量程。 */
 static float Vofa_RawMaximum(vofa_family_t family)
 {
     return (family == VOFA_FAMILY_M2006) ?
            VOFA_M2006_RAW_MAX : VOFA_M3508_RAW_MAX;
 }
 
+/* 功能：按会话电流限制约束原始电流命令；用途：保护被调试电机；返回值表示限幅后的 CAN 电流值。 */
 static int16_t Vofa_ClampCurrentRaw(const vofa_session_t *session,
                                     int16_t current_raw)
 {
@@ -228,38 +238,57 @@ static int16_t Vofa_ClampCurrentRaw(const vofa_session_t *session,
     return current_raw;
 }
 
-static bool Vofa_GetFeedbackPosition(const vofa_session_t *session,
-                                     uint8_t motor_id,
-                                     uint32_t tick_ms,
-                                     float *position_rad)
+/* 功能：向会话内所有电机应用运动与电流限制配置；用途：在启动调试前统一控制参数；返回 true 表示全部应用成功。 */
+static bool Vofa_ApplyProfile(const vofa_session_t *session)
 {
-    if (session->family == VOFA_FAMILY_M2006)
-    {
-        m2006_feedback_t feedback;
+    uint8_t index;
+    bool success;
 
-        if (M2006_GetFeedback(session->can_bus, motor_id, &feedback) &&
-            ((tick_ms - feedback.updated_at_ms) <=
-             VOFA_FEEDBACK_TIMEOUT_MS))
+    success = true;
+    for (index = 0U; index < session->motor_count; index++)
+    {
+        uint8_t motor_id;
+
+        motor_id = session->motor_ids[index];
+        if (session->family == VOFA_FAMILY_M2006)
         {
-            *position_rad = feedback.output_pos_rad;
-            return true;
+            success = M2006_SetCurrentLimit(
+                          session->can_bus,
+                          motor_id,
+                          session->current_limit_a) && success;
+            success = M2006_SetPositionVelocityLimit(
+                          session->can_bus,
+                          motor_id,
+                          session->position_speed_rpm *
+                          VOFA_RPM_TO_RAD_S) && success;
+            success = M2006_SetAccelerationLimit(
+                          session->can_bus,
+                          motor_id,
+                          session->acceleration_rpm_s *
+                          VOFA_RPM_TO_RAD_S) && success;
+        }
+        else
+        {
+            success = M3508_SetCurrentLimit(
+                          session->can_bus,
+                          motor_id,
+                          session->current_limit_a) && success;
+            success = M3508_SetPositionVelocityLimit(
+                          session->can_bus,
+                          motor_id,
+                          session->position_speed_rpm *
+                          VOFA_RPM_TO_RAD_S) && success;
+            success = M3508_SetAccelerationLimit(
+                          session->can_bus,
+                          motor_id,
+                          session->acceleration_rpm_s *
+                          VOFA_RPM_TO_RAD_S) && success;
         }
     }
-    else
-    {
-        m3508_feedback_t feedback;
-
-        if (M3508_GetFeedback(session->can_bus, motor_id, &feedback) &&
-            ((tick_ms - feedback.updated_at_ms) <=
-             VOFA_FEEDBACK_TIMEOUT_MS))
-        {
-            *position_rad = feedback.output_pos_rad;
-            return true;
-        }
-    }
-    return false;
+    return success;
 }
 
+/* 功能：停止会话内全部电机并清理调试状态；用途：响应 STOP、超时或错误；无返回值表示会话已失活。 */
 static void Vofa_StopSession(vofa_session_t *session, uint32_t tick_ms)
 {
     uint8_t index;
@@ -271,6 +300,7 @@ static void Vofa_StopSession(vofa_session_t *session, uint32_t tick_ms)
         motor_id = session->motor_ids[index];
         if (session->family == VOFA_FAMILY_M2006)
         {
+            (void)M2006_CancelAutoTune(session->can_bus, motor_id);
             (void)M2006_SetTarget(session->can_bus,
                                   motor_id,
                                   M2006_MODE_STOP,
@@ -279,6 +309,7 @@ static void Vofa_StopSession(vofa_session_t *session, uint32_t tick_ms)
         }
         else
         {
+            (void)M3508_CancelAutoTune(session->can_bus, motor_id);
             (void)M3508_SetTarget(session->can_bus,
                                   motor_id,
                                   M3508_MODE_STOP,
@@ -286,15 +317,15 @@ static void Vofa_StopSession(vofa_session_t *session, uint32_t tick_ms)
                                   tick_ms);
         }
         session->current_raw[index] = 0;
-        session->reference_speed_rpm[index] = 0.0f;
-        session->reference_acceleration_rpm_s[index] = 0.0f;
     }
     session->mode = VOFA_MODE_STOP;
     session->target_current_a = 0.0f;
     session->target_speed_rpm = 0.0f;
+    session->auto_tune_active = false;
     session->command_status = VOFA_STATUS_OFFLINE;
 }
 
+/* 功能：检查活动会话是否占用相同 CAN 电机地址；用途：防止两个会话同时控制同一电机；返回 true 表示存在冲突。 */
 static bool Vofa_SessionsConflict(const vofa_session_t *session,
                                   uint8_t can_bus,
                                   const uint8_t *motor_ids,
@@ -320,6 +351,7 @@ static bool Vofa_SessionsConflict(const vofa_session_t *session,
     return false;
 }
 
+/* 功能：遍历会话表检查目标路由冲突；用途：启动新会话前保证控制权唯一；返回 true 表示至少一处地址被占用。 */
 static bool Vofa_RouteConflicts(const vofa_session_t *target,
                                 uint8_t can_bus,
                                 const uint8_t *motor_ids,
@@ -346,7 +378,8 @@ static bool Vofa_RouteConflicts(const vofa_session_t *target,
     return false;
 }
 
-static void Vofa_StartSession(vofa_session_t *session,
+/* 功能：配置并启动一个 VOFA 电机调试会话；用途：绑定电机、周期和初始状态；返回 true 表示会话已激活。 */
+static bool Vofa_StartSession(vofa_session_t *session,
                               uint8_t can_bus,
                               const uint8_t *motor_ids,
                               uint8_t motor_count,
@@ -370,24 +403,22 @@ static void Vofa_StartSession(vofa_session_t *session,
     session->target_current_a = 0.0f;
     session->target_speed_rpm = 0.0f;
     session->target_position_rad = 0.0f;
+    session->auto_tune_active = false;
     session->command_status = VOFA_STATUS_OFFLINE;
     for (index = 0U; index < motor_count; index++)
     {
-        float position_rad;
-
-        position_rad = 0.0f;
-        (void)Vofa_GetFeedbackPosition(session,
-                                       motor_ids[index],
-                                       tick_ms,
-                                       &position_rad);
-        session->reference_position_rad[index] = position_rad;
-        session->reference_speed_rpm[index] = 0.0f;
-        session->reference_acceleration_rpm_s[index] = 0.0f;
         session->current_raw[index] = 0;
     }
     vofa_telemetry_session = session;
+    if (!Vofa_ApplyProfile(session))
+    {
+        session->active = false;
+        return false;
+    }
+    return true;
 }
 
+/* 功能：解析 START 命令中的电机列表和发送周期；用途：形成会话启动参数；返回 true 表示所有字段合法。 */
 static bool Vofa_ParseStart(char *const *tokens,
                             uint8_t token_count,
                             uint8_t start_index,
@@ -467,11 +498,16 @@ static bool Vofa_ParseStart(char *const *tokens,
     return true;
 }
 
+/* 功能：把会话目标应用到各电机控制器；用途：周期执行电流、速度或位置调试命令；返回 true 表示全部设置成功。 */
 static bool Vofa_ApplyTarget(vofa_session_t *session, uint32_t tick_ms)
 {
     uint8_t index;
     bool success;
 
+    if (session->auto_tune_active)
+    {
+        return true;
+    }
     success = true;
     for (index = 0U; index < session->motor_count; index++)
     {
@@ -489,7 +525,7 @@ static bool Vofa_ApplyTarget(vofa_session_t *session, uint32_t tick_ms)
         }
         else if (session->mode == VOFA_MODE_POSITION)
         {
-            target = session->reference_position_rad[index];
+            target = session->target_position_rad;
         }
         else
         {
@@ -532,78 +568,7 @@ static bool Vofa_ApplyTarget(vofa_session_t *session, uint32_t tick_ms)
     return success;
 }
 
-static void Vofa_UpdateMotion(vofa_session_t *session)
-{
-    uint8_t index;
-
-    for (index = 0U; index < session->motor_count; index++)
-    {
-        float error_rad;
-        float desired_speed_rpm;
-        float speed_step_rpm;
-        float position_step_rad;
-
-        if (session->mode != VOFA_MODE_POSITION)
-        {
-            session->reference_speed_rpm[index] =
-                (session->mode == VOFA_MODE_SPEED) ?
-                session->target_speed_rpm : 0.0f;
-            session->reference_acceleration_rpm_s[index] = 0.0f;
-            continue;
-        }
-
-        error_rad = session->target_position_rad -
-                    session->reference_position_rad[index];
-        desired_speed_rpm = error_rad * VOFA_RAD_S_TO_RPM * 1000.0f;
-        if (desired_speed_rpm > session->position_speed_rpm)
-        {
-            desired_speed_rpm = session->position_speed_rpm;
-        }
-        else if (desired_speed_rpm < -session->position_speed_rpm)
-        {
-            desired_speed_rpm = -session->position_speed_rpm;
-        }
-
-        speed_step_rpm = session->acceleration_rpm_s * 0.001f;
-        session->reference_acceleration_rpm_s[index] = 0.0f;
-        if (session->reference_speed_rpm[index] < desired_speed_rpm)
-        {
-            session->reference_speed_rpm[index] += speed_step_rpm;
-            if (session->reference_speed_rpm[index] > desired_speed_rpm)
-            {
-                session->reference_speed_rpm[index] = desired_speed_rpm;
-            }
-            session->reference_acceleration_rpm_s[index] =
-                session->acceleration_rpm_s;
-        }
-        else if (session->reference_speed_rpm[index] > desired_speed_rpm)
-        {
-            session->reference_speed_rpm[index] -= speed_step_rpm;
-            if (session->reference_speed_rpm[index] < desired_speed_rpm)
-            {
-                session->reference_speed_rpm[index] = desired_speed_rpm;
-            }
-            session->reference_acceleration_rpm_s[index] =
-                -session->acceleration_rpm_s;
-        }
-
-        position_step_rad = session->reference_speed_rpm[index] *
-                            VOFA_RPM_TO_RAD_S * 0.001f;
-        if (((error_rad >= 0.0f) && (position_step_rad >= error_rad)) ||
-            ((error_rad < 0.0f) && (position_step_rad <= error_rad)))
-        {
-            session->reference_position_rad[index] =
-                session->target_position_rad;
-            session->reference_speed_rpm[index] = 0.0f;
-            session->reference_acceleration_rpm_s[index] = 0.0f;
-        }
-        else
-        {
-            session->reference_position_rad[index] += position_step_rad;
-        }
-    }
-}
-
+/* 功能：向会话内电机应用速度环或位置环 PID；用途：支持 VOFA 在线整定；返回 true 表示全部参数设置成功。 */
 static bool Vofa_ApplyPid(vofa_session_t *session,
                           bool speed_loop,
                           const float values[5])
@@ -678,6 +643,7 @@ static bool Vofa_ApplyPid(vofa_session_t *session,
     return success;
 }
 
+/* 功能：解析并执行一条 VOFA 业务命令；用途：处理 START、目标、PID、自动整定和停止操作；返回值为协议状态码。 */
 static int32_t Vofa_ProcessCommand(char *line, uint32_t tick_ms)
 {
     char *tokens[VOFA_TOKEN_COUNT];
@@ -777,13 +743,13 @@ static int32_t Vofa_ProcessCommand(char *line, uint32_t tick_ms)
         {
             return VOFA_STATUS_BUSY;
         }
-        Vofa_StartSession(session,
-                          can_bus,
-                          motor_ids,
-                          motor_count,
-                          period_ms,
-                          tick_ms);
-        return VOFA_STATUS_OFFLINE;
+        return Vofa_StartSession(session,
+                                 can_bus,
+                                 motor_ids,
+                                 motor_count,
+                                 period_ms,
+                                 tick_ms) ?
+               VOFA_STATUS_OFFLINE : VOFA_STATUS_INVALID;
     }
 
     if (!session->active || (can_bus != session->can_bus))
@@ -812,6 +778,8 @@ static int32_t Vofa_ProcessCommand(char *line, uint32_t tick_ms)
         session->target_current_a = value;
         session->target_speed_rpm = 0.0f;
         session->mode = VOFA_MODE_CURRENT;
+        session->auto_tune_active = false;
+        session->command_status = VOFA_STATUS_OFFLINE;
         return VOFA_STATUS_OFFLINE;
     }
     if (Vofa_StringEquals(verb, "SPEED"))
@@ -826,6 +794,8 @@ static int32_t Vofa_ProcessCommand(char *line, uint32_t tick_ms)
         session->target_speed_rpm = value;
         session->target_current_a = 0.0f;
         session->mode = VOFA_MODE_SPEED;
+        session->auto_tune_active = false;
+        session->command_status = VOFA_STATUS_OFFLINE;
         return VOFA_STATUS_OFFLINE;
     }
     if (Vofa_StringEquals(verb, "ANGLE") ||
@@ -843,6 +813,8 @@ static int32_t Vofa_ProcessCommand(char *line, uint32_t tick_ms)
         session->target_current_a = 0.0f;
         session->target_speed_rpm = 0.0f;
         session->mode = VOFA_MODE_POSITION;
+        session->auto_tune_active = false;
+        session->command_status = VOFA_STATUS_OFFLINE;
         return VOFA_STATUS_OFFLINE;
     }
     if (Vofa_StringEquals(verb, "PROFILE"))
@@ -859,7 +831,8 @@ static int32_t Vofa_ProcessCommand(char *line, uint32_t tick_ms)
         }
         session->position_speed_rpm = speed;
         session->acceleration_rpm_s = acceleration;
-        return VOFA_STATUS_OFFLINE;
+        return Vofa_ApplyProfile(session) ?
+               VOFA_STATUS_OFFLINE : VOFA_STATUS_INVALID;
     }
     if (Vofa_StringEquals(verb, "PID"))
     {
@@ -938,6 +911,70 @@ static int32_t Vofa_ProcessCommand(char *line, uint32_t tick_ms)
         }
         return success ? VOFA_STATUS_OFFLINE : VOFA_STATUS_INVALID;
     }
+    if (Vofa_StringEquals(verb, "AUTOTUNE"))
+    {
+        uint8_t motor_id;
+
+        if (session->motor_count != 1U)
+        {
+            return VOFA_STATUS_INVALID;
+        }
+        motor_id = session->motor_ids[0];
+        if ((index + 1U == token_count) &&
+            Vofa_StringEquals(tokens[index], "CANCEL"))
+        {
+            bool success;
+
+            success = (family == VOFA_FAMILY_M2006) ?
+                      M2006_CancelAutoTune(can_bus, motor_id) :
+                      M3508_CancelAutoTune(can_bus, motor_id);
+            if (success)
+            {
+                session->mode = VOFA_MODE_STOP;
+                session->auto_tune_active = false;
+                session->command_status = VOFA_STATUS_OFFLINE;
+            }
+            return success ? VOFA_STATUS_OFFLINE : VOFA_STATUS_INVALID;
+        }
+        if ((index + 4U == token_count) &&
+            Vofa_StringEquals(tokens[index], "SPEED"))
+        {
+            float relay_current_a;
+            float hysteresis_rpm;
+            float safety_speed_rpm;
+            bool success;
+
+            if (!Vofa_ParseFloat(tokens[index + 1U], &relay_current_a) ||
+                !Vofa_ParseFloat(tokens[index + 2U], &hysteresis_rpm) ||
+                !Vofa_ParseFloat(tokens[index + 3U], &safety_speed_rpm))
+            {
+                return VOFA_STATUS_INVALID;
+            }
+            success = (family == VOFA_FAMILY_M2006) ?
+                      M2006_StartSpeedAutoTune(
+                          can_bus,
+                          motor_id,
+                          relay_current_a,
+                          hysteresis_rpm * VOFA_RPM_TO_RAD_S,
+                          safety_speed_rpm * VOFA_RPM_TO_RAD_S,
+                          tick_ms) :
+                      M3508_StartSpeedAutoTune(
+                          can_bus,
+                          motor_id,
+                          relay_current_a,
+                          hysteresis_rpm * VOFA_RPM_TO_RAD_S,
+                          safety_speed_rpm * VOFA_RPM_TO_RAD_S,
+                          tick_ms);
+            if (success)
+            {
+                session->mode = VOFA_MODE_STOP;
+                session->auto_tune_active = true;
+                session->command_status = VOFA_STATUS_TUNING;
+            }
+            return success ? VOFA_STATUS_TUNING : VOFA_STATUS_INVALID;
+        }
+        return VOFA_STATUS_INVALID;
+    }
     if (Vofa_StringEquals(verb, "LIMIT"))
     {
         float value;
@@ -949,7 +986,8 @@ static int32_t Vofa_ProcessCommand(char *line, uint32_t tick_ms)
             return VOFA_STATUS_INVALID;
         }
         session->current_limit_a = value;
-        return VOFA_STATUS_OFFLINE;
+        return Vofa_ApplyProfile(session) ?
+               VOFA_STATUS_OFFLINE : VOFA_STATUS_INVALID;
     }
     if (Vofa_StringEquals(verb, "ZERO"))
     {
@@ -977,7 +1015,6 @@ static int32_t Vofa_ProcessCommand(char *line, uint32_t tick_ms)
                               session->can_bus,
                               session->motor_ids[motor_index]) && success;
             }
-            session->reference_position_rad[motor_index] = 0.0f;
         }
         session->target_position_rad = 0.0f;
         return success ? VOFA_STATUS_OFFLINE : VOFA_STATUS_INVALID;
@@ -1022,6 +1059,7 @@ static int32_t Vofa_ProcessCommand(char *line, uint32_t tick_ms)
     return VOFA_STATUS_INVALID;
 }
 
+/* 功能：发送文本格式的 VOFA 命令确认；用途：反馈命令序号和执行状态；无返回值表示发送结果由通信层处理。 */
 static void Vofa_SendAck(uint32_t sequence, int32_t status)
 {
     char response[48];
@@ -1040,6 +1078,7 @@ static void Vofa_SendAck(uint32_t sequence, int32_t status)
     }
 }
 
+/* 功能：识别并处理一行完整 VOFA 文本；用途：解析可选序号并发送 ACK；返回 true 表示该行属于 VOFA 协议。 */
 static bool Vofa_ProcessLine(char *line, uint32_t tick_ms)
 {
     char sequence_copy[VOFA_LINE_SIZE];
@@ -1081,6 +1120,7 @@ static bool Vofa_ProcessLine(char *line, uint32_t tick_ms)
     return true;
 }
 
+/* 功能：在会话电机列表中查找节点号；用途：把 CAN 反馈映射到遥测槽位；返回负数表示未找到。 */
 static int8_t Vofa_FindMotorIndex(const vofa_session_t *session,
                                   uint8_t motor_id)
 {
@@ -1096,6 +1136,7 @@ static int8_t Vofa_FindMotorIndex(const vofa_session_t *session,
     return -1;
 }
 
+/* 功能：汇总并发送各 CAN 总线的 DJI 四电机电流组帧；用途：统一下发 M2006/M3508 调试输出；无返回值表示完成本周期发送。 */
 static void Vofa_SendGroups(uint32_t tick_ms)
 {
     uint8_t can_bus;
@@ -1176,6 +1217,7 @@ static void Vofa_SendGroups(uint32_t tick_ms)
     }
 }
 
+/* 功能：填充单台电机的 VOFA 遥测通道；用途：汇集目标、反馈、误差和自动整定状态；结果写入 channels。 */
 static void Vofa_FillTelemetry(const vofa_session_t *session,
                                uint8_t motor_index,
                                uint32_t tick_ms,
@@ -1186,7 +1228,15 @@ static void Vofa_FillTelemetry(const vofa_session_t *session,
     float actual_position_rad;
     float actual_speed_rpm;
     float feedback_current_a;
+    float final_position_rad;
+    float reference_position_rad;
+    float final_speed_rpm;
+    float reference_speed_rpm;
+    float reference_acceleration_rpm_s;
     float current_command_a;
+    float position_error_rad;
+    float speed_error_rpm;
+    int32_t auto_tune_status;
 
     (void)memset(channels, 0, VOFA_CHANNEL_COUNT * sizeof(float));
     motor_id = session->motor_ids[motor_index];
@@ -1194,13 +1244,26 @@ static void Vofa_FillTelemetry(const vofa_session_t *session,
     actual_position_rad = 0.0f;
     actual_speed_rpm = 0.0f;
     feedback_current_a = 0.0f;
+    final_position_rad = 0.0f;
+    reference_position_rad = 0.0f;
+    final_speed_rpm = 0.0f;
+    reference_speed_rpm = 0.0f;
+    reference_acceleration_rpm_s = 0.0f;
+    current_command_a = 0.0f;
+    position_error_rad = 0.0f;
+    speed_error_rpm = 0.0f;
+    auto_tune_status = VOFA_STATUS_OFFLINE;
     if (session->family == VOFA_FAMILY_M2006)
     {
         m2006_feedback_t feedback;
         m2006_online_pid_state_t online;
+        m2006_motion_state_t motion;
+        m2006_autotune_state_t auto_tune;
 
         (void)memset(&feedback, 0, sizeof(feedback));
         (void)memset(&online, 0, sizeof(online));
+        (void)memset(&motion, 0, sizeof(motion));
+        (void)memset(&auto_tune, 0, sizeof(auto_tune));
         feedback_fresh = M2006_GetFeedback(session->can_bus,
                                            motor_id,
                                            &feedback) &&
@@ -1212,6 +1275,34 @@ static void Vofa_FillTelemetry(const vofa_session_t *session,
         (void)M2006_GetOnlinePidState(session->can_bus,
                                       motor_id,
                                       &online);
+        (void)M2006_GetMotionState(session->can_bus,
+                                   motor_id,
+                                   &motion);
+        (void)M2006_GetAutoTuneState(session->can_bus,
+                                     motor_id,
+                                     &auto_tune);
+        final_position_rad = motion.final_position_rad;
+        reference_position_rad = motion.reference_position_rad;
+        final_speed_rpm = motion.final_velocity_rad_s * VOFA_RAD_S_TO_RPM;
+        reference_speed_rpm = motion.reference_velocity_rad_s *
+                              VOFA_RAD_S_TO_RPM;
+        reference_acceleration_rpm_s =
+            motion.reference_acceleration_rad_s2 * VOFA_RAD_S_TO_RPM;
+        current_command_a = motion.current_command_a;
+        position_error_rad = motion.position_error_rad;
+        speed_error_rpm = motion.velocity_error_rad_s * VOFA_RAD_S_TO_RPM;
+        if (auto_tune.status == M2006_AUTOTUNE_RUNNING)
+        {
+            auto_tune_status = VOFA_STATUS_TUNING;
+        }
+        else if (auto_tune.status == M2006_AUTOTUNE_COMPLETE)
+        {
+            auto_tune_status = VOFA_STATUS_TUNED;
+        }
+        else if (auto_tune.status == M2006_AUTOTUNE_FAILED)
+        {
+            auto_tune_status = VOFA_STATUS_TUNE_FAILED;
+        }
         channels[12] = online.applied_kp /
                        (VOFA_M2006_CURRENT_MAX_A /
                         VOFA_M2006_RAW_MAX * VOFA_RAD_S_TO_RPM);
@@ -1229,9 +1320,13 @@ static void Vofa_FillTelemetry(const vofa_session_t *session,
     {
         m3508_feedback_t feedback;
         m3508_online_pid_state_t online;
+        m3508_motion_state_t motion;
+        m3508_autotune_state_t auto_tune;
 
         (void)memset(&feedback, 0, sizeof(feedback));
         (void)memset(&online, 0, sizeof(online));
+        (void)memset(&motion, 0, sizeof(motion));
+        (void)memset(&auto_tune, 0, sizeof(auto_tune));
         feedback_fresh = M3508_GetFeedback(session->can_bus,
                                            motor_id,
                                            &feedback) &&
@@ -1243,6 +1338,34 @@ static void Vofa_FillTelemetry(const vofa_session_t *session,
         (void)M3508_GetOnlinePidState(session->can_bus,
                                       motor_id,
                                       &online);
+        (void)M3508_GetMotionState(session->can_bus,
+                                   motor_id,
+                                   &motion);
+        (void)M3508_GetAutoTuneState(session->can_bus,
+                                     motor_id,
+                                     &auto_tune);
+        final_position_rad = motion.final_position_rad;
+        reference_position_rad = motion.reference_position_rad;
+        final_speed_rpm = motion.final_velocity_rad_s * VOFA_RAD_S_TO_RPM;
+        reference_speed_rpm = motion.reference_velocity_rad_s *
+                              VOFA_RAD_S_TO_RPM;
+        reference_acceleration_rpm_s =
+            motion.reference_acceleration_rad_s2 * VOFA_RAD_S_TO_RPM;
+        current_command_a = motion.current_command_a;
+        position_error_rad = motion.position_error_rad;
+        speed_error_rpm = motion.velocity_error_rad_s * VOFA_RAD_S_TO_RPM;
+        if (auto_tune.status == M3508_AUTOTUNE_RUNNING)
+        {
+            auto_tune_status = VOFA_STATUS_TUNING;
+        }
+        else if (auto_tune.status == M3508_AUTOTUNE_COMPLETE)
+        {
+            auto_tune_status = VOFA_STATUS_TUNED;
+        }
+        else if (auto_tune.status == M3508_AUTOTUNE_FAILED)
+        {
+            auto_tune_status = VOFA_STATUS_TUNE_FAILED;
+        }
         channels[12] = online.applied_kp /
                        (VOFA_M3508_CURRENT_MAX_A /
                         VOFA_M3508_RAW_MAX * VOFA_RAD_S_TO_RPM);
@@ -1257,28 +1380,27 @@ static void Vofa_FillTelemetry(const vofa_session_t *session,
                        0.1f * (float)online.active_rule : 0.0f;
     }
 
-    current_command_a =
-        (float)session->current_raw[motor_index] *
-        Vofa_CurrentMaximum(session->family) /
-        Vofa_RawMaximum(session->family);
-    channels[0] = session->target_position_rad;
-    channels[1] = session->reference_position_rad[motor_index];
+    channels[0] = final_position_rad;
+    channels[1] = reference_position_rad;
     channels[2] = actual_position_rad;
-    channels[3] = session->target_speed_rpm;
-    channels[4] = session->reference_speed_rpm[motor_index];
+    channels[3] = final_speed_rpm;
+    channels[4] = reference_speed_rpm;
     channels[5] = actual_speed_rpm;
-    channels[6] = session->reference_acceleration_rpm_s[motor_index];
+    channels[6] = reference_acceleration_rpm_s;
     channels[7] = current_command_a;
     channels[8] = feedback_current_a;
-    channels[9] = session->target_position_rad - actual_position_rad;
-    channels[10] = session->target_speed_rpm - actual_speed_rpm;
-    channels[11] = (session->command_status < 0) ?
+    channels[9] = position_error_rad;
+    channels[10] = speed_error_rpm;
+    channels[11] = (auto_tune_status != VOFA_STATUS_OFFLINE) ?
+                   (float)auto_tune_status :
+                   (session->command_status < 0) ?
                    (float)session->command_status :
                    (feedback_fresh ?
                     (float)VOFA_STATUS_ONLINE :
                     (float)VOFA_STATUS_OFFLINE);
 }
 
+/* 功能：打包并发送一个会话的 JustFloat 遥测；用途：供 VOFA 实时绘图和调参观察；无返回值表示更新发送统计与时刻。 */
 static void Vofa_SendTelemetry(vofa_session_t *session, uint32_t tick_ms)
 {
     uint8_t motor_index;
@@ -1308,6 +1430,7 @@ static void Vofa_SendTelemetry(vofa_session_t *session, uint32_t tick_ms)
         (uint16_t)(payload_size + sizeof(tail)));
 }
 
+/* 功能：初始化全部 VOFA 会话和接收状态；用途：建立调试桥默认参数；无返回值表示所有会话被复位。 */
 void VofaBridge_Init(void)
 {
     uint8_t family_index;
@@ -1348,6 +1471,7 @@ void VofaBridge_Init(void)
     vofa_last_sequence_valid = false;
 }
 
+/* 功能：接收字节流并按行解析 VOFA 命令；用途：从 UART 数据中提取文本控制消息；返回 true 表示至少消费了 VOFA 数据。 */
 bool VofaBridge_Receive(const uint8_t *data,
                         size_t size,
                         uint32_t tick_ms)
@@ -1415,6 +1539,7 @@ bool VofaBridge_Receive(const uint8_t *data,
     return consumed;
 }
 
+/* 功能：执行 VOFA 桥的 1 ms 周期任务；用途：处理会话超时、目标应用、分组发送和遥测；无返回值表示完成一次调度。 */
 void VofaBridge_Control1ms(uint32_t tick_ms)
 {
     uint8_t session_index;
@@ -1430,7 +1555,6 @@ void VofaBridge_Control1ms(uint32_t tick_ms)
         {
             continue;
         }
-        Vofa_UpdateMotion(session);
         if (!Vofa_ApplyTarget(session, tick_ms))
         {
             session->command_status = VOFA_STATUS_INVALID;
@@ -1449,6 +1573,7 @@ void VofaBridge_Control1ms(uint32_t tick_ms)
     }
 }
 
+/* 功能：把 DJI CAN 反馈路由到对应 VOFA 会话；用途：更新调试电机反馈和在线整定输入；无返回值表示匹配帧已记录。 */
 void VofaBridge_OnCanFrame(uint8_t can_bus,
                            const can_frame_t *frame,
                            uint32_t tick_ms)
@@ -1492,6 +1617,7 @@ void VofaBridge_OnCanFrame(uint8_t can_bus,
     }
 }
 
+/* 功能：查询是否存在活动 VOFA 会话；用途：判断调试桥是否正在占用电机控制；返回 true 表示至少一个会话已启动。 */
 bool VofaBridge_IsActive(void)
 {
     uint8_t session_index;

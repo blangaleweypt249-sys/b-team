@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+/* 功能：将数值限制在正负上限内；用途：抑制 PID 积分和输出饱和；返回值表示限幅后的数值。 */
 static float PID_Clamp(float value, float limit)
 {
     if (limit <= 0.0f)
@@ -19,6 +20,7 @@ static float PID_Clamp(float value, float limit)
     return value;
 }
 
+/* 功能：初始化 PID 控制器并保存参数；用途：建立可用的控制状态；执行后历史误差和积分均被清零。 */
 void PID_Init(pid_t *pid, const pid_cfg_t *cfg)
 {
     if ((pid == NULL) || (cfg == NULL))
@@ -38,6 +40,7 @@ void PID_Init(pid_t *pid, const pid_cfg_t *cfg)
     }
 }
 
+/* 功能：清空 PID 运行状态但保留配置；用途：切换工况或停机后重新起算；执行后控制器无历史累积。 */
 void PID_Reset(pid_t *pid)
 {
     pid_cfg_t cfg;
@@ -52,6 +55,7 @@ void PID_Reset(pid_t *pid)
     pid->cfg = cfg;
 }
 
+/* 功能：计算一次 PID 控制输出；用途：根据目标、反馈和周期形成闭环控制量；返回值表示限幅后的控制输出。 */
 float PID_Calc(pid_t *pid,
                float target,
                float feedback,

@@ -7,17 +7,20 @@
 #define PC_HEADER_SIZE  8U
 #define PC_CRC_SIZE     2U
 
+/* 功能：从字节流读取小端 16 位整数；用途：解析上位机协议字段；返回值表示解码结果。 */
 static uint16_t PcProtocol_ReadU16(const uint8_t *data)
 {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8U);
 }
 
+/* 功能：将 16 位整数写成小端字节；用途：编码上位机协议字段；无返回值表示结果写入 data。 */
 static void PcProtocol_WriteU16(uint8_t *data, uint16_t value)
 {
     data[0] = (uint8_t)value;
     data[1] = (uint8_t)(value >> 8U);
 }
 
+/* 功能：计算 Modbus 多项式形式的 CRC16；用途：校验上位机帧完整性；返回值表示校验码。 */
 uint16_t PcProtocol_Crc16(const uint8_t *data, size_t size)
 {
     uint16_t crc;
@@ -40,6 +43,7 @@ uint16_t PcProtocol_Crc16(const uint8_t *data, size_t size)
     return crc;
 }
 
+/* 功能：清零并初始化流式协议解析器；用途：开始接收新会话；无返回值表示解析状态被复位。 */
 void PcProtocol_Init(pc_parser_t *parser)
 {
     if (parser != NULL)
@@ -48,6 +52,7 @@ void PcProtocol_Init(pc_parser_t *parser)
     }
 }
 
+/* 功能：编码一帧完整的上位机协议数据；用途：生成同步头、帧头、载荷和 CRC；返回 0 表示参数或缓冲区无效。 */
 size_t PcProtocol_Encode(uint8_t type,
                          uint16_t sequence,
                          const uint8_t *payload,
@@ -82,6 +87,7 @@ size_t PcProtocol_Encode(uint8_t type,
     return frame_size;
 }
 
+/* 功能：复位协议解析进度并尝试保留新的同步首字节；用途：错误后快速重新同步；无返回值表示状态已更新。 */
 static void PcProtocol_Reset(pc_parser_t *parser, uint8_t last_byte)
 {
     parser->received = 0U;
@@ -93,6 +99,7 @@ static void PcProtocol_Reset(pc_parser_t *parser, uint8_t last_byte)
     }
 }
 
+/* 功能：校验并提交一帧已收齐的数据；用途：检查 CRC 后调用业务回调；失败时更新错误计数并重新同步。 */
 static void PcProtocol_Deliver(pc_parser_t *parser,
                                pc_frame_handler_t handler,
                                void *user_data)
@@ -130,6 +137,7 @@ static void PcProtocol_Deliver(pc_parser_t *parser,
     }
 }
 
+/* 功能：逐字节推进上位机协议解析；用途：从任意长度的数据块中识别完整帧；有效帧通过 handler 回调交付。 */
 void PcProtocol_Push(pc_parser_t *parser,
                      const uint8_t *data,
                      size_t size,
