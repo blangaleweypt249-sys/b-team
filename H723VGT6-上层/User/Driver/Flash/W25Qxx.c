@@ -98,6 +98,7 @@ static w25q_handle_t w25q_device =
     .bus_lock = NULL,
     .bus_unlock = NULL
 };
+static w25q_status_t w25q_port_init_status = W25Q_ERROR_NOT_INIT;
 
 /* 自动擦除写入时用于保存并恢复同一扇区内未修改的数据。 */
 static uint8_t w25q_sector_buffer[W25Q_SECTOR_SIZE_BYTE];
@@ -109,7 +110,8 @@ static uint8_t w25q_sector_buffer[W25Q_SECTOR_SIZE_BYTE];
  */
 w25q_status_t W25Q_PortInit(void)
 {
-    return W25Q_Init(&w25q_device);
+    w25q_port_init_status = W25Q_Init(&w25q_device);
+    return w25q_port_init_status;
 }
 
 /**
@@ -119,6 +121,11 @@ w25q_status_t W25Q_PortInit(void)
 w25q_handle_t *W25Q_PortGetDevice(void)
 {
     return &w25q_device;
+}
+
+w25q_status_t W25Q_PortGetInitStatus(void)
+{
+    return w25q_port_init_status;
 }
 
 /**

@@ -264,6 +264,7 @@ static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
             link->handshake_received_tick_ms = link->current_rx_tick_ms;
             link->handshake_received_count++;
             link->handshake_pending = true;
+            link->flash_info_pending = false;
         }
         break;
 
@@ -337,6 +338,24 @@ static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
                                         UPPER_PC_MOTOR_CONFIG_ACTION_PAYLOAD_SIZE) ?
                                        frame->payload[3] : 0U,
                                        link->user_data);
+        }
+        else
+        {
+            link->command_error_count++;
+        }
+        break;
+
+    case PC_MSG_FLASH_INFO_REQUEST:
+        if (!UpperPcLink_IsSessionActive(link,
+                                         link->current_rx_tick_ms))
+        {
+            break;
+        }
+        if (frame->payload_len == 0U)
+        {
+            UpperPcLink_Accept(link, frame);
+            link->flash_info_sequence = frame->sequence;
+            link->flash_info_pending = true;
         }
         else
         {
@@ -474,6 +493,60 @@ void UpperPcLink_MarkHandshakeAckSent(upper_pc_link_t *link,
     {
         link->handshake_pending = false;
         link->session_active = true;
+    }
+}
+
+/* Flash info is emitted only for an accepted one-shot request. */
+bool UpperPcLink_HasFlashInfoPending(const upper_pc_link_t *link)
+{
+    return (link != NULL) && link->flash_info_pending;
+}
+
+uint16_t UpperPcLink_GetFlashInfoSequence(const upper_pc_link_t *link)
+{
+    return (link != NULL) ? link->flash_info_sequence : 0U;
+}
+
+size_t UpperPcLink_BuildFlashInfo(const upper_pc_link_t *link,
+                                  uint8_t init_status,
+                                  bool initialized,
+                                  uint32_t jedec_id,
+                                  uint32_t capacity_kb,
+                                  uint32_t sector_count,
+                                  uint16_t page_size_byte,
+                                  uint32_t sector_size_byte,
+                                  uint8_t *output,
+                                  size_t output_size)
+{
+    uint8_t payload[UPPER_PC_FLASH_INFO_PAYLOAD_SIZE];
+
+    if ((link == NULL) || !link->flash_info_pending)
+    {
+        return 0U;
+    }
+
+    payload[0] = init_status;
+    payload[1] = initialized ? 1U : 0U;
+    UpperPcLink_WriteU32(&payload[2], jedec_id);
+    UpperPcLink_WriteU32(&payload[6], capacity_kb);
+    UpperPcLink_WriteU32(&payload[10], sector_count);
+    UpperPcLink_WriteU16(&payload[14], page_size_byte);
+    UpperPcLink_WriteU32(&payload[16], sector_size_byte);
+    return PcProtocol_Encode(PC_MSG_FLASH_INFO,
+                             link->flash_info_sequence,
+                             payload,
+                             sizeof(payload),
+                             output,
+                             output_size);
+}
+
+void UpperPcLink_MarkFlashInfoSent(upper_pc_link_t *link,
+                                   uint16_t sequence)
+{
+    if ((link != NULL) && link->flash_info_pending &&
+        (link->flash_info_sequence == sequence))
+    {
+        link->flash_info_pending = false;
     }
 }
 

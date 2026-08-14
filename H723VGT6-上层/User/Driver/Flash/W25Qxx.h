@@ -152,6 +152,13 @@ w25q_status_t W25Q_PortInit(void);
 w25q_handle_t *W25Q_PortGetDevice(void);
 
 /**
+ * @brief Get the result from the latest W25Q_PortInit call.
+ * @retval W25Q_ERROR_NOT_INIT before port initialization, otherwise the
+ *         exact initialization result.
+ */
+w25q_status_t W25Q_PortGetInitStatus(void);
+
+/**
  * @brief 使用 0x90 命令读取制造商和器件 ID
  * @param dev W25Qxx 设备句柄
  * @param device_id 制造商 ID 与器件 ID 的组合值

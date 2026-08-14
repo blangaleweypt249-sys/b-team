@@ -31,6 +31,8 @@ from protocol import (
     MSG_ACK,
     MSG_ESTOP,
     MSG_FAULT,
+    MSG_FLASH_INFO,
+    MSG_FLASH_INFO_REQUEST,
     MSG_HEARTBEAT,
     MSG_MOTOR_ACTION,
     MSG_MOTOR_ACTION_RESULT,
@@ -45,6 +47,7 @@ from protocol import (
     decode_motor_event,
     decode_motor_action_result,
     decode_dji_telemetry,
+    decode_flash_info,
     decode_robot_state,
     encode_frame,
 )
@@ -65,8 +68,8 @@ J4310_KD_LIMIT = 5.0
 J4310_TORQUE_LIMIT = 10.0
 J4310_RAW_MIN_DEG = -math.degrees(J4310_POSITION_LIMIT)
 J4310_RAW_MAX_DEG = math.degrees(J4310_POSITION_LIMIT)
-POSITION_MIN_DEG = -90.0
-POSITION_MAX_DEG = 90.0
+POSITION_MIN_DEG = -360.0
+POSITION_MAX_DEG = 360.0
 GATE_M2006_ID = 1
 GRIPPER_M2006_ID = 2
 M2006_NODE_IDS = {
@@ -117,6 +120,41 @@ STATE_NAMES = {
     3: "停止",
     4: "错误",
 }
+
+W25Q_STATUS_NAMES = {
+    0: "W25Q_OK",
+    1: "W25Q_ERROR_INVALID_ARG",
+    2: "W25Q_ERROR_NOT_INIT",
+    3: "W25Q_ERROR_UNSUPPORTED_DEVICE",
+    4: "W25Q_ERROR_OUT_OF_RANGE",
+    5: "W25Q_ERROR_NOT_ALIGNED",
+    6: "W25Q_ERROR_TIMEOUT",
+    7: "W25Q_ERROR_SPI",
+    8: "W25Q_ERROR_WRITE_ENABLE",
+    9: "W25Q_ERROR_LOCK_TIMEOUT",
+}
+
+W25Q_MODEL_NAMES = {
+    0xEF4015: "W25Q16",
+    0xEF4016: "W25Q32",
+    0xEF4017: "W25Q64",
+    0xEF4018: "W25Q128",
+}
+
+
+def format_flash_info(info: dict[str, int | bool]) -> str:
+    init_status = int(info["init_status"])
+    initialized = bool(info["initialized"])
+    jedec_id = int(info["jedec_id"])
+    capacity_kb = int(info["capacity_kb"])
+    status_name = W25Q_STATUS_NAMES.get(init_status, "W25Q_ERROR_UNKNOWN")
+    model_name = W25Q_MODEL_NAMES.get(jedec_id, "未知型号")
+    state_name = "已初始化" if initialized else "未初始化"
+    return (
+        f"Flash: {state_name} · {model_name} · "
+        f"w25q_init_status={init_status} {status_name} · "
+        f"JEDEC=0x{jedec_id:06X} · 容量={capacity_kb} KB"
+    )
 
 
 def format_dji_feedback(
@@ -333,6 +371,7 @@ class UpperConsole:
         self.rx_var = tk.StringVar(value="RX 0")
         self.board_state_var = tk.StringVar(value="板端状态: --")
         self.remote_var = tk.StringVar(value="远程链路: --")
+        self.flash_info_var = tk.StringVar(value="Flash: --")
         self.j4310_output_position_var = tk.StringVar(value="当前输出轴角度: -- deg")
         self.dji_diagnostic_vars = {
             (1, 2, 1): tk.StringVar(
@@ -391,6 +430,7 @@ class UpperConsole:
         self.j4310_auto_return_stage = 0
         self.j4310_auto_return_pending: bool | None = None
         self.position_slider_controls: dict[str, tuple[tk.Widget, ...]] = {}
+        self.output_enable_checks: dict[str, ttk.Checkbutton] = {}
         self._space_estop_pressed = False
         self._drag_target: str | None = None
         self._active_arm_mask = 0
@@ -493,13 +533,22 @@ class UpperConsole:
         ttk.Label(connection_status, textvariable=self.tx_var, style="CardMuted.TLabel").pack(side="right", padx=(12, 0))
         ttk.Label(connection_status, textvariable=self.rx_var, style="CardMuted.TLabel").pack(side="right")
         ttk.Button(connection_status, text="急停", style="Danger.TButton", command=self.estop).pack(side="right", padx=(0, 22))
+        self.flash_query_button = ttk.Button(
+            connection_status,
+            text="查询 Flash",
+            command=self.request_flash_info,
+            state="disabled",
+        )
+        self.flash_query_button.pack(side="right", padx=(0, 8))
         self.disconnect_button.configure(state="disabled")
 
         status = ttk.Frame(root, style="Card.TFrame", padding=10)
         status.pack(fill="x", pady=(0, 14))
-        ttk.Label(status, textvariable=self.board_state_var, style="CardTitle.TLabel").pack(side="left")
-        ttk.Label(status, textvariable=self.remote_var, style="CardMuted.TLabel").pack(side="left", padx=20)
-        ttk.Label(status, text="断开或 200 ms 无有效帧后停止输出", style="CardMuted.TLabel").pack(side="right")
+        status.columnconfigure(2, weight=1)
+        ttk.Label(status, textvariable=self.board_state_var, style="CardTitle.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(status, textvariable=self.remote_var, style="CardMuted.TLabel").grid(row=0, column=1, sticky="w", padx=20)
+        ttk.Label(status, text="断开或 200 ms 无有效帧后停止输出", style="CardMuted.TLabel").grid(row=0, column=2, sticky="e")
+        ttk.Label(status, textvariable=self.flash_info_var, style="CardMuted.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
         navigation = tk.Frame(root, bg="#e8f6fb")
         navigation.pack(fill="x", pady=(0, 2))
@@ -633,8 +682,8 @@ class UpperConsole:
             text="使能 J4310 输出",
             variable=self.arm_enable,
             style="Output.TCheckbutton",
-            command=self._on_j4310_enable_changed,
         )
+        self.output_enable_checks["j4310"] = self.j4310_enable_check
         self.j4310_enable_check.grid(
             row=4, column=0, columnspan=3, sticky="w", pady=(6, 3)
         )
@@ -700,6 +749,7 @@ class UpperConsole:
             variable=self.m3508_enable,
             style="Output.TCheckbutton",
         )
+        self.output_enable_checks["m3508"] = self.m3508_enable_check
         self.m3508_enable_check.grid(
             row=10, column=0, columnspan=6, sticky="w", pady=(7, 3)
         )
@@ -776,7 +826,16 @@ class UpperConsole:
             key,
         )
         ttk.Label(left, text=f"FDCAN3 · ID {node_id} · {title}", style="CardMuted.TLabel").grid(row=2, column=0, columnspan=3, sticky="w", pady=(8, 12))
-        ttk.Checkbutton(left, text="允许 M2006 输出", variable=enable_var, style="Output.TCheckbutton").grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 4))
+        enable_check = ttk.Checkbutton(
+            left,
+            text="允许 M2006 输出",
+            variable=enable_var,
+            style="Output.TCheckbutton",
+        )
+        enable_check.grid(
+            row=3, column=0, columnspan=3, sticky="w", pady=(4, 4)
+        )
+        self.output_enable_checks[key] = enable_check
         buttons = ttk.Frame(left, style="Card.TFrame")
         buttons.grid(row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
         self._add_page_buttons(buttons, title, key, "M2006")
@@ -1103,8 +1162,10 @@ class UpperConsole:
     def _begin_handshake(self, now: float, *, reset_feedback: bool = True) -> None:
         self.parser = FrameParser()
         self.handshaken = False
+        self.flash_query_button.configure(state="disabled")
         if reset_feedback:
             self._reset_feedback_display("等待握手后反馈")
+            self.flash_info_var.set("Flash: 等待握手")
         self.handshake_started_at = now
         self.last_handshake = 0.0
         self.handshake_sequence = None
@@ -1145,6 +1206,8 @@ class UpperConsole:
         self.disconnect_button.configure(state="disabled")
         self.board_state_var.set("板端状态: --")
         self.remote_var.set("远程链路: --")
+        self.flash_info_var.set("Flash: --")
+        self.flash_query_button.configure(state="disabled")
         self.j4310_auto_return_pending = None
         self._update_j4310_auto_return_button()
 
@@ -1184,6 +1247,21 @@ class UpperConsole:
             self.tx_var.set(f"TX {self.tx_count}")
             return True
         return False
+
+    def request_flash_info(self, *, automatic: bool = False) -> bool:
+        if not self.transport.connected or not self.handshaken:
+            if not automatic:
+                self.status_var.set("请先连接并完成握手")
+            return False
+        if not self._send(MSG_FLASH_INFO_REQUEST):
+            self.flash_info_var.set("Flash: 查询发送失败")
+            if not automatic:
+                self.status_var.set("Flash 信息查询发送失败")
+            return False
+        self.flash_info_var.set("Flash: 查询中...")
+        if not automatic:
+            self.status_var.set("Flash 信息查询已发送")
+        return True
 
     def _send_estop_frame(self) -> None:
         self._send(MSG_ESTOP, b"\x01")
@@ -1433,56 +1511,9 @@ class UpperConsole:
         elif enabled_by_slider:
             enable_var.set(False)
 
-    def _update_j4310_diagnostic(
-        self, diagnostic: object, tx_diagnostic: object = None
-    ) -> None:
-        state_text = "状态未知"
-        if isinstance(tx_diagnostic, dict):
-            feedback_state = int(tx_diagnostic["feedback_state"])
-            if feedback_state == 0xFF:
-                state_text = "未收到反馈"
-            elif feedback_state == 0:
-                state_text = "电机未使能"
-            elif feedback_state == 1:
-                state_text = "电机已使能"
-            else:
-                state_text = J4310_FAULT_NAMES.get(
-                    feedback_state, f"状态 0x{feedback_state:X}"
-                )
-        elif (
-            isinstance(diagnostic, dict)
-            and int(diagnostic["accepted_frames"]) > 0
-            and int(diagnostic["last_result"]) == 1
-        ):
-            feedback_state = (int(diagnostic["last_data0"]) >> 4) & 0x0F
-            if feedback_state == 0:
-                state_text = "电机未使能"
-            elif feedback_state == 1:
-                state_text = "电机已使能"
-            else:
-                state_text = J4310_FAULT_NAMES.get(
-                    feedback_state, f"状态 0x{feedback_state:X}"
-                )
-        self.j4310_feedback_status = state_text
-        self._refresh_j4310_status()
-
-    def _refresh_j4310_status(self) -> None:
-        flash_status = "--"
-        if self.j4310_auto_return_status_received:
-            flash_status = (
-                "是" if self.j4310_auto_return_storage_ready else "否"
-            )
-        self.j4310_bus_label.configure(
-            text=(
-                f"反馈状态: {self.j4310_feedback_status}\n"
-                f"Flash 是否就绪: {flash_status}"
-            )
-        )
-
     def _finish_slider_drag(self, target: str) -> None:
         if self._drag_target != target:
             return
-        # Keep the final target active so a smooth position trajectory can finish.
         self._send_slider_target(target)
         self._drag_target = None
         self.status_var.set(f"{self._slider_target_name(target)} 保持当前目标")
@@ -1552,10 +1583,7 @@ class UpperConsole:
             self.gripper_enable.set(False)
         else:
             self.conveyor_enable.set(False)
-        page, _enable_var = {
-            "conveyor": ("开关门", self.conveyor_enable),
-            "gripper": ("夹爪", self.gripper_enable),
-        }[target]
+        page = "开关门" if target == "conveyor" else "夹爪"
         return self._send_position_values(page, self._values(), True)
 
     def _stop_slider_target(self, target: str) -> None:
@@ -1585,6 +1613,52 @@ class UpperConsole:
         enable_var.set(False)
         self._send_position_values(page, self._values(), False)
 
+    def _update_j4310_diagnostic(
+        self, diagnostic: object, tx_diagnostic: object = None
+    ) -> None:
+        state_text = "状态未知"
+        if isinstance(tx_diagnostic, dict):
+            feedback_state = int(tx_diagnostic["feedback_state"])
+            if feedback_state == 0xFF:
+                state_text = "未收到反馈"
+            elif feedback_state == 0:
+                state_text = "电机未使能"
+            elif feedback_state == 1:
+                state_text = "电机已使能"
+            else:
+                state_text = J4310_FAULT_NAMES.get(
+                    feedback_state, f"状态 0x{feedback_state:X}"
+                )
+        elif (
+            isinstance(diagnostic, dict)
+            and int(diagnostic["accepted_frames"]) > 0
+            and int(diagnostic["last_result"]) == 1
+        ):
+            feedback_state = (int(diagnostic["last_data0"]) >> 4) & 0x0F
+            if feedback_state == 0:
+                state_text = "电机未使能"
+            elif feedback_state == 1:
+                state_text = "电机已使能"
+            else:
+                state_text = J4310_FAULT_NAMES.get(
+                    feedback_state, f"状态 0x{feedback_state:X}"
+                )
+        self.j4310_feedback_status = state_text
+        self._refresh_j4310_status()
+
+    def _refresh_j4310_status(self) -> None:
+        flash_status = "--"
+        if self.j4310_auto_return_status_received:
+            flash_status = (
+                "是" if self.j4310_auto_return_storage_ready else "否"
+            )
+        self.j4310_bus_label.configure(
+            text=(
+                f"反馈状态: {self.j4310_feedback_status}\n"
+                f"Flash 是否就绪: {flash_status}"
+            )
+        )
+
     def _arm_group_controls(
         self, group: str
     ) -> tuple[int, tk.BooleanVar, tuple[int, ...], str]:
@@ -1593,13 +1667,6 @@ class UpperConsole:
         if group == "m3508":
             return ENABLE_M3508_ONLY, self.m3508_enable, (4, 5), "M3508"
         raise ValueError(f"unknown arm group: {group}")
-
-    def _on_j4310_enable_changed(self) -> None:
-        if self.arm_enable.get():
-            if not self.send_arm_group_now("j4310"):
-                self.arm_enable.set(False)
-        else:
-            self.stop_arm_group("j4310")
 
     def send_arm_group_now(self, group: str) -> bool:
         bit, enable_var, value_indices, display_name = self._arm_group_controls(group)
@@ -1755,8 +1822,10 @@ class UpperConsole:
         self.status_var.set("已握手")
         self.connect_button.configure(text="已握手", state="disabled")
         self.disconnect_button.configure(state="normal")
+        self.flash_query_button.configure(state="normal")
         self._update_j4310_auto_return_button()
         self.log("已收到单片机握手确认，控制链路就绪")
+        self.request_flash_info(automatic=True)
 
     def _update_dji_diagnostics(
         self,
@@ -1925,6 +1994,24 @@ class UpperConsole:
                         [telemetry["diagnostic"]],
                         telemetry["fdcan_rx_counts"],
                         clear_missing=False,
+                    )
+                elif frame.msg_type == MSG_FLASH_INFO:
+                    try:
+                        flash_info = decode_flash_info(frame.payload)
+                    except ValueError:
+                        continue
+                    self.last_board_response = time.monotonic()
+                    self.flash_info_var.set(format_flash_info(flash_info))
+                    self.log(
+                        "Flash 信息: "
+                        f"initialized={int(flash_info['initialized'])}, "
+                        f"w25q_init_status={flash_info['init_status']} "
+                        f"{W25Q_STATUS_NAMES.get(int(flash_info['init_status']), 'W25Q_ERROR_UNKNOWN')}, "
+                        f"JEDEC=0x{int(flash_info['jedec_id']):06X}, "
+                        f"capacity={flash_info['capacity_kb']} KB, "
+                        f"sectors={flash_info['sector_count']}, "
+                        f"page={flash_info['page_size_byte']} B, "
+                        f"sector={flash_info['sector_size_byte']} B"
                     )
                 elif frame.msg_type == MSG_FAULT:
                     self._handle_motor_fault(frame.payload)

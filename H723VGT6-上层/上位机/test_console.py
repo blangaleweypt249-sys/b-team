@@ -33,6 +33,8 @@ from protocol import (
     HEADER_SIZE,
     MSG_ACK,
     MSG_ESTOP,
+    MSG_FLASH_INFO,
+    MSG_FLASH_INFO_REQUEST,
     MSG_HEARTBEAT,
     MOTOR_ACTION_J4310_SAVE_ZERO,
     MOTOR_ACTION_J4310_AUTO_RETURN,
@@ -41,8 +43,10 @@ from protocol import (
     MSG_DJI_TELEMETRY,
     MSG_ROBOT_STATE,
     MSG_UPPER_POSITION_CMD,
+    Frame,
     FrameParser,
     decode_dji_telemetry,
+    decode_flash_info,
     decode_motor_action_result,
     decode_robot_state,
     encode_frame,
@@ -136,47 +140,31 @@ class UpperConsoleTest(unittest.TestCase):
         payload = frame[HEADER_SIZE:FRAME_OVERHEAD + payload_size - 2]
         return struct.unpack("<H30f", payload)
 
-    def test_pressing_slider_automatically_enables_and_sends(self) -> None:
-        transport = mock.Mock()
-        transport.connected = True
-        transport.write.return_value = True
-        self.app.transport = transport
-        self.app.connection_requested = True
-        self.app.handshaken = True
-
-        self.app._start_slider_drag("j4310")
-
-        sent = self._decode_position_frame(transport.write.call_args.args[0])
-        self.assertEqual(sent[0], ENABLE_J4310_ONLY)
-        self.assertEqual(self.app._drag_target, "j4310")
-        self.assertTrue(self.app.arm_enable.get())
-
-    def test_slider_auto_enable_rolls_back_when_not_connected(self) -> None:
-        self.assertFalse(self.app.conveyor_enable.get())
-
-        self.app._start_slider_drag("conveyor")
-
-        self.assertFalse(self.app.conveyor_enable.get())
-        self.assertIsNone(self.app._drag_target)
-        self.assertEqual(self.app.status_var.get(), "未连接，目标未发送")
-
-    def test_pressing_permitted_j4310_slider_sends_enabled_target(self) -> None:
+    def test_input_values_only_stage_targets(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         transport.write.return_value = True
         self.app.transport = transport
         self.app.handshaken = True
+
         self.app.j_position.set(30.0)
-        self.app.arm_enable.set(True)
+        self.app.m3508_position_1.set(-35.0)
+        self.app.m3508_position_2.set(35.0)
+        self.app.conveyor_position.set(40.0)
+        self.app.gripper_position.set(-45.0)
 
-        self.app._start_slider_drag("j4310")
+        transport.write.assert_not_called()
+        self.assertEqual(self.app.j_position.get(), 30.0)
+        self.assertEqual(self.app.m3508_position_1.get(), -35.0)
+        self.assertEqual(self.app.m3508_position_2.get(), 35.0)
+        self.assertEqual(self.app.conveyor_position.get(), 40.0)
+        self.assertEqual(self.app.gripper_position.get(), -45.0)
+        self.assertFalse(self.app.arm_enable.get())
+        self.assertFalse(self.app.m3508_enable.get())
+        self.assertFalse(self.app.conveyor_enable.get())
+        self.assertFalse(self.app.gripper_enable.get())
 
-        sent = self._decode_position_frame(transport.write.call_args.args[0])
-        self.assertEqual(sent[0], ENABLE_J4310_ONLY)
-        self.assertAlmostEqual(sent[1], math.radians(30.0), places=6)
-        self.assertEqual(self.app._drag_target, "j4310")
-
-    def test_real_slider_mouse_drag_sends_changed_target(self) -> None:
+    def test_real_slider_mouse_drag_sends_and_enables(self) -> None:
         self.root.deiconify()
         self.root.update()
         transport = mock.Mock()
@@ -203,41 +191,32 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertTrue(self.app.arm_enable.get())
         self.assertIsNone(self.app._drag_target)
 
-    def test_manual_output_controls_remain_available(self) -> None:
-        self.assertEqual(self.app.j4310_enable_check.cget("text"), "使能 J4310 输出")
-        self.assertEqual(self.app.j4310_send_button.cget("text"), "发送目标")
-        self.assertEqual(self.app.j4310_stop_button.cget("text"), "停止发送")
-        self.assertEqual(self.app.m3508_enable_check.cget("text"), "允许 M3508 输出")
-        self.assertEqual(self.app.m3508_send_button.cget("text"), "发送目标")
-        self.assertEqual(self.app.m3508_stop_button.cget("text"), "停止发送")
-
-    def test_space_key_sends_estop_once_until_released(self) -> None:
+    def test_each_slider_directly_controls_its_motor(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         transport.write.return_value = True
         self.app.transport = transport
         self.app.handshaken = True
-        self.app.arm_enable.set(True)
-        self.app.m3508_enable.set(True)
-        self.app.conveyor_enable.set(True)
-        self.app.gripper_enable.set(True)
-        self.app._drag_target = "conveyor"
+        cases = (
+            ("j4310", ENABLE_J4310_ONLY, self.app.arm_enable),
+            ("m3508", ENABLE_M3508_ONLY, self.app.m3508_enable),
+            ("conveyor", ENABLE_CONVEYOR, self.app.conveyor_enable),
+            ("gripper", ENABLE_GRIPPER, self.app.gripper_enable),
+        )
 
-        self.assertEqual(self.app._on_space_estop(mock.Mock()), "break")
-        frame = transport.write.call_args.args[0]
-        self.assertEqual(frame[3], MSG_ESTOP)
-        self.assertEqual(frame[HEADER_SIZE:HEADER_SIZE + 1], b"\x01")
-        self.assertFalse(self.app.arm_enable.get())
-        self.assertFalse(self.app.m3508_enable.get())
-        self.assertFalse(self.app.conveyor_enable.get())
-        self.assertFalse(self.app.gripper_enable.get())
-        self.assertIsNone(self.app._drag_target)
+        for target, expected_mask, enable_var in cases:
+            with self.subTest(target=target):
+                self.app._disable_all_outputs()
+                transport.reset_mock()
 
-        self.app._on_space_estop(mock.Mock())
-        self.assertEqual(transport.write.call_count, 1)
-        self.app._on_space_estop_released(mock.Mock())
-        self.app._on_space_estop(mock.Mock())
-        self.assertEqual(transport.write.call_count, 2)
+                self.app._start_slider_drag(target)
+
+                sent = self._decode_position_frame(
+                    transport.write.call_args.args[0]
+                )
+                self.assertEqual(sent[0], expected_mask)
+                self.assertTrue(enable_var.get())
+                self.app._finish_slider_drag(target)
 
     def test_drag_period_sends_latest_slider_position(self) -> None:
         transport = mock.Mock()
@@ -264,43 +243,39 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertEqual(sent[0], ENABLE_CONVEYOR)
         self.assertAlmostEqual(sent[9], math.radians(75.0), places=6)
 
-    def test_releasing_slider_keeps_final_target_enabled(self) -> None:
+    def test_manual_output_controls_remain_available(self) -> None:
+        self.assertEqual(self.app.j4310_enable_check.cget("text"), "使能 J4310 输出")
+        self.assertEqual(self.app.j4310_send_button.cget("text"), "发送目标")
+        self.assertEqual(self.app.j4310_stop_button.cget("text"), "停止发送")
+        self.assertEqual(self.app.m3508_enable_check.cget("text"), "允许 M3508 输出")
+        self.assertEqual(self.app.m3508_send_button.cget("text"), "发送目标")
+        self.assertEqual(self.app.m3508_stop_button.cget("text"), "停止发送")
+
+    def test_space_key_sends_estop_once_until_released(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         transport.write.return_value = True
         self.app.transport = transport
         self.app.handshaken = True
-        self.app.gripper_enable.set(True)
-        self.app._start_slider_drag("gripper")
-
-        self.app._finish_slider_drag("gripper")
-
-        final = self._decode_position_frame(transport.write.call_args.args[0])
-        self.assertEqual(final[0], ENABLE_GRIPPER)
-        self.assertIsNone(self.app._drag_target)
-        self.assertTrue(self.app.gripper_enable.get())
-        self.assertEqual(
-            self.app.j4310_bus_label.cget("text"),
-            "反馈状态: 未收到反馈\nFlash 是否就绪: --",
-        )
-
-    def test_releasing_j4310_slider_keeps_both_groups_enabled(self) -> None:
-        transport = mock.Mock()
-        transport.connected = True
-        transport.write.return_value = True
-        self.app.transport = transport
-        self.app.handshaken = True
-        self.app.m3508_enable.set(True)
-        self.app._send_slider_target("m3508")
         self.app.arm_enable.set(True)
-        self.app._start_slider_drag("j4310")
+        self.app.m3508_enable.set(True)
+        self.app.conveyor_enable.set(True)
+        self.app.gripper_enable.set(True)
 
-        self.app._finish_slider_drag("j4310")
+        self.assertEqual(self.app._on_space_estop(mock.Mock()), "break")
+        frame = transport.write.call_args.args[0]
+        self.assertEqual(frame[3], MSG_ESTOP)
+        self.assertEqual(frame[HEADER_SIZE:HEADER_SIZE + 1], b"\x01")
+        self.assertFalse(self.app.arm_enable.get())
+        self.assertFalse(self.app.m3508_enable.get())
+        self.assertFalse(self.app.conveyor_enable.get())
+        self.assertFalse(self.app.gripper_enable.get())
 
-        final = self._decode_position_frame(transport.write.call_args.args[0])
-        self.assertEqual(final[0], ENABLE_J4310_ONLY | ENABLE_M3508_ONLY)
-        self.assertTrue(self.app.arm_enable.get())
-        self.assertTrue(self.app.m3508_enable.get())
+        self.app._on_space_estop(mock.Mock())
+        self.assertEqual(transport.write.call_count, 1)
+        self.app._on_space_estop_released(mock.Mock())
+        self.app._on_space_estop(mock.Mock())
+        self.assertEqual(transport.write.call_count, 2)
 
     def test_j4310_and_m3508_send_buttons_use_independent_masks(self) -> None:
         transport = mock.Mock()
@@ -405,7 +380,9 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertEqual(self.app.m3508_position_2.get(), 90.0)
         self.assertEqual(self.app.conveyor_position.get(), -45.0)
 
-    def test_all_position_sliders_use_ninety_degree_range(self) -> None:
+    def test_all_position_sliders_use_full_rotation_range(self) -> None:
+        self.assertEqual(POSITION_MIN_DEG, -360.0)
+        self.assertEqual(POSITION_MAX_DEG, 360.0)
         self.assertEqual(
             set(self.app.position_slider_controls),
             {"j4310", "m3508", "conveyor", "gripper"},
@@ -423,14 +400,13 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertIsInstance(controls[1], ttk.Spinbox)
         self.assertIsInstance(controls[2], ttk.Scale)
 
-    def test_slider_value_change_waits_for_periodic_send(self) -> None:
+    def test_slider_value_change_without_drag_does_not_send(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         transport.write.return_value = True
         self.app.transport = transport
         self.app.handshaken = True
         self.app.m3508_enable.set(True)
-        self.app._drag_target = "m3508"
 
         for position in (35.0, -35.0):
             with self.subTest(position=position):
@@ -444,7 +420,7 @@ class UpperConsoleTest(unittest.TestCase):
                 )
 
     def test_m3508_sync_slider_keeps_opposite_targets_with_equal_magnitude(self) -> None:
-        for value in (-90.0, -12.5, 0.0, 42.0, 90.0):
+        for value in (-360.0, -12.5, 0.0, 42.0, 360.0):
             self.app._on_m3508_sync_slider_value(str(value))
             self.assertEqual(
                 self.app.m3508_position_1.get(), -value if value else 0.0
@@ -650,6 +626,37 @@ class UpperConsoleTest(unittest.TestCase):
             ),
         )
 
+    def test_handshake_automatically_queries_flash_once(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.write.return_value = True
+        self.app.transport = transport
+        self.app.connection_requested = True
+        self.app.handshake_sequence = 0x1234
+
+        self.app._accept_handshake_ack(
+            Frame(MSG_ACK, 0x1234, HANDSHAKE_MAGIC)
+        )
+
+        written = transport.write.call_args.args[0]
+        self.assertTrue(self.app.handshaken)
+        self.assertEqual(written[3], MSG_FLASH_INFO_REQUEST)
+        self.assertEqual(struct.unpack_from("<H", written, 6)[0], 0)
+        self.assertEqual(self.app.flash_info_var.get(), "Flash: 查询中...")
+
+    def test_manual_flash_query_uses_binary_protocol(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.write.return_value = True
+        self.app.transport = transport
+        self.app.handshaken = True
+
+        self.assertTrue(self.app.request_flash_info())
+
+        written = transport.write.call_args.args[0]
+        self.assertEqual(written[3], MSG_FLASH_INFO_REQUEST)
+        self.assertEqual(struct.unpack_from("<H", written, 6)[0], 0)
+
     def test_handshake_timeout_keeps_wireless_cdc_open(self) -> None:
         transport = mock.Mock()
         transport.connected = True
@@ -809,7 +816,7 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertNotEqual(written[3], MSG_UPPER_POSITION_CMD)
         self.assertEqual(transport.write.call_count, 1)
 
-    def test_j4310_enable_checkbox_sends_target_and_stop(self) -> None:
+    def test_all_enable_checkboxes_do_not_send_motor_targets(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         transport.write.return_value = True
@@ -817,16 +824,33 @@ class UpperConsoleTest(unittest.TestCase):
         self.app.connection_requested = True
         self.app.handshaken = True
 
-        self.app.j4310_enable_check.invoke()
-        enabled = self._decode_position_frame(transport.write.call_args.args[0])
-        self.assertEqual(enabled[0], ENABLE_J4310_ONLY)
+        for check in self.app.output_enable_checks.values():
+            check.invoke()
+
+        transport.write.assert_not_called()
         self.assertTrue(self.app.arm_enable.get())
+        self.assertTrue(self.app.m3508_enable.get())
+        self.assertTrue(self.app.conveyor_enable.get())
+        self.assertTrue(self.app.gripper_enable.get())
+
+    def test_j4310_waits_for_send_target_button(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.write.return_value = True
+        self.app.transport = transport
+        self.app.connection_requested = True
+        self.app.handshaken = True
+        self.app.j_position.set(30.0)
 
         self.app.j4310_enable_check.invoke()
-        stopped = self._decode_position_frame(transport.write.call_args.args[0])
-        self.assertEqual(stopped[0], COMMAND_J4310_STOP)
-        self.assertFalse(self.app.arm_enable.get())
-        self.assertEqual(transport.write.call_count, 2)
+        transport.write.assert_not_called()
+
+        self.app.j4310_send_button.invoke()
+
+        sent = self._decode_position_frame(transport.write.call_args.args[0])
+        self.assertEqual(sent[0], ENABLE_J4310_ONLY)
+        self.assertAlmostEqual(sent[1], math.radians(30.0), places=6)
+        self.assertEqual(transport.write.call_count, 1)
 
     def test_j4310_target_stays_in_absolute_motor_range(self) -> None:
         self.assertAlmostEqual(J4310_RAW_MAX_DEG, math.degrees(12.5))
@@ -1047,6 +1071,50 @@ class UpperConsoleTest(unittest.TestCase):
 
         self.assertEqual(state["j4310_position_valid"], 1)
         self.assertAlmostEqual(state["j4310_position_rad"], 1.25)
+
+    def test_decode_flash_info_includes_init_result_and_geometry(self) -> None:
+        payload = struct.pack(
+            "<BBIIIHI", 0, 1, 0xEF4015, 2048, 512, 256, 4096
+        )
+
+        info = decode_flash_info(payload)
+
+        self.assertEqual(info["init_status"], 0)
+        self.assertTrue(info["initialized"])
+        self.assertEqual(info["jedec_id"], 0xEF4015)
+        self.assertEqual(info["capacity_kb"], 2048)
+        self.assertEqual(info["sector_count"], 512)
+        self.assertEqual(info["page_size_byte"], 256)
+        self.assertEqual(info["sector_size_byte"], 4096)
+
+    def test_flash_info_response_is_displayed(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.rx_queue = queue.Queue()
+        transport.error_queue = queue.Queue()
+        payload = struct.pack(
+            "<BBIIIHI", 3, 0, 0, 0, 0, 0, 4096
+        )
+        transport.rx_queue.put(encode_frame(MSG_FLASH_INFO, 7, payload))
+        self.app.transport = transport
+        self.app.connection_requested = True
+        self.app.handshaken = True
+        poll_after_id = self.app._poll_after_id
+
+        with (
+            mock.patch("main.time.monotonic", return_value=12.5),
+            mock.patch.object(self.root, "after"),
+        ):
+            self.app._poll_io()
+        self.app._poll_after_id = poll_after_id
+
+        text = self.app.flash_info_var.get()
+        self.assertIn("未初始化", text)
+        self.assertIn("未知型号", text)
+        self.assertIn("w25q_init_status=3 W25Q_ERROR_UNSUPPORTED_DEVICE", text)
+        self.assertIn("JEDEC=0x000000", text)
+        self.assertIn("容量=0 KB", text)
+        self.assertEqual(self.app.last_board_response, 12.5)
 
     def test_decode_robot_state_includes_j4310_rx_diagnostic(self) -> None:
         payload = struct.pack(

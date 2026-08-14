@@ -59,6 +59,11 @@ static uint32_t Test_ReadU32(const uint8_t *data)
            ((uint32_t)data[3] << 24U);
 }
 
+static uint16_t Test_ReadU16(const uint8_t *data)
+{
+    return (uint16_t)data[0] | ((uint16_t)data[1] << 8U);
+}
+
 /* 功能：判断两个浮点数是否在误差容限内；用途：避免协议换算测试受舍入影响；返回 true 表示足够接近。 */
 static bool Test_FloatClose(float actual, float expected, float tolerance)
 {
@@ -242,6 +247,17 @@ int main(void)
                      NULL);
     assert(!UpperPcLink_IsSessionActive(&link, 0U));
 
+    frame_size = PcProtocol_Encode(PC_MSG_FLASH_INFO_REQUEST,
+                                   8U,
+                                   NULL,
+                                   0U,
+                                   frame,
+                                   TEST_FRAME_CAPACITY);
+    assert(frame_size > 0U);
+    UpperPcLink_Push(&link, frame, frame_size, 49U);
+    assert(!UpperPcLink_HasFlashInfoPending(&link));
+    assert(link.last_rx_tick_ms == 0U);
+
     frame_size = Test_BuildCommand(UPPER_PC_CMD_PAYLOAD_SIZE, frame);
     assert(frame_size > 0U);
     UpperPcLink_Push(&link, frame, frame_size, 50U);
@@ -269,6 +285,40 @@ int main(void)
     UpperPcLink_MarkHandshakeAckSent(&link, 9U);
     assert(!UpperPcLink_HasHandshakePending(&link));
     assert(UpperPcLink_IsSessionActive(&link, 99U));
+
+    frame_size = PcProtocol_Encode(PC_MSG_FLASH_INFO_REQUEST,
+                                   10U,
+                                   NULL,
+                                   0U,
+                                   frame,
+                                   TEST_FRAME_CAPACITY);
+    assert(frame_size > 0U);
+    UpperPcLink_Push(&link, frame, frame_size, 100U);
+    assert(UpperPcLink_HasFlashInfoPending(&link));
+    assert(UpperPcLink_GetFlashInfoSequence(&link) == 10U);
+    frame_size = UpperPcLink_BuildFlashInfo(&link,
+                                            0U,
+                                            true,
+                                            0xEF4015UL,
+                                            2048UL,
+                                            512UL,
+                                            256U,
+                                            4096UL,
+                                            frame,
+                                            TEST_FRAME_CAPACITY);
+    assert(frame_size > 0U);
+    assert(frame[3] == PC_MSG_FLASH_INFO);
+    assert(Test_ReadU16(&frame[4]) == 10U);
+    assert(Test_ReadU16(&frame[6]) == UPPER_PC_FLASH_INFO_PAYLOAD_SIZE);
+    assert(frame[8] == 0U);
+    assert(frame[9] == 1U);
+    assert(Test_ReadU32(&frame[10]) == 0xEF4015UL);
+    assert(Test_ReadU32(&frame[14]) == 2048UL);
+    assert(Test_ReadU32(&frame[18]) == 512UL);
+    assert(Test_ReadU16(&frame[22]) == 256U);
+    assert(Test_ReadU32(&frame[24]) == 4096UL);
+    UpperPcLink_MarkFlashInfoSent(&link, 10U);
+    assert(!UpperPcLink_HasFlashInfoPending(&link));
 
     frame_size = Test_BuildCommand(UPPER_PC_CMD_PAYLOAD_SIZE, frame);
     assert(frame_size > 0U);
