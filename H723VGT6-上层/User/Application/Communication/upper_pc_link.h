@@ -16,6 +16,7 @@
 #define UPPER_PC_HANDSHAKE_PAYLOAD_SIZE 4U
 #define UPPER_PC_MOTOR_ACTION_PAYLOAD_SIZE 3U
 #define UPPER_PC_MOTOR_CONFIG_ACTION_PAYLOAD_SIZE 4U
+#define UPPER_PC_FLASH_INFO_PAYLOAD_SIZE 20U
 #define UPPER_PC_DJI_DIAGNOSTIC_COUNT 4U
 #define UPPER_PC_FDCAN_COUNT 3U
 
@@ -54,6 +55,8 @@ typedef struct
     volatile uint16_t handshake_sequence;
     volatile uint32_t handshake_received_tick_ms;
     volatile uint32_t handshake_received_count;
+    volatile bool flash_info_pending;
+    volatile uint16_t flash_info_sequence;
     uint32_t current_rx_tick_ms;
     uint16_t last_rx_sequence;
     uint16_t tx_sequence;
@@ -81,6 +84,20 @@ size_t UpperPcLink_BuildHandshakeAck(const upper_pc_link_t *link,
                                      size_t output_size);
 void UpperPcLink_MarkHandshakeAckSent(upper_pc_link_t *link,
                                       uint16_t sequence);
+bool UpperPcLink_HasFlashInfoPending(const upper_pc_link_t *link);
+uint16_t UpperPcLink_GetFlashInfoSequence(const upper_pc_link_t *link);
+size_t UpperPcLink_BuildFlashInfo(const upper_pc_link_t *link,
+                                  uint8_t init_status,
+                                  bool initialized,
+                                  uint32_t jedec_id,
+                                  uint32_t capacity_kb,
+                                  uint32_t sector_count,
+                                  uint16_t page_size_byte,
+                                  uint32_t sector_size_byte,
+                                  uint8_t *output,
+                                  size_t output_size);
+void UpperPcLink_MarkFlashInfoSent(upper_pc_link_t *link,
+                                   uint16_t sequence);
 size_t UpperPcLink_BuildState(upper_pc_link_t *link,
                               const upper_robot_t *robot,
                               uint32_t tick_ms,

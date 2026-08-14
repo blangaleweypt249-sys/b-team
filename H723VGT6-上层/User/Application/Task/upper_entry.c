@@ -491,6 +491,8 @@ static void UpperEntry_SendHandshakeAck(uint32_t tick_ms)
 static void UpperEntry_SendState(uint32_t tick_ms)
 {
     size_t frame_size;
+    uint16_t flash_info_sequence;
+    w25q_handle_t *flash_device;
     upper_motor_fault_t fault;
     upper_j4310_rx_diagnostic_t j4310_rx_diagnostic;
     upper_j4310_tx_diagnostic_t j4310_tx_diagnostic;
@@ -537,6 +539,29 @@ static void UpperEntry_SendState(uint32_t tick_ms)
             CommRuntime_PcTransmit(upper_tx_buffer, (uint16_t)frame_size))
         {
             UpperMotorPort_MarkFaultSent(fault.sequence);
+        }
+    }
+    if (UpperPcLink_HasFlashInfoPending(&upper_pc_link) &&
+        CommRuntime_PcTxReady())
+    {
+        flash_info_sequence = UpperPcLink_GetFlashInfoSequence(&upper_pc_link);
+        flash_device = W25Q_PortGetDevice();
+        frame_size = UpperPcLink_BuildFlashInfo(
+                         &upper_pc_link,
+                         (uint8_t)W25Q_PortGetInitStatus(),
+                         flash_device->is_initialized,
+                         flash_device->flash_id,
+                         flash_device->capacity_kb,
+                         flash_device->sector_count,
+                         flash_device->page_size_byte,
+                         W25Q_SECTOR_SIZE_BYTE,
+                         upper_tx_buffer,
+                         sizeof(upper_tx_buffer));
+        if ((frame_size > 0U) &&
+            CommRuntime_PcTransmit(upper_tx_buffer, (uint16_t)frame_size))
+        {
+            UpperPcLink_MarkFlashInfoSent(&upper_pc_link,
+                                          flash_info_sequence);
         }
     }
     if ((tick_ms - upper_state_last_sent_tick_ms) < UPPER_STATE_PERIOD_MS)

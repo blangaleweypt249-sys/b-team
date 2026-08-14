@@ -25,9 +25,11 @@ MSG_HANDSHAKE = 0x03
 MSG_UPPER_CMD = 0x10
 MSG_UPPER_POSITION_CMD = 0x12
 MSG_MOTOR_ACTION = 0x13
+MSG_FLASH_INFO_REQUEST = 0x14
 MSG_ROBOT_STATE = 0x20
 MSG_MOTOR_ACTION_RESULT = 0x21
 MSG_DJI_TELEMETRY = 0x22
+MSG_FLASH_INFO = 0x23
 MSG_ACK = 0x7E
 MSG_FAULT = 0x7F
 
@@ -272,6 +274,31 @@ class FrameParser:
             self.valid_count += 1
             del self._buffer[:frame_len]
         return frames
+
+
+def decode_flash_info(payload: bytes) -> dict[str, int | bool]:
+    """Decode the one-shot external Flash information response."""
+
+    if len(payload) != 20:
+        raise ValueError("Flash info payload must be 20 bytes")
+    (
+        init_status,
+        initialized,
+        jedec_id,
+        capacity_kb,
+        sector_count,
+        page_size_byte,
+        sector_size_byte,
+    ) = struct.unpack("<BBIIIHI", payload)
+    return {
+        "init_status": init_status,
+        "initialized": bool(initialized),
+        "jedec_id": jedec_id,
+        "capacity_kb": capacity_kb,
+        "sector_count": sector_count,
+        "page_size_byte": page_size_byte,
+        "sector_size_byte": sector_size_byte,
+    }
 
 
 def decode_robot_state(payload: bytes) -> dict[str, object]:
