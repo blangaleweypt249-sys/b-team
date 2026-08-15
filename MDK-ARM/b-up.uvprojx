@@ -1527,6 +1527,26 @@
               <FileType>5</FileType>
               <FilePath>../user/com_link/dt35_pnp_link.h</FilePath>
             </File>
+            <File>
+              <FileName>lora_link.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../user/com_link/lora_link.c</FilePath>
+            </File>
+            <File>
+              <FileName>lora_link.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../user/com_link/lora_link.h</FilePath>
+            </File>
+            <File>
+              <FileName>mcu_link.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../user/com_link/mcu_link.c</FilePath>
+            </File>
+            <File>
+              <FileName>mcu_link.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../user/com_link/mcu_link.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

@@ -30,6 +30,8 @@
 #include "computer_link.h"
 #include "dt35_pnp_link.h"
 #include "imu_main.h"
+#include "lora_link.h"
+#include "mcu_link.h"
 
 /* USER CODE END Includes */
 
@@ -113,13 +115,13 @@ int main(void)
   MX_FDCAN2_Init();
   MX_FDCAN3_Init();
   MX_USART1_UART_Init();
-  MX_USART2_UART_Init();
   MX_UART4_Init();
   MX_UART7_Init();
   MX_UART9_Init();
   MX_UART8_Init();
+  MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_Delay(1000);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -211,8 +213,7 @@ void PeriphCommonClock_Config(void)
   /** Initializes the peripherals clock
   */
   PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_UART8|RCC_PERIPHCLK_FDCAN
-                              |RCC_PERIPHCLK_UART7|RCC_PERIPHCLK_UART4
-                              |RCC_PERIPHCLK_USART2;
+                              |RCC_PERIPHCLK_UART7|RCC_PERIPHCLK_UART4;
   PeriphClkInitStruct.PLL2.PLL2M = 2;
   PeriphClkInitStruct.PLL2.PLL2N = 16;
   PeriphClkInitStruct.PLL2.PLL2P = 2;
@@ -241,11 +242,19 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
   ImuMain_HandleRxEvent(huart, size);
 }
 
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+  LoraLink_HandleTxCplt(huart);
+  McuLink_HandleTxCplt(huart);
+}
+
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
   ComputerLink_Error(huart);
   DT35PnpLink_Error(huart);
   ImuMain_HandleUartError(huart);
+  LoraLink_HandleUartError(huart);
+  McuLink_HandleUartError(huart);
 }
 
 /* USER CODE END 4 */

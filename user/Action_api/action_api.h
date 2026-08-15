@@ -10,14 +10,15 @@ typedef enum
     ACTION_CMD_LOWER = 0U,
     ACTION_CMD_LIFT = 1U,
     ACTION_CMD_M2006_FORWARD = 2U,
-    ACTION_CMD_FRONT_FOLD = 3U,
-    ACTION_CMD_FRONT_FLAT = 4U,
-    ACTION_CMD_FRONT_DOWN = 5U,
-    ACTION_CMD_REAR_FOLD = 6U,
-    ACTION_CMD_REAR_FLAT = 7U,
-    ACTION_CMD_REAR_DOWN = 8U,
+    ACTION_CMD_FRONT_FLAT = 3U,
+    ACTION_CMD_FRONT_DOWN = 4U,
+    ACTION_CMD_REAR_FLAT = 5U,
+    ACTION_CMD_REAR_DOWN = 6U,
+    ACTION_CMD_M2006_COAST = 7U,
     ACTION_CMD_NONE = 0xFFU
 } action_cmd_t;
+
+#define ACTION_CMD_MAX ACTION_CMD_M2006_COAST
 
 extern volatile action_cmd_t action_pending;
 extern volatile uint8_t action_pnp_f_trigger;

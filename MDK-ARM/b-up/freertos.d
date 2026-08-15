@@ -50,8 +50,9 @@ b-up/freertos.o: ..\Core\Src\freertos.c \
   ..\user\chassis_vesc\vesc_motor.h ..\user\chassis_vesc\vesc_can.h \
   ..\Core\Inc\fdcan.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
-  ..\user\com_link\computer_link.h ..\user\com_link\dt35_link.h \
-  ..\user\imu\imu_main.h ..\user\up\up_main.h ..\user\2006\c610_2006.h \
-  ..\user\up\dm_2006_bus.h ..\user\up\dm_app.h ..\user\up\dm_motor.h \
-  ..\user\up\rs_app.h ..\user\up\rs00.h ..\user\up\rs_bus.h \
-  ..\Core\Inc\usart.h ..\Core\Inc\gpio.h
+  ..\user\com_link\computer_link.h ..\user\com_link\dt35_pnp_link.h \
+  ..\user\imu\imu_main.h ..\user\com_link\lora_link.h \
+  ..\user\com_link\mcu_link.h ..\user\up\up_main.h \
+  ..\user\2006\c610_2006.h ..\user\up\dm_2006_bus.h ..\user\up\dm_app.h \
+  ..\user\up\dm_motor.h ..\user\up\rs_app.h ..\user\up\rs00.h \
+  ..\user\up\rs_bus.h ..\Core\Inc\usart.h ..\Core\Inc\gpio.h

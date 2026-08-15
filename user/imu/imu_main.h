@@ -32,7 +32,7 @@ typedef struct
     int16_t omega_output;          // 输出给底盘混控的旋转指令
     bool yaw_valid;                // 偏航角是否已完成归零
     bool gyro_valid;               // 角速度零偏是否已完成
-    bool online;                   // 最近 100 ms 内是否收到有效帧
+    bool online;                   // 最近 100 ms 内两类控制数据是否都有效
     bool yaw_hold_enabled;         // 航向保持功能是否使能
     bool yaw_hold_active;          // 当前是否由航向闭环控制旋转
 } imu_data_t;
@@ -47,6 +47,8 @@ typedef struct
     uint32_t config_cmd_delay_ms;     // 每条配置命令之间的发送间隔
     uint16_t gyro_bias_samples;       // 软件零偏采样采集的帧数
     uint32_t online_timeout_ms;       // 判定 IMU 离线的超时时间
+    uint32_t recovery_timeout_ms;     // 持续离线多久后启动自动恢复
+    uint32_t recovery_retry_ms;       // 两次自动恢复之间的最小间隔
     uint32_t yaw_tx_period_ms;        // 向上位机发送偏航角的周期
     uint32_t yaw_control_period_ms;   // 航向保持控制环的执行周期
     int16_t yaw_cmd_threshold;        // 手动旋转指令阈值（判定是否手动旋转）

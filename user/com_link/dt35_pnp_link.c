@@ -16,6 +16,7 @@ typedef struct
 } sensor_parser_t;
 
 static sensor_parser_t sensor_parser;
+static uint8_t sensor_link_initialized;
 
 volatile dt35_link_t dt35_link[SENSOR_LINK_COUNT];
 volatile pnp_link_t pnp_link[SENSOR_LINK_COUNT];
@@ -205,6 +206,10 @@ HAL_StatusTypeDef DT35PnpLink_Init(UART_HandleTypeDef *uart)
     {
         return HAL_ERROR;
     }
+    if (sensor_link_initialized != 0U)
+    {
+        return (sensor_parser.uart == uart) ? HAL_OK : HAL_ERROR;
+    }
 
     sensor_parser.uart = uart;
     sensor_parser.restart_requested = 0U;
@@ -222,6 +227,7 @@ HAL_StatusTypeDef DT35PnpLink_Init(UART_HandleTypeDef *uart)
         pnp_link[i].online = 0U;
         pnp_link[i].frame_pending = 0U;
     }
+    sensor_link_initialized = 1U;
 
     if (Link_StartReceive() != HAL_OK)
     {

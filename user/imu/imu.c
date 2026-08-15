@@ -46,6 +46,11 @@ static HAL_StatusTypeDef start_receive(void)
     }
 
     imu_driver.dma_read_pos = 0U;
+    /* 清除启动延时期间累计的错误和残留数据，避免 DMA 启动后立即中止。 */
+    __HAL_UART_CLEAR_FLAG(imu_driver.uart,
+                          UART_CLEAR_OREF | UART_CLEAR_NEF |
+                          UART_CLEAR_PEF | UART_CLEAR_FEF);
+    __HAL_UART_SEND_REQ(imu_driver.uart, UART_RXDATA_FLUSH_REQUEST);
     status = HAL_UARTEx_ReceiveToIdle_DMA(imu_driver.uart,
                                          imu_driver.dma_buffer,
                                          IMU_DMA_BUFFER_SIZE);
@@ -159,6 +164,7 @@ static bool frame_type_valid(uint8_t type, uint8_t *length)
 static bool parse_frame(void)
 {
     float value;
+    uint32_t now_ms;
     uint8_t frame_type = imu_driver.frame_buffer[3];
 
     if (imu_driver.frame_buffer[imu_driver.expected_length - 1U] !=
@@ -180,6 +186,7 @@ static bool parse_frame(void)
     {
         return false;
     }
+    now_ms = HAL_GetTick();
 
     if (frame_type == IMU_FRAME_TYPE_GYRO)
     {
@@ -190,6 +197,7 @@ static bool parse_frame(void)
         imu_driver.raw_data.gyro_z_deg_s = value;
         imu_driver.raw_data.gyro_sequence++;
         imu_driver.raw_data.gyro_valid = true;
+        imu_driver.stats.last_gyro_ms = now_ms;
     }
     else
     {
@@ -200,9 +208,10 @@ static bool parse_frame(void)
         imu_driver.raw_data.yaw_deg = value;
         imu_driver.raw_data.yaw_sequence++;
         imu_driver.raw_data.yaw_valid = true;
+        imu_driver.stats.last_yaw_ms = now_ms;
     }
 
-    imu_driver.stats.last_valid_ms = HAL_GetTick();
+    imu_driver.stats.last_valid_ms = now_ms;
     return true;
 }
 
@@ -218,6 +227,13 @@ static void reset_parser(uint8_t last_byte)
     {
         imu_driver.frame_index = 0U;
     }
+}
+
+static void discard_receive_pipeline(void)
+{
+    imu_driver.fifo_read = imu_driver.fifo_write;
+    imu_driver.frame_index = 0U;
+    imu_driver.expected_length = 0U;
 }
 
 static void parse_byte(uint8_t byte)
@@ -333,6 +349,7 @@ void Imu_Process(void)
     {
         imu_driver.restart_requested = false;
         (void)HAL_UART_AbortReceive(imu_driver.uart);
+        discard_receive_pipeline();
         if (start_receive() != HAL_OK)
         {
             imu_driver.restart_requested = true;
@@ -342,6 +359,14 @@ void Imu_Process(void)
     while (fifo_pop(&byte))
     {
         parse_byte(byte);
+    }
+}
+
+void Imu_RequestRestart(void)
+{
+    if (imu_driver.initialized)
+    {
+        imu_driver.restart_requested = true;
     }
 }
 

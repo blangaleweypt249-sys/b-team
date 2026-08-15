@@ -46,6 +46,7 @@ static volatile bool cmd_pending;
 static volatile bool action_frame_pending;
 static volatile bool link_online;
 static volatile bool restart_requested;
+static bool computer_link_initialized;
 
 static void reset_parser(void)
 {
@@ -87,7 +88,7 @@ static void store_command(void)
 
 static void store_action(void)
 {
-    if (rx_frame[2] > ACTION_CMD_REAR_DOWN)
+    if (rx_frame[2] > ACTION_CMD_MAX)
     {
         return;
     }
@@ -177,6 +178,10 @@ HAL_StatusTypeDef ComputerLink_Init(UART_HandleTypeDef *uart)
     {
         return HAL_ERROR;
     }
+    if (computer_link_initialized)
+    {
+        return (computer_uart == uart) ? HAL_OK : HAL_ERROR;
+    }
 
     computer_uart = uart;
     rx_byte = 0U;
@@ -191,6 +196,7 @@ HAL_StatusTypeDef ComputerLink_Init(UART_HandleTypeDef *uart)
     link_online = false;
     restart_requested = false;
     reset_parser();
+    computer_link_initialized = true;
 
     status = start_receive();
     if (status != HAL_OK)

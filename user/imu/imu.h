@@ -23,6 +23,8 @@ typedef struct
     uint32_t rx_overflow_count;    // 软件接收队列溢出次数
     uint32_t uart_error_count;     // HAL 串口错误次数
     uint32_t last_valid_ms;        // 最近有效帧的系统时间
+    uint32_t last_gyro_ms;         // 最近有效角速度帧的系统时间
+    uint32_t last_yaw_ms;          // 最近有效欧拉角帧的系统时间
 } imu_stats_t;
 
 /**
@@ -37,6 +39,12 @@ HAL_StatusTypeDef Imu_Init(UART_HandleTypeDef *uart);
  * @retval None
  */
 void Imu_Process(void);
+
+/**
+ * @brief 请求在任务上下文重启串口 DMA 接收
+ * @retval None
+ */
+void Imu_RequestRestart(void);
 
 /**
  * @brief 向 DM-IMU L1 发送配置命令

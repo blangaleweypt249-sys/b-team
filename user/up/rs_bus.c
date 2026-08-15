@@ -79,6 +79,49 @@ bool RsBus_BusOff(const rs_bus_t *bus)
     return (bus != NULL) && bus->bus_off;
 }
 
+HAL_StatusTypeDef RsBus_Recover(rs_bus_t *bus)
+{
+    HAL_StatusTypeDef status;
+
+    if ((bus == NULL) || !bus->ready)
+    {
+        return HAL_ERROR;
+    }
+    if (!bus->bus_off)
+    {
+        return HAL_OK;
+    }
+
+    if (bus->device->State == HAL_FDCAN_STATE_BUSY)
+    {
+        status = HAL_FDCAN_Stop(bus->device);
+        if (status != HAL_OK)
+        {
+            return status;
+        }
+    }
+    if (bus->device->State != HAL_FDCAN_STATE_READY)
+    {
+        return HAL_ERROR;
+    }
+
+    bus->rx_tail = bus->rx_head;
+    status = HAL_FDCAN_Start(bus->device);
+    if (status == HAL_OK)
+    {
+        status = HAL_FDCAN_ActivateNotification(
+            bus->device,
+            FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_ERROR_WARNING |
+                FDCAN_IT_ERROR_PASSIVE | FDCAN_IT_BUS_OFF,
+            0U);
+    }
+    if (status == HAL_OK)
+    {
+        bus->bus_off = false;
+    }
+    return status;
+}
+
 void RsBus_Stop(rs_bus_t *bus)
 {
     if ((bus == NULL) || !bus->ready)

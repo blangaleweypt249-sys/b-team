@@ -5,9 +5,17 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#define FDCAN_RECOVERY_PERIOD_MS 100U
+
 static rs_bus_t rs_bus;  /* FDCAN2：RS 扩展帧。 */
 static std_can_t std_can; /* FDCAN3：DM 与 M2006 标准帧。 */
 static bool task_ready;
+static uint32_t next_recovery_ms;
+
+static bool time_reached(uint32_t now_ms, uint32_t due_ms)
+{
+    return (int32_t)(now_ms - due_ms) >= 0;
+}
 
 HAL_StatusTypeDef Fdcan_Init(const fdcan_config_t *config)
 {
@@ -32,15 +40,32 @@ HAL_StatusTypeDef Fdcan_Init(const fdcan_config_t *config)
         return HAL_ERROR;
     }
 
+    next_recovery_ms = 0U;
     task_ready = true;
     return HAL_OK;
 }
 
 void Fdcan_Run1ms(void)
 {
+    uint32_t now_ms;
+
     if (!task_ready)
     {
         return;
+    }
+
+    now_ms = HAL_GetTick();
+    if (Fdcan_BusOff() && time_reached(now_ms, next_recovery_ms))
+    {
+        next_recovery_ms = now_ms + FDCAN_RECOVERY_PERIOD_MS;
+        if (RsBus_BusOff(&rs_bus))
+        {
+            (void)RsBus_Recover(&rs_bus);
+        }
+        if (StdCan_BusOff(&std_can))
+        {
+            (void)StdCan_Recover(&std_can);
+        }
     }
 
     RsBus_ProcessRx(&rs_bus);
@@ -98,5 +123,15 @@ void Fdcan_HandleErrorIsr(FDCAN_HandleTypeDef *hfdcan,
 
 bool Fdcan_BusOff(void)
 {
-    return RsBus_BusOff(&rs_bus) || StdCan_BusOff(&std_can);
+    return Fdcan_RsBusOff() || Fdcan_StdBusOff();
+}
+
+bool Fdcan_RsBusOff(void)
+{
+    return task_ready && RsBus_BusOff(&rs_bus);
+}
+
+bool Fdcan_StdBusOff(void)
+{
+    return task_ready && StdCan_BusOff(&std_can);
 }

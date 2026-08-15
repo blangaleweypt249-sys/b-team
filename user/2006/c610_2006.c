@@ -49,6 +49,7 @@ static bool config_valid(const m2006_config_t *config)
 {
     return (config != NULL) && (config->id >= 1U) &&
            (config->id <= C610_MAX_MOTORS) &&
+           ((config->direction == 1) || (config->direction == -1)) &&
            finite_float(config->target_position_deg) &&
            pid_gains_valid(&config->pid);
 }
@@ -115,11 +116,12 @@ static bool attach_motor(c610_bus_t *bus, m2006_motor_t *motor,
     }
 
     motor->id = config->id;
+    motor->direction = config->direction;
     motor->pid.gains = config->pid;
     motor->pid.integral_limit = current_limit;
     motor->pid.output_limit = current_limit;
     motor->target_position_deg = config->target_position_deg;
-    motor->enabled = false;
+    motor->control_mode = M2006_CONTROL_COAST;
 
     bus->motors[slot] = motor;
     bus->group_used[slot / 4U] = true;
@@ -156,7 +158,8 @@ static void update_feedback(m2006_motor_t *motor, const uint8_t data[8],
     motor->rotor_rpm =
         (int16_t)(((uint16_t)data[2] << 8) | data[3]);
     motor->current_feedback =
-        (int16_t)(((uint16_t)data[4] << 8) | data[5]);
+        (int16_t)((int16_t)(((uint16_t)data[4] << 8) | data[5]) *
+                  motor->direction);
     motor->last_feedback_ms = now_ms;
 }
 
@@ -184,16 +187,20 @@ static void update_motor(m2006_motor_t *motor, uint32_t now_ms)
 {
     float current = 0.0f;
 
-    motor->output_speed_rpm = (float)motor->rotor_rpm / M2006_GEAR_RATIO;
+    motor->output_speed_rpm = (float)motor->rotor_rpm /
+                              M2006_GEAR_RATIO *
+                              (float)motor->direction;
     motor->output_angle_deg = (float)motor->rotor_total *
                               (360.0f / C610_ENCODER_COUNTS) /
-                              M2006_GEAR_RATIO;
+                              M2006_GEAR_RATIO *
+                              (float)motor->direction;
     motor->online = motor->feedback_seen &&
                     ((uint32_t)(now_ms - motor->last_feedback_ms) <=
                      C610_FEEDBACK_TIMEOUT_MS);
 
     // 未使能或反馈超时后立即清 PID，并在组控制帧中发送零电流。
-    if (!motor->online || !motor->enabled)
+    if (!motor->online ||
+        (motor->control_mode != M2006_CONTROL_POSITION))
     {
         pid_reset(&motor->pid);
     }
@@ -205,7 +212,8 @@ static void update_motor(m2006_motor_t *motor, uint32_t now_ms)
         if ((error_deg <= -M2006_POSITION_DEADBAND_DEG) ||
             (error_deg >= M2006_POSITION_DEADBAND_DEG))
         {
-            current = pid_run(&motor->pid, error_deg);
+            current = pid_run(&motor->pid, error_deg) *
+                      (float)motor->direction;
         }
         else
         {
@@ -314,7 +322,7 @@ HAL_StatusTypeDef C610_SetPos(c610_bus_t *bus, uint8_t id,
     }
 
     motor->target_position_deg = target_position_deg;
-    motor->enabled = true;
+    motor->control_mode = M2006_CONTROL_POSITION;
     return HAL_OK;
 }
 
@@ -347,7 +355,33 @@ void C610_Enable(c610_bus_t *bus, uint8_t id, bool enabled)
         pid_reset(&motor->pid);
         motor->current_command = 0;
     }
-    motor->enabled = enabled;
+    motor->control_mode = enabled ? M2006_CONTROL_POSITION
+                                  : M2006_CONTROL_COAST;
+}
+
+HAL_StatusTypeDef C610_CoastAll(c610_bus_t *bus)
+{
+    uint8_t i;
+    HAL_StatusTypeDef result = HAL_OK;
+
+    if ((bus == NULL) || !bus->ready)
+    {
+        return HAL_ERROR;
+    }
+
+    for (i = 0U; i < bus->motor_count; i++)
+    {
+        C610_Enable(bus, bus->motor_list[i].id, false);
+    }
+    for (i = 0U; i < 2U; i++)
+    {
+        if (bus->group_used[i] && (send_group(bus, i) != HAL_OK))
+        {
+            result = HAL_ERROR;
+        }
+    }
+    bus->last_control_ms = HAL_GetTick();
+    return result;
 }
 
 void C610_StopAll(c610_bus_t *bus)
@@ -381,6 +415,7 @@ bool C610_GetStatus(const c610_bus_t *bus, uint8_t id,
     status->last_feedback_ms = motor->last_feedback_ms;
     status->feedback_seen = motor->feedback_seen;
     status->online = motor->online;
-    status->enabled = motor->enabled;
+    status->control_mode = motor->control_mode;
+    status->enabled = motor->control_mode == M2006_CONTROL_POSITION;
     return true;
 }

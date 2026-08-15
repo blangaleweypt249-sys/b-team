@@ -31,6 +31,12 @@ typedef enum
     DM_FAULT_OVERLOAD = 0xE
 } dm_fault_t;
 
+typedef enum
+{
+    DM_STATE_DISABLED = 0x0,
+    DM_STATE_ENABLED = 0x1
+} dm_operating_state_t;
+
 typedef struct
 {
     float position_rad;
@@ -54,6 +60,7 @@ typedef struct
     float torque_nm;
     uint8_t mos_temp_c;
     uint8_t rotor_temp_c;
+    uint8_t operating_state;
     dm_fault_t fault;
     uint32_t rx_tick_ms;
     uint32_t rx_count;

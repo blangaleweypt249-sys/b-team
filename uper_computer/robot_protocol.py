@@ -20,12 +20,11 @@ PNP_ADDR_B = 0x41
 ACTION_LOWER = 0x00
 ACTION_LIFT = 0x01
 ACTION_M2006_FORWARD = 0x02
-ACTION_FRONT_FOLD = 0x03
-ACTION_FRONT_FLAT = 0x04
-ACTION_FRONT_DOWN = 0x05
-ACTION_REAR_FOLD = 0x06
-ACTION_REAR_FLAT = 0x07
-ACTION_REAR_DOWN = 0x08
+ACTION_FRONT_FLAT = 0x03
+ACTION_FRONT_DOWN = 0x04
+ACTION_REAR_FLAT = 0x05
+ACTION_REAR_DOWN = 0x06
+ACTION_M2006_COAST = 0x07
 
 YAW_FRAME_LENGTH = 5
 YAW_SCALE = 100.0
@@ -58,7 +57,7 @@ def build_velocity_frame(command: VelocityCommand) -> bytes:
 
 
 def build_action_frame(action: int) -> bytes:
-    if not ACTION_LOWER <= action <= ACTION_REAR_DOWN:
+    if not ACTION_LOWER <= action <= ACTION_M2006_COAST:
         raise ValueError("unknown action")
     return ACTION_HEADER + bytes((action,))
 

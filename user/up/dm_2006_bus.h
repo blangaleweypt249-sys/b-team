@@ -44,6 +44,8 @@ HAL_StatusTypeDef StdCan_Init(std_can_t *bus, FDCAN_HandleTypeDef *device,
                               const uint16_t *rx_ids, uint8_t rx_id_count);
 /** @brief 停止标准 CAN 总线。 */
 void StdCan_Stop(std_can_t *bus);
+/** @brief 从 Bus-Off 状态重启控制器，保留应用层控制状态。 */
+HAL_StatusTypeDef StdCan_Recover(std_can_t *bus);
 /** @brief 注册一个主循环中执行的接收处理函数。 */
 HAL_StatusTypeDef StdCan_AddHandler(std_can_t *bus,
                                     std_can_rx_handler_t callback,
@@ -57,7 +59,7 @@ void StdCan_HandleRxIsr(std_can_t *bus, uint32_t interrupt_flags);
 void StdCan_HandleErrorIsr(std_can_t *bus, uint32_t interrupt_flags);
 /** @brief 在主循环中解析接收队列。 */
 void StdCan_ProcessRx(std_can_t *bus);
-/** @brief 查询总线是否进入闭锁状态。 */
+/** @brief 查询总线当前是否处于 Bus-Off 状态。 */
 bool StdCan_BusOff(const std_can_t *bus);
 
 #endif

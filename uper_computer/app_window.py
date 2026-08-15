@@ -1047,6 +1047,32 @@ class MainWindow(QMainWindow):
         conn_section.addWidget(self.debug_connect_btn)
 
         settings_layout.addLayout(conn_section)
+
+        settings_layout.addWidget(self._divider())
+
+        key_label = QLabel("键盘控制")
+        key_label.setObjectName("FieldLabel")
+        settings_layout.addWidget(key_label)
+
+        key_grid = QGridLayout()
+        key_grid.setHorizontalSpacing(12)
+        key_grid.setVerticalSpacing(8)
+        key_rows = [
+            ("W / S", "前进 / 后退"),
+            ("A / D", "左移 / 右移"),
+            ("Q / E", "逆时针 / 顺时针"),
+        ]
+        for row_index, (key, desc) in enumerate(key_rows):
+            key_badge = QLabel(key)
+            key_badge.setObjectName("KeyBadge")
+            key_badge.setMinimumWidth(70)
+            key_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            desc_label = QLabel(desc)
+            desc_label.setObjectName("Subtle")
+            key_grid.addWidget(key_badge, row_index, 0)
+            key_grid.addWidget(desc_label, row_index, 1)
+        key_grid.setColumnStretch(1, 1)
+        settings_layout.addLayout(key_grid)
         settings_layout.addStretch(1)
 
         self.stop_button = QPushButton("停止")
@@ -1060,7 +1086,7 @@ class MainWindow(QMainWindow):
 
         page_layout.addWidget(settings_group)
 
-        # 右侧：遥测数据 + 按键说明
+        # 右侧：遥测数据 + 机构动作
         right_panel = QVBoxLayout()
         right_panel.setSpacing(16)
 
@@ -1107,40 +1133,6 @@ class MainWindow(QMainWindow):
         self.action_control = ActionControlPanel()
         self.action_control.action_requested.connect(self._send_action)
         right_panel.addWidget(self.action_control)
-
-        key_card = QFrame()
-        key_card.setObjectName("CardPanel")
-        key_layout = QVBoxLayout(key_card)
-        key_layout.setContentsMargins(20, 18, 20, 20)
-        key_layout.setSpacing(12)
-
-        key_title = QLabel("键盘控制")
-        key_title.setObjectName("CardTitle")
-        key_layout.addWidget(key_title)
-
-        key_grid = QVBoxLayout()
-        key_grid.setSpacing(8)
-        key_rows = [
-            ("W / S", "前进 / 后退"),
-            ("A / D", "左移 / 右移"),
-            ("Q / E", "逆时针 / 顺时针"),
-        ]
-        for key, desc in key_rows:
-            row = QHBoxLayout()
-            row.setSpacing(12)
-            key_label = QLabel(key)
-            key_label.setObjectName("KeyBadge")
-            key_label.setMinimumWidth(70)
-            key_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            desc_label = QLabel(desc)
-            desc_label.setObjectName("Subtle")
-            row.addWidget(key_label)
-            row.addWidget(desc_label)
-            row.addStretch(1)
-            key_grid.addLayout(row)
-
-        key_layout.addLayout(key_grid)
-        right_panel.addWidget(key_card)
         right_panel.addStretch(1)
 
         page_layout.addLayout(right_panel, 1)

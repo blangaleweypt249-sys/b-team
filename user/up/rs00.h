@@ -56,8 +56,18 @@ typedef struct
 
 typedef struct
 {
+    uint32_t sent_ms;
+    uint32_t feedback_sequence;
+    HAL_StatusTypeDef result;
+    bool pending;
+    bool completed;
+} rs_zero_state_t;
+
+typedef struct
+{
     rs_bus_t *bus;
     rs_feedback_t feedback;
+    rs_zero_state_t zero;
     uint32_t last_rx_ms;
     float pp_speed_rad_s;
     float pp_acceleration_rad_s2;
@@ -78,6 +88,8 @@ HAL_StatusTypeDef RsMotor_Init(rs_motor_t *motor, rs_bus_t *bus, uint8_t id);
 
 /** @brief 写入当前位置为机械零点，不用于普通位置回零 */
 HAL_StatusTypeDef RsMotor_SetZero(rs_motor_t *motor);
+/** @brief 查询机械标零结果，等待新反馈时返回 HAL_BUSY。 */
+HAL_StatusTypeDef RsMotor_GetZeroStatus(rs_motor_t *motor);
 
 /** @brief 非阻塞地停止、配置并使能指定控制模式。 */
 HAL_StatusTypeDef RsMotor_Start(rs_motor_t *motor, rs_mode_t mode,

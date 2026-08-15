@@ -7,7 +7,7 @@
 
 /* 应用层调度周期和电机容量。 */
 #define RS_APP_MAX_MOTORS          8U
-#define RS_APP_CONTROL_PERIOD_MS   1U
+#define RS_APP_CONTROL_PERIOD_MS   10U
 #define RS_APP_FEEDBACK_TIMEOUT_MS 50U
 
 /* 应用层命令和反馈使用输出轴单位，发送或读取时由 rs_app 换算。 */
@@ -62,6 +62,7 @@ typedef struct
 typedef struct
 {
     uint8_t id;
+    int8_t direction;
     uint32_t period_ms;
     rs_command_t command;
 } rs_app_motor_config_t;
@@ -70,6 +71,7 @@ typedef struct
 {
     rs_motor_t motor;
     rs_command_t command;
+    int8_t direction;
     HAL_StatusTypeDef last_result;
     uint32_t period_ms;
     uint32_t next_control_ms; /* 此电机下一次允许发送控制帧的时间。 */
@@ -122,6 +124,8 @@ HAL_StatusTypeDef RsApp_Enable(rs_app_t *app, uint8_t id, bool enabled);
 HAL_StatusTypeDef RsApp_Restart(rs_app_t *app, uint8_t id);
 /** @brief 写入一台 RS00 的机械零点。 */
 HAL_StatusTypeDef RsApp_SetZero(rs_app_t *app, uint8_t id);
+/** @brief 查询一台 RS00 的机械标零结果。 */
+HAL_StatusTypeDef RsApp_GetZeroStatus(rs_app_t *app, uint8_t id);
 /** @brief 清除一台 RS00 的故障。 */
 HAL_StatusTypeDef RsApp_ClearFault(rs_app_t *app, uint8_t id);
 /** @brief 请求全部 RS00 失能。 */

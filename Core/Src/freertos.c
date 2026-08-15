@@ -31,6 +31,8 @@
 #include "computer_link.h"
 #include "dt35_pnp_link.h"
 #include "imu_main.h"
+#include "lora_link.h"
+#include "mcu_link.h"
 #include "up_main.h"
 #include "usart.h"
 #include "gpio.h"
@@ -145,8 +147,7 @@ void MX_FREERTOS_Init(void) {
 
   /* Create the thread(s) */
   /* creation of startupReminder */
-  startupReminderHandle = osThreadNew(StartStartupReminderTask, NULL,
-                                      &startupReminder_attributes);
+  startupReminderHandle = osThreadNew(StartStartupReminderTask, NULL, &startupReminder_attributes);
 
   /* creation of chassisTask */
   chassisTaskHandle = osThreadNew(StartChassisTask, NULL, &chassisTask_attributes);
@@ -156,6 +157,7 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of commTask */
   commTaskHandle = osThreadNew(StartCommTask, NULL, &commTask_attributes);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -180,20 +182,16 @@ __weak void StartStartupReminderTask(void *argument)
 
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
-  /* Two short 500 Hz beeps with a pause between them. */
+  /* 每次 MCU 复位后重新播放两声启动提示音。 */
   for (uint32_t beep = 0U; beep < 2U; beep++)
   {
-    for (uint32_t cycle = 0U; cycle < 80U; cycle++)
-    {
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
-      (void)osDelay(1U);
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET);
-      (void)osDelay(1U);
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
-      (void)osDelay(1U);
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET);
-      (void)osDelay(1U);
-    }
+for (uint32_t cycle = 0U; cycle < 80U; cycle++)
+{
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
+  (void)osDelay(1U);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET);
+  (void)osDelay(1U);
+}
 
     (void)osDelay(80U);
   }
@@ -254,14 +252,13 @@ __weak void StartLiftTask(void *argument)
 
   (void)argument;
   up_result = Up_Init();
-
   /* Infinite loop */
   for(;;)
   {
     if (up_result == HAL_OK)
     {
-      Action_Run1ms();
       Up_Run1ms();
+      Action_Run1ms();
     }
 
     next_tick += 1U;
@@ -283,11 +280,15 @@ __weak void StartCommTask(void *argument)
   (void)argument;
   (void)ComputerLink_Init(&huart4);
   (void)DT35PnpLink_Init(&huart9);
+  (void)LoraLink_Init(&huart7);
+  (void)McuLink_Init(&huart6);
 
   /* Infinite loop */
   for(;;)
   {
     DT35PnpLink_Run();
+    LoraLink_Run();
+    McuLink_Run();
     Action_UpdatePnp(pnp_link[SENSOR_LINK_F_INDEX].trigger,
                      pnp_link[SENSOR_LINK_L_B_INDEX].trigger);
     ComputerLink_Run();

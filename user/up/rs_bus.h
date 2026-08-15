@@ -37,6 +37,8 @@ HAL_StatusTypeDef RsBus_Init(rs_bus_t *bus, FDCAN_HandleTypeDef *device,
                              uint8_t host_id);
 /** @brief 停止 RS00 CAN 总线。 */
 void RsBus_Stop(rs_bus_t *bus);
+/** @brief 从 Bus-Off 状态重启控制器，保留应用层控制状态。 */
+HAL_StatusTypeDef RsBus_Recover(rs_bus_t *bus);
 /** @brief 设置主循环中的唯一接收处理函数。 */
 HAL_StatusTypeDef RsBus_SetHandler(rs_bus_t *bus,
                                    rs_bus_rx_handler_t handler,
@@ -50,7 +52,7 @@ void RsBus_HandleRxIsr(rs_bus_t *bus, uint32_t interrupt_flags);
 void RsBus_HandleErrorIsr(rs_bus_t *bus, uint32_t interrupt_flags);
 /** @brief 在主循环中解析接收队列。 */
 void RsBus_ProcessRx(rs_bus_t *bus);
-/** @brief 查询总线是否进入闭锁状态。 */
+/** @brief 查询总线当前是否处于 Bus-Off 状态。 */
 bool RsBus_BusOff(const rs_bus_t *bus);
 
 #endif

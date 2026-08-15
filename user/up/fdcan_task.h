@@ -16,7 +16,7 @@ typedef struct
 
 /** @brief 初始化抬升机构使用的两条 FDCAN 总线。 */
 HAL_StatusTypeDef Fdcan_Init(const fdcan_config_t *config);
-/** @brief 在 1 ms 任务中处理两条总线的接收队列。 */
+/** @brief 在 1 ms 任务中处理接收队列并尝试恢复 Bus-Off。 */
 void Fdcan_Run1ms(void);
 /** @brief 停止两条 FDCAN 总线。 */
 void Fdcan_Stop(void);
@@ -30,7 +30,9 @@ void Fdcan_HandleRxIsr(FDCAN_HandleTypeDef *hfdcan,
 /** @brief 分发错误中断，只记录总线状态。 */
 void Fdcan_HandleErrorIsr(FDCAN_HandleTypeDef *hfdcan,
                           uint32_t interrupt_flags);
-/** @brief 查询任一抬升总线是否进入闭锁状态。 */
+/** @brief 查询任一抬升总线当前是否处于 Bus-Off 状态。 */
 bool Fdcan_BusOff(void);
+bool Fdcan_RsBusOff(void);
+bool Fdcan_StdBusOff(void);
 
 #endif

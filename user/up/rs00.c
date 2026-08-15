@@ -5,6 +5,9 @@
 
 /* RS00 协议范围和数据缩放。 */
 #define RS_MODE_DELAY_MS        3U
+#define RS_ENABLE_TIMEOUT_MS    100U
+#define RS_ZERO_TIMEOUT_MS      1500U
+#define RS_ZERO_ERROR_RAD       0.05f
 #define RS_LIMIT_IQ_VALID       (1U << 0)
 #define RS_LIMIT_SPEED_VALID    (1U << 1)
 
@@ -160,17 +163,6 @@ static HAL_StatusTypeDef require_mode(rs_motor_t *motor, rs_mode_t mode)
     return HAL_OK;
 }
 
-static HAL_StatusTypeDef send_packet(rs_motor_t *motor,
-                                     const rs_packet_t *packet)
-{
-    if (!motor_ok(motor) || (packet == NULL))
-    {
-        return HAL_ERROR;
-    }
-
-    return RsBus_Send(motor->bus, packet->id, packet->data);
-}
-
 static HAL_StatusTypeDef send_command(rs_motor_t *motor, uint8_t command,
                                       uint8_t first_byte)
 {
@@ -183,7 +175,7 @@ static HAL_StatusTypeDef send_command(rs_motor_t *motor, uint8_t command,
 
     pack_command(&packet, motor, command, motor->bus->host_id);
     packet.data[0] = first_byte;
-    return send_packet(motor, &packet);
+    return RsBus_Send(motor->bus, packet.id, packet.data);
 }
 
 static HAL_StatusTypeDef write_u8(rs_motor_t *motor, uint16_t index,
@@ -199,7 +191,7 @@ static HAL_StatusTypeDef write_u8(rs_motor_t *motor, uint16_t index,
     pack_command(&packet, motor, RS_CMD_WRITE, motor->bus->host_id);
     pack_u16_le(packet.data, index);
     packet.data[4] = value;
-    return send_packet(motor, &packet);
+    return RsBus_Send(motor->bus, packet.id, packet.data);
 }
 
 static HAL_StatusTypeDef write_float(rs_motor_t *motor, uint16_t index,
@@ -215,58 +207,12 @@ static HAL_StatusTypeDef write_float(rs_motor_t *motor, uint16_t index,
     pack_command(&packet, motor, RS_CMD_WRITE, motor->bus->host_id);
     pack_u16_le(packet.data, index);
     pack_float_le(&packet.data[4], value);
-    return send_packet(motor, &packet);
+    return RsBus_Send(motor->bus, packet.id, packet.data);
 }
 
 static bool time_reached(uint32_t now_ms, uint32_t due_ms)
 {
     return (int32_t)(now_ms - due_ms) >= 0;
-}
-
-static HAL_StatusTypeDef set_iq_limit(rs_motor_t *motor, float max_iq)
-{
-    float iq = clampf(max_iq, 0.0f, RS_IQ_MAX);
-    HAL_StatusTypeDef status;
-
-    if (((motor->limit_valid & RS_LIMIT_IQ_VALID) != 0U) &&
-        (motor->limit_iq == iq))
-    {
-        return HAL_OK;
-    }
-
-    status = write_float(motor, RS_PARAM_IQ_MAX, iq);
-    if (status == HAL_OK)
-    {
-        motor->limit_iq = iq;
-        motor->limit_valid |= RS_LIMIT_IQ_VALID;
-    }
-    return status;
-}
-
-static HAL_StatusTypeDef set_speed_limit(rs_motor_t *motor,
-                                         float max_velocity_rad_s)
-{
-    HAL_StatusTypeDef status;
-
-    if (!finite_float(max_velocity_rad_s) || (max_velocity_rad_s < 0.0f))
-    {
-        return HAL_ERROR;
-    }
-
-    max_velocity_rad_s = clampf(max_velocity_rad_s, 0.0f, RS_V_MAX);
-    if (((motor->limit_valid & RS_LIMIT_SPEED_VALID) == 0U) ||
-        (motor->limit_speed_rad_s != max_velocity_rad_s))
-    {
-        status = write_float(motor, RS_PARAM_SPEED_MAX, max_velocity_rad_s);
-        if (status != HAL_OK)
-        {
-            return status;
-        }
-        motor->limit_speed_rad_s = max_velocity_rad_s;
-        motor->limit_valid |= RS_LIMIT_SPEED_VALID;
-    }
-
-    return HAL_OK;
 }
 
 HAL_StatusTypeDef RsMotor_Init(rs_motor_t *motor, rs_bus_t *bus, uint8_t id)
@@ -279,17 +225,61 @@ HAL_StatusTypeDef RsMotor_Init(rs_motor_t *motor, rs_bus_t *bus, uint8_t id)
     memset(motor, 0, sizeof(*motor));
     motor->bus = bus;
     motor->id = id;
-    motor->mode = (uint8_t)RS_MOTION;
+    motor->mode = UINT8_MAX;
+    motor->requested_mode = UINT8_MAX;
     return HAL_OK;
 }
 
 HAL_StatusTypeDef RsMotor_SetZero(rs_motor_t *motor)
 {
+    HAL_StatusTypeDef status;
+
     if (!motor_ok(motor) || motor->active)
     {
         return HAL_ERROR;
     }
-    return send_command(motor, RS_CMD_ZERO, 1U);
+    if (motor->zero.pending)
+    {
+        return HAL_BUSY;
+    }
+
+    motor->zero.sent_ms = HAL_GetTick();
+    motor->zero.feedback_sequence = motor->feedback.sequence;
+    motor->zero.result = HAL_BUSY;
+    motor->zero.pending = true;
+    motor->zero.completed = false;
+
+    status = send_command(motor, RS_CMD_ZERO, 1U);
+    if (status != HAL_OK)
+    {
+        motor->zero.pending = false;
+        motor->zero.result = status;
+    }
+    return status;
+}
+
+HAL_StatusTypeDef RsMotor_GetZeroStatus(rs_motor_t *motor)
+{
+    if (!motor_ok(motor))
+    {
+        return HAL_ERROR;
+    }
+    if (motor->zero.pending)
+    {
+        if ((uint32_t)(HAL_GetTick() - motor->zero.sent_ms) >=
+            RS_ZERO_TIMEOUT_MS)
+        {
+            motor->zero.pending = false;
+            motor->zero.result = HAL_TIMEOUT;
+            return HAL_TIMEOUT;
+        }
+        return HAL_BUSY;
+    }
+    if (!motor->zero.completed)
+    {
+        return HAL_ERROR;
+    }
+    return motor->zero.result;
 }
 
 HAL_StatusTypeDef RsMotor_Start(rs_motor_t *motor, rs_mode_t mode,
@@ -361,17 +351,28 @@ HAL_StatusTypeDef RsMotor_Start(rs_motor_t *motor, rs_mode_t mode,
             motor->start_step = RS_START_IDLE;
             return status;
         }
-        motor->transition_due_ms = now_ms + RS_MODE_DELAY_MS;
+        motor->transition_due_ms = now_ms + RS_ENABLE_TIMEOUT_MS;
         motor->start_step = RS_START_WAIT;
         return HAL_BUSY;
     }
 
-    if (!time_reached(now_ms, motor->transition_due_ms))
+    if (motor->start_step != RS_START_WAIT)
     {
+        motor->start_step = RS_START_IDLE;
+        return HAL_ERROR;
+    }
+    if (!motor->active)
+    {
+        if (time_reached(now_ms, motor->transition_due_ms))
+        {
+            motor->mode = UINT8_MAX;
+            motor->requested_mode = UINT8_MAX;
+            motor->start_step = RS_START_IDLE;
+            return HAL_TIMEOUT;
+        }
         return HAL_BUSY;
     }
 
-    motor->active = true;
     motor->pp_configured = false;
     motor->limit_valid = 0U;
     motor->start_step = RS_START_IDLE;
@@ -440,7 +441,7 @@ HAL_StatusTypeDef RsMotor_SetMotion(rs_motor_t *motor, float position_rad,
     pack_scaled_u16(&packet.data[2], velocity_rad_s, RS_V_MIN, RS_V_MAX);
     pack_scaled_u16(&packet.data[4], kp, 0.0f, RS_MOTION_KP_MAX);
     pack_scaled_u16(&packet.data[6], kd, 0.0f, RS_MOTION_KD_MAX);
-    return send_packet(motor, &packet);
+    return RsBus_Send(motor->bus, packet.id, packet.data);
 }
 
 HAL_StatusTypeDef RsMotor_SetIq(rs_motor_t *motor, float iq)
@@ -464,6 +465,7 @@ HAL_StatusTypeDef RsMotor_SetIq(rs_motor_t *motor, float iq)
 HAL_StatusTypeDef RsMotor_SetSpeed(rs_motor_t *motor, float velocity_rad_s,
                                    float max_iq)
 {
+    float iq_limit;
     HAL_StatusTypeDef status;
 
     if (!finite_float(velocity_rad_s) || !finite_float(max_iq) ||
@@ -478,10 +480,17 @@ HAL_StatusTypeDef RsMotor_SetSpeed(rs_motor_t *motor, float velocity_rad_s,
         return status;
     }
 
-    status = set_iq_limit(motor, max_iq);
-    if (status != HAL_OK)
+    iq_limit = clampf(max_iq, 0.0f, RS_IQ_MAX);
+    if (((motor->limit_valid & RS_LIMIT_IQ_VALID) == 0U) ||
+        (motor->limit_iq != iq_limit))
     {
-        return status;
+        status = write_float(motor, RS_PARAM_IQ_MAX, iq_limit);
+        if (status != HAL_OK)
+        {
+            return status;
+        }
+        motor->limit_iq = iq_limit;
+        motor->limit_valid |= RS_LIMIT_IQ_VALID;
     }
 
     return write_float(motor, RS_PARAM_SPEED_REF,
@@ -493,8 +502,8 @@ HAL_StatusTypeDef RsMotor_SetCsp(rs_motor_t *motor, float position_rad,
 {
     HAL_StatusTypeDef status;
 
-    if (!motor_ok(motor) || !finite_float(position_rad) ||
-        !finite_float(max_velocity_rad_s) || (max_velocity_rad_s < 0.0f))
+    if (!finite_float(position_rad) || !finite_float(max_velocity_rad_s) ||
+        (max_velocity_rad_s < 0.0f))
     {
         return HAL_ERROR;
     }
@@ -504,10 +513,18 @@ HAL_StatusTypeDef RsMotor_SetCsp(rs_motor_t *motor, float position_rad,
         return status;
     }
 
-    status = set_speed_limit(motor, max_velocity_rad_s);
-    if (status != HAL_OK)
+    max_velocity_rad_s = clampf(max_velocity_rad_s, 0.0f, RS_V_MAX);
+    if (((motor->limit_valid & RS_LIMIT_SPEED_VALID) == 0U) ||
+        (motor->limit_speed_rad_s != max_velocity_rad_s))
     {
-        return status;
+        status = write_float(motor, RS_PARAM_SPEED_MAX,
+                             max_velocity_rad_s);
+        if (status != HAL_OK)
+        {
+            return status;
+        }
+        motor->limit_speed_rad_s = max_velocity_rad_s;
+        motor->limit_valid |= RS_LIMIT_SPEED_VALID;
     }
 
     return write_float(motor, RS_PARAM_POS_REF, position_rad);
@@ -519,8 +536,7 @@ HAL_StatusTypeDef RsMotor_SetPp(rs_motor_t *motor, float position_rad,
 {
     HAL_StatusTypeDef status;
 
-    if (!motor_ok(motor) || !finite_float(position_rad) ||
-        !finite_float(max_velocity_rad_s) ||
+    if (!finite_float(position_rad) || !finite_float(max_velocity_rad_s) ||
         !finite_float(acceleration_rad_s2) || (max_velocity_rad_s < 0.0f) ||
         (acceleration_rad_s2 < 0.0f))
     {
@@ -607,9 +623,26 @@ static void parse_feedback(rs_motor_t *motor, uint32_t id,
     motor->feedback.state = (uint8_t)((id >> 22) & 0x03U);
     motor->active =
         motor->feedback.state == (uint8_t)RS_RUN;
+    if (!motor->active && (motor->start_step == RS_START_IDLE) &&
+        (motor->mode != UINT8_MAX))
+    {
+        /* Reset feedback invalidates the run mode cached by the MCU. */
+        motor->mode = UINT8_MAX;
+        motor->requested_mode = UINT8_MAX;
+    }
     motor->feedback.valid |= RS_FDB_SPEED | RS_FDB_TORQUE | RS_FDB_TEMP |
                              RS_FDB_STATE | RS_FDB_FAULT;
     motor->feedback.sequence++;
+
+    if (motor->zero.pending &&
+        (motor->feedback.sequence != motor->zero.feedback_sequence) &&
+        (motor->feedback.position_rad >= -RS_ZERO_ERROR_RAD) &&
+        (motor->feedback.position_rad <= RS_ZERO_ERROR_RAD))
+    {
+        motor->zero.pending = false;
+        motor->zero.completed = true;
+        motor->zero.result = HAL_OK;
+    }
 }
 
 static void parse_fault(rs_motor_t *motor, const uint8_t data[8])
