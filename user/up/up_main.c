@@ -30,10 +30,10 @@
 #define DM_HOME_KP           70.0f
 #define DM_HOME_KD           1.25f
 #define M2006_HOME_ANGLE_DEG 0.0f
-#define M2006_PID_KP         45.0f
+#define M2006_PID_KP         30.0f
 #define M2006_PID_KI         0.0f
-#define M2006_PID_KD         5.0f
-#define MOTOR_WORK_ZERO_DEG  (-107.0f)
+#define M2006_PID_KD         4.0f
+#define MOTOR_WORK_ZERO_DEG (-UP_SECOND_ZERO_OFFSET_DEG)
 #define MOTOR_MOVE_TIME_MS   2000U
 #define MOTOR_DONE_ERROR_DEG 3.0f
 #define MOTOR_START_DELAY_MS 20U
@@ -46,7 +46,7 @@
 #define DM_MAX_OUTPUT_ANGLE_DEG (DM_J4310_P_MAX * RAD_TO_DEG * \
                                  DM_APP_MOTOR_TO_OUTPUT_RATIO)
 
-/* RS、DM 和 M2006 的接线 ID 与默认控制参数集中在本文件。 */
+/* RS、DM 和 M2006 的接线 ID 与默认控制参数集中 */
 static const rs_app_motor_config_t rs_motor_config[] = {
     {
         .id = RS_MOTOR_L_ID,
@@ -501,13 +501,13 @@ static void reset_dm_coordinates(void)
     curve_start_angles.dm_r_deg = 0.0f;
 }
 
-static void start_work_zero_curve(uint32_t now_ms)
+static void start_all_motor_curve(float target_angle_deg, uint32_t now_ms)
 {
     curve_start_angles = up_command_angles;
-    up_target_angles.rs_l_deg = MOTOR_WORK_ZERO_DEG;
-    up_target_angles.rs_r_deg = MOTOR_WORK_ZERO_DEG;
-    up_target_angles.dm_l_deg = MOTOR_WORK_ZERO_DEG;
-    up_target_angles.dm_r_deg = MOTOR_WORK_ZERO_DEG;
+    up_target_angles.rs_l_deg = target_angle_deg;
+    up_target_angles.rs_r_deg = target_angle_deg;
+    up_target_angles.dm_l_deg = target_angle_deg;
+    up_target_angles.dm_r_deg = target_angle_deg;
     curve_start_ms = now_ms;
     up_rs_feedforward_nm = 0.0f;
     up_dm_feedforward_nm = 0.0f;
@@ -774,10 +774,11 @@ static void run_motor_state(uint32_t now_ms)
     switch (up_state)
     {
     case UP_STATE_FIRST_ZERO:
+        /* 在上电位置完成第一次标零。 */
         zero_result = run_zero_sequence(now_ms);
         if (zero_result == HAL_OK)
         {
-            start_work_zero_curve(now_ms);
+            start_all_motor_curve(MOTOR_WORK_ZERO_DEG, now_ms);
             up_state = UP_STATE_MOVE_SECOND_ZERO;
             state_start_ms = now_ms;
         }
@@ -788,6 +789,7 @@ static void run_motor_state(uint32_t now_ms)
         break;
 
     case UP_STATE_MOVE_SECOND_ZERO:
+        /* 四台电机同步转到带偏移的待机位置。 */
         update_motor_curve(now_ms);
         if (!up_curve_running &&
             all_motors_at_angle(now_ms, MOTOR_WORK_ZERO_DEG))
@@ -799,6 +801,7 @@ static void run_motor_state(uint32_t now_ms)
         break;
 
     case UP_STATE_SECOND_ZERO:
+        /* 将偏移后的待机位置重新定义为工作零点。 */
         zero_result = run_zero_sequence(now_ms);
         if (zero_result == HAL_OK)
         {

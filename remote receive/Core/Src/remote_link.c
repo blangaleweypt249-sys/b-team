@@ -8,15 +8,22 @@ volatile uint32_t remote_link_rx_arm_errors;
 volatile uint32_t remote_link_forward_errors;
 volatile uint32_t remote_link_forward_overflows;
 volatile uint32_t remote_link_forwarded_bytes;
+volatile uint32_t remote_link_return_errors;
+volatile uint32_t remote_link_return_overflows;
+volatile uint32_t remote_link_returned_bytes;
 volatile uint32_t remote_link_lora_config_attempts;
 volatile remote_link_lora_config_status_t remote_link_lora_config_status;
 volatile uint8_t remote_link_lora_config_readback[REMOTE_LINK_LORA_CONFIG_SIZE];
 
 static uint8_t remote_link_rx_byte;
+static uint8_t remote_link_return_rx_byte;
 static uint8_t remote_link_lora_ready;
 static uint8_t remote_link_forward_buffer[128U];
 static volatile uint16_t remote_link_forward_head;
 static volatile uint16_t remote_link_forward_tail;
+static uint8_t remote_link_return_buffer[128U];
+static volatile uint16_t remote_link_return_head;
+static volatile uint16_t remote_link_return_tail;
 
 #define E32_CONFIG_BAUDRATE 9600U
 #define E32_NORMAL_BAUDRATE 115200U
@@ -215,7 +222,7 @@ static void RemoteLink_LoRaConfigure(void)
     remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIG_READY;
 }
 
-static void RemoteLink_QueueByte(uint8_t byte)
+static void RemoteLink_QueueForwardByte(uint8_t byte)
 {
     uint16_t head = remote_link_forward_head;
     uint16_t next = head + 1U;
@@ -234,13 +241,44 @@ static void RemoteLink_QueueByte(uint8_t byte)
     remote_link_forward_head = next;
 }
 
-static void RemoteLink_ArmReceive(void)
+static void RemoteLink_QueueReturnByte(uint8_t byte)
+{
+    uint16_t head = remote_link_return_head;
+    uint16_t next = head + 1U;
+
+    if (next >= REMOTE_LINK_FORWARD_BUFFER_SIZE)
+    {
+        next = 0U;
+    }
+    if (next == remote_link_return_tail)
+    {
+        remote_link_return_overflows++;
+        return;
+    }
+
+    remote_link_return_buffer[head] = byte;
+    remote_link_return_head = next;
+}
+
+static void RemoteLink_ArmLoraReceive(void)
 {
     if (huart3.RxState == HAL_UART_STATE_BUSY_RX)
     {
         return;
     }
     if (HAL_UART_Receive_IT(&huart3, &remote_link_rx_byte, 1U) != HAL_OK)
+    {
+        remote_link_rx_arm_errors++;
+    }
+}
+
+static void RemoteLink_ArmControllerReceive(void)
+{
+    if (huart2.RxState == HAL_UART_STATE_BUSY_RX)
+    {
+        return;
+    }
+    if (HAL_UART_Receive_IT(&huart2, &remote_link_return_rx_byte, 1U) != HAL_OK)
     {
         remote_link_rx_arm_errors++;
     }
@@ -255,15 +293,21 @@ void RemoteLink_Init(void)
     remote_link_forward_errors = 0U;
     remote_link_forward_overflows = 0U;
     remote_link_forwarded_bytes = 0U;
+    remote_link_return_errors = 0U;
+    remote_link_return_overflows = 0U;
+    remote_link_returned_bytes = 0U;
     remote_link_lora_config_attempts = 0U;
     remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIG_NOT_STARTED;
     remote_link_forward_head = 0U;
     remote_link_forward_tail = 0U;
+    remote_link_return_head = 0U;
+    remote_link_return_tail = 0U;
     HAL_GPIO_WritePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin, GPIO_PIN_RESET);
     RemoteLink_LoRaConfigure();
     if (RemoteLink_LoRaReady() != 0U)
     {
-        RemoteLink_ArmReceive();
+        RemoteLink_ArmLoraReceive();
+        RemoteLink_ArmControllerReceive();
     }
 }
 
@@ -288,19 +332,43 @@ void RemoteLink_ForwardRawData(void)
             tail = 0U;
         }
     }
-    if (length == 0U)
-    {
-        return;
-    }
-
-    if (HAL_UART_Transmit(&huart2, data, length, 10U) == HAL_OK)
+    if ((length != 0U) &&
+        (HAL_UART_Transmit(&huart2, data, length, 10U) == HAL_OK))
     {
         remote_link_forward_tail = tail;
         remote_link_forwarded_bytes += length;
     }
-    else
+    else if (length != 0U)
     {
         remote_link_forward_errors++;
+    }
+
+    length = 0U;
+    head = remote_link_return_head;
+    tail = remote_link_return_tail;
+    while ((tail != head) && (length < REMOTE_LINK_FORWARD_CHUNK_SIZE))
+    {
+        data[length++] = remote_link_return_buffer[tail];
+        tail++;
+        if (tail >= REMOTE_LINK_FORWARD_BUFFER_SIZE)
+        {
+            tail = 0U;
+        }
+    }
+    if ((length == 0U) ||
+        (HAL_GPIO_ReadPin(LORA_AUX_GPIO_Port, LORA_AUX_Pin) == GPIO_PIN_RESET))
+    {
+        return;
+    }
+
+    if (HAL_UART_Transmit(&huart3, data, length, 10U) == HAL_OK)
+    {
+        remote_link_return_tail = tail;
+        remote_link_returned_bytes += length;
+    }
+    else
+    {
+        remote_link_return_errors++;
     }
 }
 
@@ -312,9 +380,15 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         if (RemoteLink_LoRaReady() != 0U)
         {
             remote_link_rx_bytes++;
-            RemoteLink_QueueByte(remote_link_rx_byte);
+            RemoteLink_QueueForwardByte(remote_link_rx_byte);
         }
-        RemoteLink_ArmReceive();
+        RemoteLink_ArmLoraReceive();
+    }
+    else if (huart->Instance == USART2)
+    {
+        remote_link_rx_callbacks++;
+        RemoteLink_QueueReturnByte(remote_link_return_rx_byte);
+        RemoteLink_ArmControllerReceive();
     }
 }
 
@@ -325,7 +399,12 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
         remote_link_uart_errors++;
         if (RemoteLink_LoRaReady() != 0U)
         {
-            RemoteLink_ArmReceive();
+            RemoteLink_ArmLoraReceive();
         }
+    }
+    else if (huart->Instance == USART2)
+    {
+        remote_link_uart_errors++;
+        RemoteLink_ArmControllerReceive();
     }
 }

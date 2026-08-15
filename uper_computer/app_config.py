@@ -41,7 +41,7 @@ def calculate_velocity(
 ) -> VelocityCommand:
     vx_axis = int(state.right) - int(state.left)
     vy_axis = int(state.forward) - int(state.backward)
-    wz_axis = int(state.counterclockwise) - int(state.clockwise)
+    wz_axis = int(state.clockwise) - int(state.counterclockwise)
     linear_speed_mm_s = linear_speed_m_s * 1000.0
 
     if vx_axis != 0 and vy_axis != 0:

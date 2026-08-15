@@ -7,14 +7,14 @@
 
 typedef enum
 {
-    ACTION_CMD_LOWER = 0U,
-    ACTION_CMD_LIFT = 1U,
-    ACTION_CMD_M2006_FORWARD = 2U,
-    ACTION_CMD_FRONT_FLAT = 3U,
-    ACTION_CMD_FRONT_DOWN = 4U,
-    ACTION_CMD_REAR_FLAT = 5U,
-    ACTION_CMD_REAR_DOWN = 6U,
-    ACTION_CMD_M2006_COAST = 7U,
+    ACTION_CMD_LOWER = 0U,        /* 四台电机沿撑起反方向回待机位。 */
+    ACTION_CMD_LIFT = 1U,         /* 四台抬升电机运动到支撑角度。 */
+    ACTION_CMD_M2006_FORWARD = 2U, /* 两台 M2006 向前转一圈。 */
+    ACTION_CMD_FRONT_FLAT = 3U,   /* 前部 RS 绕转、标零并放平。 */
+    ACTION_CMD_FRONT_DOWN = 4U,   /* 前部 RS 从放平回到支撑。 */
+    ACTION_CMD_REAR_FLAT = 5U,    /* 后部 DM 反向绕转、标零并放平。 */
+    ACTION_CMD_REAR_DOWN = 6U,    /* 后部 DM 继续反向回到支撑。 */
+    ACTION_CMD_M2006_COAST = 7U,  /* 两台 M2006 失去位置保持。 */
     ACTION_CMD_NONE = 0xFFU
 } action_cmd_t;
 

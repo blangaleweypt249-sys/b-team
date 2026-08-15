@@ -47,7 +47,7 @@ void Remote_LoRaInit(void);
 uint8_t Remote_LoRaReady(void);
 
 /**
- * @brief 按固定周期发送本机和第二主控的遥控数据帧
+ * @brief 按固定周期交替发送 ID 1 和 ID 2 的独立遥控短帧
  * @retval None
  */
 void Remote_Send(void);

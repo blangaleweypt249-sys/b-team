@@ -729,8 +729,8 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
         return 0;
     }
 
-    output = filtered_gyro_deg_s * imu_config.yaw_gyro_k -
-             calculate_yaw_pid(active_pid, imu_data.yaw_error_deg);
+    output = calculate_yaw_pid(active_pid, imu_data.yaw_error_deg) -
+             filtered_gyro_deg_s * imu_config.yaw_gyro_k;
     output = limit_float(output, -active_pid->out_max,
                          active_pid->out_max);
     imu_data.omega_output = (int16_t)output;

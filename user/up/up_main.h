@@ -8,6 +8,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* 第一次标零后沿负方向运动的二次标零角度，后续动作共用。 */
+#define UP_SECOND_ZERO_OFFSET_DEG 45.0f
+
 typedef struct
 {
     float rs_l_deg;
@@ -56,7 +59,7 @@ extern float up_dm_feedforward_nm;
  */
 HAL_StatusTypeDef Up_Init(void);
 
-/** @brief 查询四台电机是否完成二次标零并保持使能。 */
+/** @brief 查询四台电机是否完成二次标零、停在零度待机位并保持使能。 */
 bool Up_IsReady(void);
 bool Up_IsM2006Ready(void);
 

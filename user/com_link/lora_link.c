@@ -14,12 +14,13 @@
 #define REMOTE_FRAME_HEADER_1      0x5AU
 #define REMOTE_ID_LOCAL            0x01U
 #define REMOTE_ID_SECONDARY        0x02U
-#define REMOTE_ID_BROADCAST        0xFFU
-#define REMOTE_TYPE_CONTROL        0x01U
 #define REMOTE_LOCAL_PAYLOAD_SIZE  6U
-#define REMOTE_MAX_PAYLOAD_SIZE    16U
-#define REMOTE_FRAME_OVERHEAD      7U
-#define REMOTE_MAX_FRAME_SIZE      (REMOTE_MAX_PAYLOAD_SIZE + REMOTE_FRAME_OVERHEAD)
+#define REMOTE_SECOND_PAYLOAD_SIZE 2U
+#define REMOTE_FRAME_OVERHEAD      3U
+#define REMOTE_LOCAL_FRAME_SIZE    (REMOTE_FRAME_OVERHEAD + REMOTE_LOCAL_PAYLOAD_SIZE)
+#define REMOTE_SECOND_FRAME_SIZE   (REMOTE_FRAME_OVERHEAD + REMOTE_SECOND_PAYLOAD_SIZE)
+#define REMOTE_MAX_FRAME_SIZE      REMOTE_LOCAL_FRAME_SIZE
+#define MCU_RETURN_BUFFER_SIZE     32U
 
 #define REMOTE_AXIS_CENTER         128U
 #define REMOTE_FAST_SPEED_MM_S     150
@@ -41,34 +42,19 @@ static uint8_t remote_frame[REMOTE_MAX_FRAME_SIZE];
 static uint8_t remote_frame_index;
 static uint8_t remote_frame_size;
 static uint32_t remote_last_rx_ms;
+static uint8_t mcu_return_buffer[MCU_RETURN_BUFFER_SIZE];
+static uint16_t mcu_return_length;
 
 volatile uint32_t lora_link_rx_bytes;
 volatile uint32_t lora_link_uart_error_count;
 volatile uint32_t lora_link_tx_error_count;
 volatile uint32_t lora_link_valid_frame_count;
-volatile uint32_t lora_link_crc_error_count;
 volatile uint32_t lora_link_forward_error_count;
+volatile uint32_t lora_link_return_error_count;
+volatile uint32_t lora_link_returned_bytes;
 volatile uint8_t lora_remote_buttons;
 volatile uint8_t lora_remote_pe0_switch;
 volatile uint8_t lora_remote_online;
-
-static uint8_t LoraLink_Crc8(const uint8_t *data, uint8_t length)
-{
-    uint8_t crc = 0U;
-    uint8_t i;
-    uint8_t bit;
-
-    for (i = 0U; i < length; i++)
-    {
-        crc ^= data[i];
-        for (bit = 0U; bit < 8U; bit++)
-        {
-            crc = ((crc & 0x80U) != 0U) ?
-                  (uint8_t)((crc << 1U) ^ 0x07U) : (uint8_t)(crc << 1U);
-        }
-    }
-    return crc;
-}
 
 static int16_t LoraLink_MapAxis(uint8_t value, int16_t max_speed)
 {
@@ -98,7 +84,7 @@ static void LoraLink_MapStick(uint8_t x, uint8_t y, int16_t max_speed,
 
 static void LoraLink_HandleLocalFrame(const uint8_t *frame)
 {
-    const uint8_t *payload = &frame[6];
+    const uint8_t *payload = &frame[REMOTE_FRAME_OVERHEAD];
     uint8_t buttons = payload[4];
     bool left_active;
     bool left_shoulder;
@@ -138,19 +124,13 @@ static void LoraLink_HandleLocalFrame(const uint8_t *frame)
 static void LoraLink_HandleFrame(void)
 {
     uint8_t target_id = remote_frame[2];
-    uint8_t frame_type = remote_frame[3];
-    uint8_t payload_size = remote_frame[4];
 
     lora_link_valid_frame_count++;
-    if (((target_id == REMOTE_ID_LOCAL) ||
-         (target_id == REMOTE_ID_BROADCAST)) &&
-        (frame_type == REMOTE_TYPE_CONTROL) &&
-        (payload_size == REMOTE_LOCAL_PAYLOAD_SIZE))
+    if (target_id == REMOTE_ID_LOCAL)
     {
         LoraLink_HandleLocalFrame(remote_frame);
     }
-    if ((target_id == REMOTE_ID_SECONDARY) ||
-        (target_id == REMOTE_ID_BROADCAST))
+    else if (target_id == REMOTE_ID_SECONDARY)
     {
         if (McuLink_Send(remote_frame, remote_frame_size) != HAL_OK)
         {
@@ -161,9 +141,6 @@ static void LoraLink_HandleFrame(void)
 
 static void LoraLink_ParseByte(uint8_t data)
 {
-    uint8_t payload_size;
-    uint8_t expected_crc;
-
     if (remote_frame_index == 0U)
     {
         if (data == REMOTE_FRAME_HEADER_0)
@@ -185,37 +162,64 @@ static void LoraLink_ParseByte(uint8_t data)
         return;
     }
 
-    remote_frame[remote_frame_index++] = data;
-    if (remote_frame_index == 5U)
+    if (remote_frame_index == 2U)
     {
-        payload_size = remote_frame[4];
-        if (payload_size > REMOTE_MAX_PAYLOAD_SIZE)
+        remote_frame[remote_frame_index++] = data;
+        if (data == REMOTE_ID_LOCAL)
         {
-            remote_frame_index = 0U;
-            remote_frame_size = 0U;
-            return;
+            remote_frame_size = REMOTE_LOCAL_FRAME_SIZE;
         }
-        remote_frame_size = (uint8_t)(REMOTE_FRAME_OVERHEAD + payload_size);
+        else if (data == REMOTE_ID_SECONDARY)
+        {
+            remote_frame_size = REMOTE_SECOND_FRAME_SIZE;
+        }
+        else
+        {
+            remote_frame_index = (data == REMOTE_FRAME_HEADER_0) ? 1U : 0U;
+            if (remote_frame_index != 0U)
+            {
+                remote_frame[0] = data;
+            }
+            remote_frame_size = 0U;
+        }
+        return;
     }
-    if ((remote_frame_size == 0U) ||
-        (remote_frame_index < remote_frame_size))
+
+    remote_frame[remote_frame_index++] = data;
+    if (remote_frame_index < remote_frame_size)
     {
         return;
     }
 
-    payload_size = remote_frame[4];
-    expected_crc = LoraLink_Crc8(&remote_frame[2],
-                                  (uint8_t)(4U + payload_size));
-    if (remote_frame[remote_frame_size - 1U] == expected_crc)
-    {
-        LoraLink_HandleFrame();
-    }
-    else
-    {
-        lora_link_crc_error_count++;
-    }
+    LoraLink_HandleFrame();
     remote_frame_index = 0U;
     remote_frame_size = 0U;
+}
+
+static void LoraLink_ForwardMcuData(void)
+{
+    HAL_StatusTypeDef status;
+
+    if (mcu_return_length == 0U)
+    {
+        mcu_return_length = McuLink_Read(mcu_return_buffer,
+                                         sizeof(mcu_return_buffer));
+    }
+    if (mcu_return_length == 0U)
+    {
+        return;
+    }
+
+    status = LoraLink_Send(mcu_return_buffer, mcu_return_length);
+    if (status == HAL_OK)
+    {
+        lora_link_returned_bytes += mcu_return_length;
+        mcu_return_length = 0U;
+    }
+    else if (status != HAL_BUSY)
+    {
+        lora_link_return_error_count++;
+    }
 }
 
 static HAL_StatusTypeDef LoraLink_StartReceive(void)
@@ -258,14 +262,16 @@ HAL_StatusTypeDef LoraLink_Init(UART_HandleTypeDef *uart)
     lora_link_uart_error_count = 0U;
     lora_link_tx_error_count = 0U;
     lora_link_valid_frame_count = 0U;
-    lora_link_crc_error_count = 0U;
     lora_link_forward_error_count = 0U;
+    lora_link_return_error_count = 0U;
+    lora_link_returned_bytes = 0U;
     lora_remote_buttons = 0U;
     lora_remote_pe0_switch = 0U;
     lora_remote_online = 0U;
     remote_frame_index = 0U;
     remote_frame_size = 0U;
     remote_last_rx_ms = 0U;
+    mcu_return_length = 0U;
 
     if (LoraLink_StartReceive() != HAL_OK)
     {
@@ -310,6 +316,8 @@ void LoraLink_Run(void)
             LoraLink_ParseByte(data[i]);
         }
     } while (count == sizeof(data));
+
+    LoraLink_ForwardMcuData();
 
     if ((lora_remote_online != 0U) &&
         ((HAL_GetTick() - remote_last_rx_ms) > REMOTE_TIMEOUT_MS))
