@@ -84,6 +84,8 @@ static bool path_mode_button_armed;
 static bool path_yaw_was_ready;
 static bool path_front_blocked;
 static bool path_left_blocked;
+static bool path_side_detection_done;
+static bool path_mirrored_detected;
 
 static int16_t Path_AbsCommand(int16_t value)
 {
@@ -176,6 +178,16 @@ static void Path_CollectInitialSample(path_initial_sampler_t *sampler,
     {
         sampler->count = 0U;
         sampler->online_previous = false;
+        return;
+    }
+
+    /*
+     * DT35 子板超量程时输出钳在 20 cm；20 cm 饱和视为“没有目标”，
+     * 不参与初始定点。镜像侧左光面向空旷场地，因此始终无样本，
+     * 常规侧只有左光真正看到西墙（< 20 cm）才允许按西墙锚定。
+     */
+    if (Path_ClampLaserCm(distance_cm) >= PATH_LASER_MAX_CM)
+    {
         return;
     }
 
@@ -304,30 +316,65 @@ static void Path_ProcessModeButton(const path_remote_snapshot_t *remote)
     }
 }
 
+/*
+ * 镜像侧自动锚定：前光首次扫到墙（镜像场地第一堵前墙是贴东墙的
+ * 墙 B）且左光无目标时判定为镜像侧。X 采用“贴东墙对称摆放”的
+ * 假定起点（与常规侧贴西墙 15 cm 间距对称），Y 用前光安装偏移
+ * （0.225 m）加实测距离反算墙 B 南面位置，之后地图坐标完全跟随
+ * 融合里程计。该锚定不依赖 yaw，也不依赖左 DT35。
+ */
+static void Path_TrySetMirroredInitialPosition(
+    const path_line_imu_data_t *odometry)
+{
+    float front_distance_m;
+    float map_y_m;
+
+    if (!path_mirrored_detected ||
+        path_diagnostics.initial_position_valid)
+    {
+        return;
+    }
+
+    front_distance_m = (float)path_diagnostics.front_distance_cm * 0.01f;
+    map_y_m = PATH_MAP_MIRRORED_FIRST_WALL_Y_M -
+              PATH_LOCALIZATION_FRONT_SENSOR_OFFSET_M -
+              front_distance_m;
+
+    PathMap_SetMirrored(true);
+    path_map_origin_x_m = PATH_MAP_MIRRORED_START_X_M -
+                          odometry->fused_position_x_m;
+    path_map_origin_y_m = map_y_m - odometry->fused_position_y_m;
+    path_diagnostics.initial_position_valid = true;
+    path_diagnostics.initial_map_x_m = PATH_MAP_MIRRORED_START_X_M;
+    path_diagnostics.initial_map_y_m = map_y_m;
+    path_diagnostics.initial_yaw_deg = path_localization_yaw_valid ?
+                                       path_localization_yaw_deg : 0.0f;
+    /* 镜像侧左光无目标，前光距离成为有效初始信息。 */
+    path_diagnostics.front_initial_distance_m = front_distance_m;
+    path_diagnostics.left_initial_distance_m = 0.0f;
+    path_diagnostics.front_wall_hit_x_m = 0.0f;
+    path_diagnostics.left_wall_hit_y_m = 0.0f;
+}
+
 static void Path_TrySetInitialPosition(
     const path_line_imu_data_t *odometry)
 {
     path_localization_result_t result;
-    float front_distance_m;
     float left_distance_m;
 
     if (path_diagnostics.initial_position_valid ||
         !path_localization_yaw_valid ||
-        (path_front_initial_sampler.count < PATH_INITIAL_SAMPLE_COUNT) ||
         (path_left_initial_sampler.count < PATH_INITIAL_SAMPLE_COUNT))
     {
         return;
     }
 
-    front_distance_m =
-        (float)Path_InitialMedian(&path_front_initial_sampler) * 0.01f;
     left_distance_m =
         (float)Path_InitialMedian(&path_left_initial_sampler) * 0.01f;
-    if (!PathLocalization_Calculate(front_distance_m, left_distance_m,
+    if (!PathLocalization_Calculate(0.0f, left_distance_m,
                                     path_localization_yaw_deg, &result))
     {
         path_diagnostics.initial_position_reject_count++;
-        path_front_initial_sampler.count = 0U;
         path_left_initial_sampler.count = 0U;
         return;
     }
@@ -339,9 +386,9 @@ static void Path_TrySetInitialPosition(
     path_diagnostics.initial_map_x_m = result.map_x_m;
     path_diagnostics.initial_map_y_m = result.map_y_m;
     path_diagnostics.initial_yaw_deg = path_localization_yaw_deg;
-    path_diagnostics.front_initial_distance_m = front_distance_m;
+    path_diagnostics.front_initial_distance_m = 0.0f;
     path_diagnostics.left_initial_distance_m = left_distance_m;
-    path_diagnostics.front_wall_hit_x_m = result.front_wall_hit_x_m;
+    path_diagnostics.front_wall_hit_x_m = 0.0f;
     path_diagnostics.left_wall_hit_y_m = result.left_wall_hit_y_m;
 }
 
@@ -369,6 +416,7 @@ static bool Path_UpdateOdometryAndRoute(void)
         odometry.encoder_body_velocity_y_mps :
         odometry.fused_velocity_y_mps;
 
+    Path_TrySetMirroredInitialPosition(&odometry);
     Path_TrySetInitialPosition(&odometry);
     if (!path_diagnostics.initial_position_valid)
     {
@@ -465,13 +513,36 @@ static void Path_UpdateLaserData(void)
     path_diagnostics.left_laser_online = left_online;
     if (!path_diagnostics.initial_position_valid)
     {
-        Path_CollectInitialSample(&path_front_initial_sampler, front_cm,
-                                  front_last_rx, front_online);
+        /* 初始 Y 固定；前 DT35 只保留运行期 +Y 动态安全职责。 */
         Path_CollectInitialSample(&path_left_initial_sampler, left_cm,
                                   left_last_rx, left_online);
     }
-    path_diagnostics.front_initial_sample_count =
-        path_front_initial_sampler.count;
+
+    /*
+     * 对抗镜像侧自动识别：前光首次扫到墙（读数降到 20 cm 饱和线
+     * 以下）时，检查左光是否看到目标。左光无目标说明机器人贴东墙
+     * 起步（左光面向空旷场地），切换镜像地图并由
+     * Path_TrySetMirroredInitialPosition 锚定；左光有目标则是常规
+     * 侧，继续等待左光锚定。只判定一次，判定后不再改变。
+     */
+    if (!path_diagnostics.initial_position_valid &&
+        !path_side_detection_done &&
+        front_online &&
+        (Path_ClampLaserCm(front_cm) < PATH_LASER_MAX_CM))
+    {
+        bool left_has_target =
+            (path_left_initial_sampler.count >= PATH_INITIAL_SAMPLE_COUNT) &&
+            (Path_InitialMedian(&path_left_initial_sampler) <
+             PATH_LASER_MAX_CM);
+
+        path_side_detection_done = true;
+        if (!left_has_target)
+        {
+            path_mirrored_detected = true;
+        }
+    }
+
+    path_diagnostics.front_initial_sample_count = 0U;
     path_diagnostics.left_initial_sample_count =
         path_left_initial_sampler.count;
     path_diagnostics.front_distance_cm =
@@ -639,7 +710,14 @@ static bool Path_ApplyLaserLimits(int16_t *vx, int16_t *vy)
         }
     }
 
-    if (path_diagnostics.left_laser_online)
+    /*
+     * 常规侧左光面向西墙，20 cm 饱和仍按“墙在量程边界”保守限速；
+     * 镜像侧左光面向空旷场地（西墙在 2.4 m 外），只有出现真实目标
+     * （< 20 cm，例如对抗中靠近的另一台车）时才启用左光限速。
+     */
+    if (path_diagnostics.left_laser_online &&
+        (!PathMap_IsMirrored() ||
+         (path_diagnostics.left_distance_cm < PATH_LASER_MAX_CM)))
     {
         distance_m = (float)path_diagnostics.left_distance_cm * 0.01f;
         requested_speed_mps = (*vx < 0) ?
@@ -738,6 +816,9 @@ void Path_Init(void)
     path_yaw_was_ready = false;
     path_front_blocked = false;
     path_left_blocked = false;
+    path_side_detection_done = false;
+    path_mirrored_detected = false;
+    PathMap_SetMirrored(false);
 
     path_diagnostics.initialized = true;
     path_diagnostics.segment_count = PATH_MAP_ROUTE_SEGMENT_COUNT;
@@ -810,6 +891,7 @@ void Path_Run1ms(uint32_t now_ms)
     Path_UpdateYawZeroLock();
     Path_UpdateLaserData();
     automatic_stop = Path_UpdateOdometryAndRoute();
+    path_diagnostics.map_mirrored = PathMap_IsMirrored();
 
     path_diagnostics.remote_online = remote.online;
     path_diagnostics.last_remote_ms = remote.timestamp_ms;

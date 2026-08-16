@@ -78,7 +78,7 @@ wheel_mps = actual_rpm * (pi * 0.152) / 60
 仓库不包含 Keil 命令行编译器时，可先在带 C11 编译器的主机运行纯算法测试：
 
 ```sh
-./user/path_line/imu/tests/run_host_tests.sh
+./user/path/imu/tests/run_host_tests.sh
 ```
 
 测试覆盖 X/Y 两轴零偏和积分、四轮逆运动学、机械 RPM 换算、60 RPM 一秒

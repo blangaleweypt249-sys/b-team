@@ -21,13 +21,15 @@ bool PathLocalization_Calculate(float front_distance_m,
     float yaw_rad;
     float cos_yaw;
     float sin_yaw;
-    float front_ray_origin_distance_m;
     float left_ray_origin_distance_m;
 
-    if ((result == NULL) || !PathLocalization_IsFinite(front_distance_m) ||
+    /* 前 DT35 参数仅为兼容既有接口保留，不参与初始地图定位。 */
+    (void)front_distance_m;
+
+    if ((result == NULL) ||
         !PathLocalization_IsFinite(left_distance_m) ||
         !PathLocalization_IsFinite(yaw_deg) ||
-        (front_distance_m <= 0.0f) || (left_distance_m <= 0.0f))
+        (left_distance_m <= 0.0f))
     {
         return false;
     }
@@ -40,21 +42,17 @@ bool PathLocalization_Calculate(float front_distance_m,
         return false;
     }
 
-    front_ray_origin_distance_m =
-        PATH_LOCALIZATION_FRONT_SENSOR_OFFSET_M + front_distance_m;
     left_ray_origin_distance_m =
         PATH_LOCALIZATION_LEFT_SENSOR_OFFSET_M + left_distance_m;
 
     /*
-     * 车体系 +Y 前激光与 y=2.075 m 相交，-X 左激光与 x=0.049 m
-     * 相交。两束光随实测 yaw 一起旋转，因此中心法向距离乘 cos(yaw)。
+     * 初始中心 Y 恒为车长一半；左 DT35 随实测 yaw 旋转，并与
+     * x=0.049 m 西边界内侧面相交，由此只反算中心 X。
      */
     result->map_x_m = PATH_MAP_WEST_INNER_X_M +
                       left_ray_origin_distance_m * cos_yaw;
-    result->map_y_m = PATH_MAP_WALL_B_SOUTH_Y_M -
-                      front_ray_origin_distance_m * cos_yaw;
-    result->front_wall_hit_x_m = result->map_x_m -
-                                 front_ray_origin_distance_m * sin_yaw;
+    result->map_y_m = PATH_MAP_INITIAL_CENTER_Y_M;
+    result->front_wall_hit_x_m = 0.0f;
     result->left_wall_hit_y_m = result->map_y_m -
                                 left_ray_origin_distance_m * sin_yaw;
 
@@ -64,10 +62,6 @@ bool PathLocalization_Calculate(float front_distance_m,
         (result->map_x_m > PATH_MAP_FIELD_WIDTH_M) ||
         (result->map_y_m < 0.0f) ||
         (result->map_y_m > PATH_MAP_FIELD_HEIGHT_M) ||
-        (result->front_wall_hit_x_m <
-         (PATH_MAP_WALL_B_X_MIN_M - PATH_LOCALIZATION_WALL_EPSILON_M)) ||
-        (result->front_wall_hit_x_m >
-         (PATH_MAP_WALL_B_X_MAX_M + PATH_LOCALIZATION_WALL_EPSILON_M)) ||
         (result->left_wall_hit_y_m <
          -PATH_LOCALIZATION_WALL_EPSILON_M) ||
         (result->left_wall_hit_y_m >

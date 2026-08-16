@@ -29,9 +29,11 @@ typedef struct
     bool front_speed_limited;
     bool left_speed_limited;
     bool yaw_zero_lock_ready;
+    bool map_mirrored;
     path_map_axis_t active_axis;
     uint8_t segment_index;
     uint8_t segment_count;
+    /* 前初始定位字段为接口兼容保留且恒为 0；初始锚定只等待左光。 */
     uint8_t front_initial_sample_count;
     uint8_t left_initial_sample_count;
     uint16_t front_distance_cm;
@@ -45,6 +47,7 @@ typedef struct
     float initial_map_x_m;
     float initial_map_y_m;
     float initial_yaw_deg;
+    /* 前距离和交点为接口兼容保留且恒为 0。 */
     float front_initial_distance_m;
     float left_initial_distance_m;
     float front_wall_hit_x_m;

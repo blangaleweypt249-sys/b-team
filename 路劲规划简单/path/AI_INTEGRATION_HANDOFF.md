@@ -2,7 +2,7 @@
 
 > 面向后续接手本工程的 AI / 开发者。阅读代码前先看本文，再看
 > [`README.md`](README.md) 与
-> [`../path_line/imu/README.md`](../path_line/imu/README.md)。
+> [`../imu/README.md`](../imu/README.md)。
 >
 > 当前实现分支：`arena/01a00460-taisheng`
 >
@@ -19,7 +19,8 @@
 - LoRa 遥控器始终是平移指令来源；
 - 本机按键 1 切换当前地图分段的单轴直线约束；
 - 正常控制期间 yaw 始终锁定为 `0°`；
-- 前、左 DT35 负责一次性初始地图定点和对应方向的动态安全限制；
+- 左 DT35 与实测 yaw 确定一次性初始 X，初始 Y 固定为半车长；前/左
+  DT35 分别保留对应方向的动态安全限制；
 - 初始定点成功后，由本地 IMU / 四轮 VESC 融合里程计连续更新地图位置；
 - 静态地图墙只做辅助净空限制，不生成自动轨迹。
 
@@ -55,7 +56,7 @@ git diff d363ebe..HEAD
 从导入基线 `d363ebe` 到编写本文前的功能提交 `a162168`：
 
 - 共改动 30 个文件；
-- 23 个文件位于新增模块 `user/path/`、`user/path_line/imu/`；
+- 23 个文件位于新增模块 `user/path/`、`user/path/imu/`；
 - 其余 7 个是既有工程的必要调用点或既有说明；
 - 总计 `3926 insertions(+), 1 deletion(-)`；唯一统计为 deletion 的内容，是
   Keil XML 中原 `IncludePath` 整行被“原内容 + 两个新增目录”替换，不是删除
@@ -75,10 +76,10 @@ git diff d363ebe..HEAD
 | `user/imu/imu.c` | `+11/-0` | 在原帧头、长度、帧尾校验后，把 `0x01` 加速度帧转发给融合里程计 | 必要传感器数据入口；原 `0x02/0x03` 解析保留 |
 | `user/imu/imu_main.c` | `+4/-0` | 在原 IMU 配置序列中追加开启 `0x01` 加速度主动上报 | 必要传感器配置；原命令序列保留 |
 
-前序二维融合里程计是独立模块，位于 `user/path_line/imu/`；本次人工路径、安全、
+前序二维融合里程计是独立模块，位于 `user/path/imu/`；本次人工路径、安全、
 地图和定位的新功能均位于用户指定的 `user/path/`。
 
-### 2.3 最新“双激光初始定点”提交的单独审计
+### 2.3 原“双激光初始定点”提交的历史审计
 
 提交 `a16216899b73dd73de1e40fe0d7d599f3d95168e` 共改动 11 个文件：
 
@@ -86,6 +87,9 @@ git diff d363ebe..HEAD
 - 唯一不在 `user/path/` 的文件是 `MDK-ARM/b-up.uvprojx`，只为加入
   `path_localization.c/.h`；
 - 没有修改 Core、通信、遥控、IMU 或底盘源码。
+
+上述是 `a162168` 的历史审计名称；当前版本已按实车启动位置纠正为“左光定 X、
+半车长固定 Y”，前光不再参与初始定位，详见第 6 节。
 
 ---
 
@@ -96,7 +100,7 @@ git diff d363ebe..HEAD
 | 目标 | 人工驾驶辅助、单轴约束、动态安全、静态墙保护 | 上电后自动建轨迹、自动跟踪并到达目标 |
 | 指令来源 | LoRa 人工摇杆；安全层只限轴/限速/制动 | 自动控制器生成底盘速度；自动运行时拥有底盘并屏蔽人工指令 |
 | 小电脑 | 不使用；不依赖绝对位姿、感知帧或自动路径指令 | `user/pc_link/` 通过 UART7 接收 `0x11` 绝对位姿，并发送 `0x20` 状态 |
-| 定位 | 前/左 DT35 各 3 个新样本中值 + IMU 实测 yaw，只锚定一次；以后使用本地融合里程计 | 小电脑绝对 XY/yaw 与 IMU 融合，含门限、延迟补偿和重捕获 |
+| 定位 | 左 DT35 3 个新样本中值 + IMU 实测 yaw 确定 X，Y 固定为半车长；只锚定一次，以后使用本地融合里程计 | 小电脑绝对 XY/yaw 与 IMU 融合，含门限、延迟补偿和重捕获 |
 | 路线 | 6 段 Manhattan 直线；只约束当前段 X 或 Y，运动仍由人控制 | 路点、曲线插值/纯追踪、速度剖面、轨迹验收 |
 | yaw | 所有输出 `z=0`，原 IMU yaw hold 目标设为 `0°`；定点几何例外地使用当时实测 yaw | 自动控制器内部 yaw-lock，并参与自动轨迹跟踪/故障判断 |
 | 状态管理 | 轻量布尔状态、段号、按键沿和诊断结构；没有复制 B-team FSM | 含自动运行状态、`fsm`、`fault_manager`、`logger`、恢复策略 |
@@ -158,7 +162,7 @@ IMU yaw/gyro 公共数据 ─┼─ PathLineImu_Run1ms()
 前/左 DT35 + 融合里程计 + 遥控邮箱
   └─ Path_Run1ms()
        ├─ 更新 yaw=0 hold
-       ├─ 收集一次性初始定位样本
+       ├─ 只收集左光一次性初始定位样本（前光仅用于安全）
        ├─ 更新地图坐标和当前路线段
        ├─ 应用单轴约束
        ├─ 应用膨胀地图净空限制
@@ -218,11 +222,11 @@ command_to_mps = π × 0.152 / 60
 
 该比例建立在实车 152 mm 轮径、1:1 直驱以及现有底盘平移混控的机械 RPM
 语义上。修改轮径或传动比时，必须同步修改
-`user/path_line/imu/path_line_imu.h` 并重跑两套宿主测试。
+`user/path/imu/path_line_imu.h` 并重跑两套宿主测试。
 
 ---
 
-## 6. 一次性双激光初始定位
+## 6. 一次性左激光 X 定位与固定初始 Y
 
 ### 6.1 成功条件
 
@@ -230,35 +234,42 @@ command_to_mps = π × 0.152 / 60
 
 1. `ImuMain_GetData()` 有效，IMU 为 READY、在线、yaw 有效；
 2. 融合里程计至少有 IMU 解或编码器解；
-3. 前 DT35 收到 3 个不同 `last_rx_ms` 的在线新样本；
-4. 左 DT35收到 3 个不同 `last_rx_ms` 的在线新样本；
-5. 两束光按实测 yaw 投影后能命中指定墙面有效范围。
+3. 左 DT35 收到 3 个不同 `last_rx_ms` 的在线新样本；
+4. 左光按实测 yaw 投影后能命中西边界有效 Y 范围。
 
-前、左各自 3 点取中值。该采样器与运行期激光安全使用的“最近 3 点最小值”
-完全分开，不能合并。
+左光 3 点取中值。该采样器与运行期激光安全使用的“最近 3 点最小值”完全
+分开，不能合并。前 DT35 的样本、在线状态和读数不属于成功条件；即使前光
+启动时无样本或离线，也必须能在左侧第 3 个新样本后完成锚定。
 
 ### 6.2 几何
 
-- 前安装偏移：中心前方 `0.225 m`；目标为墙 B 南侧面 `y=2.075 m`；
-- 左安装偏移：中心左方 `0.175 m`；目标为西边界内侧面 `x=0.049 m`。
+- 左安装偏移：中心左方 `0.175 m`；目标为西边界内侧面 `x=0.049 m`；
+- 机器人长度：`0.6170 m`；初始中心 Y 固定为长度一半 `0.3085 m`。
 
-设前、左中值距离为 `d_f`、`d_l`，定点周期实测 yaw 为 `ψ`：
+设左光中值距离为 `d_l`，定点周期实测 yaw 为 `ψ`：
 
 ```text
 x = 0.049 + (0.175 + d_l) × cos(ψ)
-y = 2.075 - (0.225 + d_f) × cos(ψ)
+y = 0.6170 / 2 = 0.3085
 ```
 
-`path_localization.c` 还计算实际射线交点：前光必须落在墙 B 的 X 范围，左光必须
-落在西墙有效 Y 范围，并拒绝 `cos(ψ) <= 0`、NaN/Inf 和地图外结果。
+`path_localization.c` 计算左光实际墙面交点，要求落在西墙有效 Y 范围，并拒绝
+`cos(ψ) <= 0`、NaN/Inf 和地图外结果。它不再用前光反算 Y，也不再校验前光
+与墙 B 的交点。既有函数参数和诊断结构中的前光初始字段只为接口兼容保留；
+`front_initial_sample_count`、`front_initial_distance_m`、
+`front_wall_hit_x_m` 均保持为 `0`。
+
+启动位置前 DT35 无法扫到原定位目标，其 `20 cm` 可能是真实距离，也可能是
+超过量程后的饱和值，因此绝不能据此锚定坐标。前 DT35 仍参与运行期 `+Y`
+动态限速，不能因取消定位依赖而删除该安全功能。
 
 ### 6.3 锚定之后
 
 成功时保存：
 
 ```text
-map_origin_x = laser_map_x - fused_odom_x
-map_origin_y = laser_map_y - fused_odom_y
+map_origin_x = initial_x - fused_odom_x
+map_origin_y = 0.3085 - fused_odom_y
 ```
 
 之后：
@@ -272,8 +283,8 @@ map_y = map_origin_y + fused_odom_y
 如需重新定点，应重新上电或在用户明确要求后设计受控 reset 流程。
 
 初始定位完成前，动态激光方向保护和 yaw=0 仍运行，但依赖地图位姿的墙体净空、
-分段终点和自动取消不可用。当前需求确认正常使用场景会收齐样本，因此没有增加
-“样本未收齐即全局停车”的策略。
+分段终点和自动取消不可用。当前需求确认正常使用场景会收齐左光样本，因此没有
+增加“样本未收齐即全局停车”的策略。
 
 ---
 
@@ -340,14 +351,14 @@ d_required = d_base + v × 0.080 + v² / (2 × 2.0)
 
 | 文件/目录 | 职责 | 常见修改入口 |
 | --- | --- | --- |
-| `user/path/path.c` | 1 ms 总控、遥控邮箱、模式切换、定位锚定、yaw、激光滤波、地图/激光限制、底盘输出 | 运行策略、阈值和诊断 |
+| `user/path/path.c` | 1 ms 总控、遥控邮箱、模式切换、常规/镜像侧识别与锚定、yaw、激光滤波、地图/激光限制、底盘输出 | 运行策略、阈值和诊断 |
 | `user/path/path.h` | 对外 API 与 `path_diagnostics_t` | 新增只读诊断/API |
-| `user/path/path_localization.c/.h` | 双激光 + yaw 的纯几何定位 | 安装偏移、目标墙面和几何校验 |
-| `user/path/path_map.c/.h` | 墙表、边界/内墙膨胀、射线净空、6 段路线 | 地图、车体净空、分段终点 |
+| `user/path/path_localization.c/.h` | 左激光 + yaw 定 X、半车长固定 Y 的纯定位 | 左安装偏移、西边界目标面和几何校验 |
+| `user/path/path_map.c/.h` | 常规/镜像两套墙表与 6 段路线、`PathMap_SetMirrored()` 侧别选择、边界/内墙膨胀、射线净空 | 地图、车体净空、分段终点、镜像几何 |
 | `user/path/path_safety.c/.h` | 动态制动距离和命令缩放纯函数 | 制动公式（同时补单元测试） |
 | `user/path/tests/` | 地图、定位、安全和运行时宿主测试 | 每次策略变更必须补测 |
-| `user/path_line/imu/path_line_imu.c/.h` | IMU 加速度 + VESC 编码器二维融合里程计 | 轮径、滤波、权重、ZUPT |
-| `user/path_line/imu/tests/` | 融合里程计宿主测试 | 机械参数和融合算法回归 |
+| `user/path/imu/path_line_imu.c/.h` | IMU 加速度 + VESC 编码器二维融合里程计 | 轮径、滤波、权重、ZUPT |
+| `user/path/imu/tests/` | 融合里程计宿主测试 | 机械参数和融合算法回归 |
 | `Core/Src/freertos.c` | 初始化和 1 ms 调用入口 | 只在任务时序确需变化时修改 |
 | `user/com_link/lora_link.c` | LoRa 遥控命令与超时入口 | 遥控协议字段变化时修改 |
 | `user/com_link/computer_link.c` | 阻止旧非遥控速度绕过安全层 | 通信控制策略明确变化时修改 |
@@ -368,6 +379,30 @@ void Path_ReplaceNonRemoteCommand(int16_t *vx, int16_t *vy, int16_t *z);
 void Path_Run1ms(uint32_t now_ms);
 bool Path_GetDiagnostics(path_diagnostics_t *diagnostics);
 ```
+
+地图模块镜像侧选择（一般由 `path.c` 自动调用，也可手动强制）：
+
+```c
+void PathMap_SetMirrored(bool mirrored);
+bool PathMap_IsMirrored(void);
+```
+
+### 9.2 对抗镜像侧（场地互换）实现要点
+
+- **语义**：左右镜像（`x' = 3 − x`）。镜像场地要求 3 段内墙物理摆到镜像
+  位置（墙 1、墙 C 贴西墙，墙 B 贴东墙），机器人贴东墙起步，车头仍朝
+  `+Y`，路线是常规路线的镜像（X 段方向取反、终点 `0.52 / 2.64 / 2.50`）。
+- **自动识别**：DT35 子板超量程输出钳在 `20 cm`，饱和视为“没有目标”。
+  未定点时左光采集只收 `< 20 cm` 样本；前光读数首次降到 `20 cm` 以下时
+  判定一次：左光有目标 → 常规侧；左光无目标 → 镜像侧。
+- **镜像锚定**：`PATH_MAP_MIRRORED_START_X_M = 2.626 m` 为假定贴东墙
+  对称起点；Y 用前光安装偏移 `PATH_LOCALIZATION_FRONT_SENSOR_OFFSET_M`
+  （`0.225 m`）反算镜像场地第一堵前墙（贴东墙的墙 B，南面
+  `y = 2.075 m`）：`y = 2.075 − 0.225 − d_front`。不依赖 yaw 和左光。
+- **左光门控**：镜像侧左光无目标时跳过左光限速（20 cm 饱和是假障碍），
+  出现 `< 20 cm` 真实目标时限速恢复；常规侧行为不变。
+- **已知边界**：常规侧摆位离西墙超过 `20 cm` 会误判为镜像侧；镜像侧
+  X 精度取决于贴东墙摆放的一致性（无传感器可测）。
 
 融合里程计：
 
@@ -395,14 +430,14 @@ void PathLineImu_ResetPosition(void);
 
 ```bash
 user/path/tests/run_host_tests.sh
-user/path_line/imu/tests/run_host_tests.sh
+user/path/imu/tests/run_host_tests.sh
 git diff --check
 ```
 
 路径测试覆盖：
 
-- 实测 yaw 下的双激光几何和墙面交点；
-- 两路各 3 个新时间戳样本取中值；
+- 实测 yaw 下的左光 X 几何、左墙交点和固定 `Y=0.3085 m`；
+- 前光无样本/离线时，仅凭左光 3 个新时间戳样本中值完成锚定；
 - 一次性锚定以及后续里程计偏移；
 - 7 个墙矩形、正/负方向终点和膨胀墙净空；
 - 动态制动公式与命令缩放；
@@ -427,7 +462,7 @@ PY
 还应确认工程中恰好包含以下新增编译单元：
 
 ```text
-user/path_line/imu/path_line_imu.c
+user/path/imu/path_line_imu.c
 user/path/path.c
 user/path/path_map.c
 user/path/path_localization.c
@@ -437,11 +472,12 @@ user/path/path_safety.c
 ### 10.3 实机最小验收顺序
 
 1. 架车/静止上电，等待 IMU READY 和加速度零偏完成；
-2. 确认前/左 DT35 在线且 `front_initial_sample_count`、
-   `left_initial_sample_count` 从 0 到 3；
-3. 确认 `initial_position_valid=true`，并核对初始 X/Y、两个中值距离和墙面交点；
+2. 保持前 DT35 无样本或离线，确认左 DT35 在线且
+   `left_initial_sample_count` 随 3 个新时间戳从 0 到 3，前计数恒为 0；
+3. 确认 `initial_position_valid=true`，核对左光中值、实测 yaw 下的初始 X、
+   固定 `Y=0.3085 m` 和左墙交点；
 4. 确认 `yaw_zero_lock_ready=true`、`output_z=0`；
-5. 低速验证 `+Y` 接近前障碍时受限、`-Y` 仍可退出；
+5. 恢复前 DT35 后低速验证 `+Y` 接近前障碍时受限、`-Y` 仍可退出；
 6. 低速验证 `-X` 接近左障碍时受限、`+X` 仍可退出；
 7. 模拟单路激光离线，确认只标记 offline、不因离线停车；
 8. 按本机按键 1，逐段确认非当前轴清零、越过终点自动取消和回中再启；

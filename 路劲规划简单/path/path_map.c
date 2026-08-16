@@ -30,6 +30,22 @@ static const path_map_wall_t path_map_walls[PATH_MAP_WALL_COUNT] =
 };
 
 /*
+ * 对抗镜像侧：4 面边界墙左右对称不变；3 段内墙按 x' = 3 − x 整体
+ * 左右对调（墙 1、墙 C 改贴西墙，墙 B 改贴东墙）。使用时要求场地
+ * 内墙已按镜像位置摆放，机器人贴东墙起步（见 README“镜像地图”）。
+ */
+static const path_map_wall_t path_map_walls_mirrored[PATH_MAP_WALL_COUNT] =
+{
+    {0.000f, 0.000f, 3.000f, 0.049f},
+    {0.000f, 5.951f, 3.000f, 6.000f},
+    {0.000f, 0.000f, 0.049f, 6.000f},
+    {2.951f, 0.000f, 3.000f, 6.000f},
+    {0.000f, 1.070f, 1.950f, 1.120f},
+    {1.000f, PATH_MAP_WALL_B_SOUTH_Y_M, 3.000f, 2.125f},
+    {0.000f, 3.075f, 1.950f, 3.125f}
+};
+
+/*
  * yaw 固定为 0 后不能采用参考分支的圆弧；按各墙端通道改成 Manhattan
  * 直线：上、右、上、左、上、右。每次按键只约束当前一段的轴。
  */
@@ -43,6 +59,24 @@ path_map_route[PATH_MAP_ROUTE_SEGMENT_COUNT] =
     {PATH_MAP_AXIS_Y,  1, 3.700f},
     {PATH_MAP_AXIS_X,  1, 0.500f}
 };
+
+/*
+ * 镜像侧的路线是常规路线的左右镜像：X 段方向取反、终点 x' = 3 − x；
+ * Y 段不变。镜像场地上第一堵前墙是贴东墙的墙 B（y = 2.075 m），
+ * path.c 用它在自动识别镜像侧时做 Y 锚定。
+ */
+static const path_map_route_segment_t
+path_map_route_mirrored[PATH_MAP_ROUTE_SEGMENT_COUNT] =
+{
+    {PATH_MAP_AXIS_Y,  1, 1.650f},
+    {PATH_MAP_AXIS_X, -1, 0.520f},
+    {PATH_MAP_AXIS_Y,  1, 2.600f},
+    {PATH_MAP_AXIS_X,  1, 2.640f},
+    {PATH_MAP_AXIS_Y,  1, 3.700f},
+    {PATH_MAP_AXIS_X, -1, 2.500f}
+};
+
+static bool path_map_mirrored;
 
 static float PathMap_MinFloat(float lhs, float rhs)
 {
@@ -168,7 +202,7 @@ const path_map_wall_t *PathMap_GetWalls(uint8_t *count)
     {
         *count = PATH_MAP_WALL_COUNT;
     }
-    return path_map_walls;
+    return path_map_mirrored ? path_map_walls_mirrored : path_map_walls;
 }
 
 const path_map_route_segment_t *PathMap_GetRoute(uint8_t *count)
@@ -177,7 +211,17 @@ const path_map_route_segment_t *PathMap_GetRoute(uint8_t *count)
     {
         *count = PATH_MAP_ROUTE_SEGMENT_COUNT;
     }
-    return path_map_route;
+    return path_map_mirrored ? path_map_route_mirrored : path_map_route;
+}
+
+void PathMap_SetMirrored(bool mirrored)
+{
+    path_map_mirrored = mirrored;
+}
+
+bool PathMap_IsMirrored(void)
+{
+    return path_map_mirrored;
 }
 
 bool PathMap_SegmentReached(uint8_t segment_index,
@@ -192,7 +236,8 @@ bool PathMap_SegmentReached(uint8_t segment_index,
         return false;
     }
 
-    segment = &path_map_route[segment_index];
+    segment = path_map_mirrored ? &path_map_route_mirrored[segment_index]
+                                : &path_map_route[segment_index];
     coordinate = (segment->axis == PATH_MAP_AXIS_X) ? map_x_m : map_y_m;
     if (segment->direction > 0)
     {
@@ -252,19 +297,25 @@ float PathMap_RayClearance(float map_x_m, float map_y_m,
     }
 
     /* 只对 3 段内墙做矩形膨胀；0..3 是已在上面处理的场地边界墙。 */
-    for (wall_index = 4U; wall_index < PATH_MAP_WALL_COUNT; wall_index++)
     {
-        inflated.x_min_m = path_map_walls[wall_index].x_min_m -
-                           PATH_MAP_INFLATE_X_M;
-        inflated.x_max_m = path_map_walls[wall_index].x_max_m +
-                           PATH_MAP_INFLATE_X_M;
-        inflated.y_min_m = path_map_walls[wall_index].y_min_m -
-                           PATH_MAP_INFLATE_Y_M;
-        inflated.y_max_m = path_map_walls[wall_index].y_max_m +
-                           PATH_MAP_INFLATE_Y_M;
-        candidate = PathMap_RayBoxDistance(map_x_m, map_y_m,
-                                           dir_x, dir_y, &inflated);
-        clearance = PathMap_MinFloat(clearance, candidate);
+        const path_map_wall_t *walls = path_map_mirrored ?
+                                       path_map_walls_mirrored :
+                                       path_map_walls;
+
+        for (wall_index = 4U; wall_index < PATH_MAP_WALL_COUNT; wall_index++)
+        {
+            inflated.x_min_m = walls[wall_index].x_min_m -
+                               PATH_MAP_INFLATE_X_M;
+            inflated.x_max_m = walls[wall_index].x_max_m +
+                               PATH_MAP_INFLATE_X_M;
+            inflated.y_min_m = walls[wall_index].y_min_m -
+                               PATH_MAP_INFLATE_Y_M;
+            inflated.y_max_m = walls[wall_index].y_max_m +
+                               PATH_MAP_INFLATE_Y_M;
+            candidate = PathMap_RayBoxDistance(map_x_m, map_y_m,
+                                               dir_x, dir_y, &inflated);
+            clearance = PathMap_MinFloat(clearance, candidate);
+        }
     }
 
     return clearance;
