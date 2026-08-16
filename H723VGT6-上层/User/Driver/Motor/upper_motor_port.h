@@ -74,6 +74,12 @@ typedef struct
     uint8_t state;
 } upper_j4310_feedback_t;
 
+typedef struct
+{
+    float position_rad;
+    float velocity_rad_s;
+} upper_motor_feedback_t;
+
 #define UPPER_MOTOR_ERROR_FEEDBACK_TIMEOUT 0xF0U
 
 bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count);
@@ -94,6 +100,8 @@ bool UpperMotorPort_GetJ4310OutputPosition(uint8_t can_bus,
 bool UpperMotorPort_GetJ4310Feedback(uint8_t can_bus,
                                      uint8_t node_id,
                                      upper_j4310_feedback_t *feedback);
+bool UpperMotorPort_GetMotorFeedback(size_t motor_index,
+                                     upper_motor_feedback_t *feedback);
 bool UpperMotorPort_GetJ4310RxDiagnostic(
     uint8_t can_bus,
     uint8_t node_id,

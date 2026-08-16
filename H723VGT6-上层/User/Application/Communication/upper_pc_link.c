@@ -346,14 +346,8 @@ static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
         break;
 
     case PC_MSG_FLASH_INFO_REQUEST:
-        if (!UpperPcLink_IsSessionActive(link,
-                                         link->current_rx_tick_ms))
-        {
-            break;
-        }
         if (frame->payload_len == 0U)
         {
-            UpperPcLink_Accept(link, frame);
             link->flash_info_sequence = frame->sequence;
             link->flash_info_pending = true;
         }

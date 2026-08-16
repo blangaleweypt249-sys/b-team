@@ -255,6 +255,24 @@ int main(void)
                                    TEST_FRAME_CAPACITY);
     assert(frame_size > 0U);
     UpperPcLink_Push(&link, frame, frame_size, 49U);
+    assert(UpperPcLink_HasFlashInfoPending(&link));
+    assert(UpperPcLink_GetFlashInfoSequence(&link) == 8U);
+    frame_size = UpperPcLink_BuildFlashInfo(&link,
+                                            2U,
+                                            false,
+                                            0U,
+                                            0U,
+                                            0U,
+                                            0U,
+                                            4096UL,
+                                            frame,
+                                            TEST_FRAME_CAPACITY);
+    assert(frame_size > 0U);
+    assert(frame[3] == PC_MSG_FLASH_INFO);
+    assert(Test_ReadU16(&frame[4]) == 8U);
+    assert(frame[8] == 2U);
+    assert(frame[9] == 0U);
+    UpperPcLink_MarkFlashInfoSent(&link, 8U);
     assert(!UpperPcLink_HasFlashInfoPending(&link));
     assert(link.last_rx_tick_ms == 0U);
 
@@ -296,6 +314,8 @@ int main(void)
     UpperPcLink_Push(&link, frame, frame_size, 100U);
     assert(UpperPcLink_HasFlashInfoPending(&link));
     assert(UpperPcLink_GetFlashInfoSequence(&link) == 10U);
+    assert(link.last_rx_sequence == 9U);
+    assert(link.last_rx_tick_ms == 99U);
     frame_size = UpperPcLink_BuildFlashInfo(&link,
                                             0U,
                                             true,

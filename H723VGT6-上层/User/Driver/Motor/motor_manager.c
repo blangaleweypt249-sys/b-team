@@ -98,6 +98,45 @@ bool MotorManager_SetEnabled(motor_manager_t *manager,
     return true;
 }
 
+bool MotorManager_SetOverride(motor_manager_t *manager,
+                              size_t motor_index,
+                              const motor_cmd_t *cmd)
+{
+    if ((manager == NULL) || (cmd == NULL) ||
+        (motor_index >= manager->motor_count))
+    {
+        return false;
+    }
+    manager->override_cmd[motor_index] = *cmd;
+    manager->override_enabled[motor_index] = true;
+    return true;
+}
+
+bool MotorManager_ClearOverride(motor_manager_t *manager,
+                                size_t motor_index)
+{
+    if ((manager == NULL) || (motor_index >= manager->motor_count))
+    {
+        return false;
+    }
+    manager->override_enabled[motor_index] = false;
+    manager->override_cmd[motor_index] =
+        (motor_cmd_t){ .mode = MOTOR_CMD_STOP };
+    return true;
+}
+
+void MotorManager_ClearAllOverrides(motor_manager_t *manager)
+{
+    if (manager == NULL)
+    {
+        return;
+    }
+    (void)memset(manager->override_enabled,
+                 0,
+                 sizeof(manager->override_enabled));
+    (void)memset(manager->override_cmd, 0, sizeof(manager->override_cmd));
+}
+
 /* 功能：按周期和相位调度所有已使能电机；用途：在控制循环中发送到期命令并统计结果；无返回值表示结果记录在计数器中。 */
 void MotorManager_Process(motor_manager_t *manager, uint32_t tick_ms)
 {
@@ -111,9 +150,11 @@ void MotorManager_Process(motor_manager_t *manager, uint32_t tick_ms)
     for (index = 0U; index < manager->motor_count; index++)
     {
         const motor_cfg_t *cfg;
+        const motor_cmd_t *command;
 
         cfg = &manager->cfg[index];
-        if (!manager->enabled[index] ||
+        if ((!manager->enabled[index] &&
+             !manager->override_enabled[index]) ||
             ((tick_ms % cfg->period_ms) != cfg->phase_ms))
         {
             continue;
@@ -125,7 +166,9 @@ void MotorManager_Process(motor_manager_t *manager, uint32_t tick_ms)
             continue;
         }
 
-        if (manager->send(cfg, &manager->cmd[index],
+        command = manager->override_enabled[index] ?
+                  &manager->override_cmd[index] : &manager->cmd[index];
+        if (manager->send(cfg, command,
                           manager->send_user_data))
         {
             manager->sent_count++;
@@ -146,6 +189,8 @@ void MotorManager_StopAll(motor_manager_t *manager)
     {
         return;
     }
+
+    MotorManager_ClearAllOverrides(manager);
 
     for (index = 0U; index < manager->motor_count; index++)
     {

@@ -62,13 +62,13 @@ CRC16 为 Modbus CRC（初值 `0xFFFF`，多项式 `0xA001`），覆盖 `version
 | UPPER_CMD | `0x10` | 原有 V3 速度命令，保持兼容 |
 | UPPER_POSITION_CMD | `0x12` | 位置命令，兼容 34 字节，当前发送 122 字节扩展 payload |
 | MOTOR_ACTION | `0x13` | J4310 维护动作；保存零点为 3 字节 payload，重启归零配置为 4 字节 `action, can_bus, node_id, enabled` |
-| FLASH_INFO_REQUEST | `0x14` | 空 payload；仅在握手会话中请求一次外部 Flash 信息 |
+| FLASH_INFO_REQUEST | `0x14` | 空 payload；无需握手，单次请求外部 Flash 信息 |
 | ROBOT_STATE | `0x20` | 当前为 84 字节：基础状态、J4310 位置、RX/TX 诊断、自动归零配置和运行状态；上位机兼容旧版 20/25/50/80/89/101 字节 |
 | DJI_TELEMETRY | `0x22` | 28 字节：单台 DJI 诊断和 3 路 FDCAN 原始 RX 计数；四台轮询发送 |
 | FLASH_INFO | `0x23` | 20 字节 Flash 初始化结果、JEDEC ID 和容量信息；序列号与查询请求一致 |
 | ACK | `0x7E` | 握手确认：序列号与请求一致，payload 为 ASCII `H723` |
 
-`FLASH_INFO (0x23)` payload 为 `<BBIIIHI`：`init_status(u8)`、`initialized(u8)`、`jedec_id(u32)`、`capacity_kb(u32)`、`sector_count(u32)`、`page_size_byte(u16)`、`sector_size_byte(u32)`。查询只读取启动阶段保存的初始化结果，不会重新访问 SPI，也不会改变电机控制、握手或心跳行为。界面会显示 `w25q_init_status` 的数值和枚举名，例如 `3 W25Q_ERROR_UNSUPPORTED_DEVICE`。
+`FLASH_INFO (0x23)` payload 为 `<BBIIIHI`：`init_status(u8)`、`initialized(u8)`、`jedec_id(u32)`、`capacity_kb(u32)`、`sector_count(u32)`、`page_size_byte(u16)`、`sector_size_byte(u32)`。查询无需控制会话，只读取启动阶段保存的初始化结果，不会重新访问 SPI，也不会激活会话、刷新电机控制超时或启动周期遥测。界面会显示 `w25q_init_status` 的数值和枚举名，例如 `3 W25Q_ERROR_UNSUPPORTED_DEVICE`。
 
 兼容位置命令 payload 为 `u16 enable_mask + 8 个 little-endian float`（34 字节）。当前上位机发送扩展位置命令，payload 为 `u16 enable_mask + 30 个 little-endian float`（122 字节）：
 

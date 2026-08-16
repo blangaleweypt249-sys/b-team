@@ -63,6 +63,8 @@ typedef struct
     size_t motor_count;
     motor_cmd_t cmd[MOTOR_MANAGER_MAX_COUNT];
     bool enabled[MOTOR_MANAGER_MAX_COUNT];
+    motor_cmd_t override_cmd[MOTOR_MANAGER_MAX_COUNT];
+    bool override_enabled[MOTOR_MANAGER_MAX_COUNT];
     motor_send_t send;
     void *send_user_data;
     uint32_t sent_count;
@@ -81,6 +83,12 @@ bool MotorManager_SetCmd(motor_manager_t *manager,
 bool MotorManager_SetEnabled(motor_manager_t *manager,
                              size_t motor_index,
                              bool enabled);
+bool MotorManager_SetOverride(motor_manager_t *manager,
+                              size_t motor_index,
+                              const motor_cmd_t *cmd);
+bool MotorManager_ClearOverride(motor_manager_t *manager,
+                                size_t motor_index);
+void MotorManager_ClearAllOverrides(motor_manager_t *manager);
 void MotorManager_Process(motor_manager_t *manager, uint32_t tick_ms);
 void MotorManager_StopAll(motor_manager_t *manager);
 
