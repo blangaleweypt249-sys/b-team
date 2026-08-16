@@ -16,6 +16,8 @@ static uint8_t test_action;
 static uint8_t test_action_can_bus;
 static uint8_t test_action_node_id;
 static uint8_t test_action_value;
+static bool test_aux_received;
+static uint8_t test_aux_output_bits;
 
 /* 功能：向测试缓冲区写入小端 16 位整数；用途：手工构造上位机协议载荷；结果写入 data。 */
 static void Test_WriteU16(uint8_t *data, uint16_t value)
@@ -103,6 +105,13 @@ static void Test_OnMotorAction(uint8_t action,
     test_action_received = true;
 }
 
+static void Test_OnAuxControl(uint8_t output_bits, void *user_data)
+{
+    (void)user_data;
+    test_aux_output_bits = output_bits;
+    test_aux_received = true;
+}
+
 /* 功能：构造基础上层控制命令测试帧；用途：覆盖速度模式及不同载荷长度；返回值表示编码后的帧长度。 */
 static size_t Test_BuildCommand(uint16_t payload_size, uint8_t *frame)
 {
@@ -180,7 +189,8 @@ static size_t Test_BuildPositionCommand(uint8_t *frame)
 }
 
 /* 功能：构造含 PID 参数的扩展位置命令；用途：验证 GUI 单位换算和参数下发；返回值表示编码后的帧长度。 */
-static size_t Test_BuildExtendedPositionCommand(uint8_t *frame)
+static size_t Test_BuildExtendedPositionCommand(uint16_t enable_mask,
+                                                 uint8_t *frame)
 {
     uint8_t payload[UPPER_PC_EXTENDED_POSITION_CMD_PAYLOAD_SIZE] = {0};
     static const float value[30] =
@@ -195,7 +205,7 @@ static size_t Test_BuildExtendedPositionCommand(uint8_t *frame)
     };
     size_t index;
 
-    Test_WriteU16(payload, 0x0002U);
+    Test_WriteU16(payload, enable_mask);
     for (index = 0U; index < 30U; index++)
     {
         Test_WriteFloat(&payload[2U + index * sizeof(float)], value[index]);
@@ -245,6 +255,7 @@ int main(void)
                      Test_OnEStop,
                      Test_OnMotorAction,
                      NULL);
+    UpperPcLink_SetAuxControlHandler(&link, Test_OnAuxControl);
     assert(!UpperPcLink_IsSessionActive(&link, 0U));
 
     frame_size = PcProtocol_Encode(PC_MSG_FLASH_INFO_REQUEST,
@@ -340,6 +351,23 @@ int main(void)
     UpperPcLink_MarkFlashInfoSent(&link, 10U);
     assert(!UpperPcLink_HasFlashInfoPending(&link));
 
+    {
+        const uint8_t aux_payload[UPPER_PC_AUX_CONTROL_PAYLOAD_SIZE] = {
+            0x0BU, 0x00U
+        };
+
+        frame_size = PcProtocol_Encode(PC_MSG_AUX_CONTROL,
+                                       11U,
+                                       aux_payload,
+                                       sizeof(aux_payload),
+                                       frame,
+                                       TEST_FRAME_CAPACITY);
+        assert(frame_size > 0U);
+        UpperPcLink_Push(&link, frame, frame_size, 100U);
+        assert(test_aux_received);
+        assert(test_aux_output_bits == 0x0BU);
+    }
+
     frame_size = Test_BuildCommand(UPPER_PC_CMD_PAYLOAD_SIZE, frame);
     assert(frame_size > 0U);
     UpperPcLink_Push(&link, frame, frame_size, 100U);
@@ -387,7 +415,7 @@ int main(void)
     assert(link.last_rx_sequence == 18U);
 
     test_target_received = false;
-    frame_size = Test_BuildExtendedPositionCommand(frame);
+    frame_size = Test_BuildExtendedPositionCommand(0x0002U, frame);
     assert(frame_size > 0U);
     UpperPcLink_Push(&link, frame, frame_size, 104U);
     assert(test_target_received);
@@ -422,6 +450,16 @@ int main(void)
     frame_size = Test_BuildPositionTorqueCommand(0x0006U, frame);
     assert(frame_size > 0U);
     UpperPcLink_Push(&link, frame, frame_size, 106U);
+    assert(test_target_received);
+    assert(test_target.conveyor.enabled);
+    assert(test_target.gripper.enabled);
+    assert(!test_target.conveyor.pid_update);
+    assert(!test_target.gripper.pid_update);
+
+    test_target_received = false;
+    frame_size = Test_BuildExtendedPositionCommand(0x0006U, frame);
+    assert(frame_size > 0U);
+    UpperPcLink_Push(&link, frame, frame_size, 107U);
     assert(!test_target_received);
     assert(link.command_error_count == 2U);
 
@@ -519,6 +557,27 @@ int main(void)
     }
 
     {
+        const uint8_t action_payload[UPPER_PC_MOTOR_ACTION_PAYLOAD_SIZE] =
+        {
+            UPPER_PC_ACTION_J4310_ENABLE, 1U, 0x06U
+        };
+        test_action_received = false;
+        frame_size = PcProtocol_Encode(PC_MSG_MOTOR_ACTION,
+                                       24U,
+                                       action_payload,
+                                       sizeof(action_payload),
+                                       frame,
+                                       TEST_FRAME_CAPACITY);
+        assert(frame_size > 0U);
+        UpperPcLink_Push(&link, frame, frame_size, 109U);
+        assert(test_action_received);
+        assert(test_action == UPPER_PC_ACTION_J4310_ENABLE);
+        assert(test_action_can_bus == 1U);
+        assert(test_action_node_id == 0x06U);
+        assert(test_action_value == 0U);
+    }
+
+    {
         const uint8_t action_payload[
             UPPER_PC_MOTOR_CONFIG_ACTION_PAYLOAD_SIZE] =
         {
@@ -604,7 +663,7 @@ int main(void)
                                          },
                                          &(upper_j4310_auto_return_status_t)
                                          {
-                                             .storage_ready = true,
+                                             .available = true,
                                              .enabled = true,
                                              .active = true,
                                              .stage = 2U
@@ -677,9 +736,9 @@ int main(void)
     assert(Test_ReadU32(&frame[32]) == 33U);
 
     assert(UpperPcLink_IsSessionActive(&link, 309U));
-    assert(!UpperPcLink_IsSessionActive(&link, 310U));
-    assert(UpperPcLink_IsTimedOut(&link, 310U));
-    assert(!link.remote_active);
+    assert(UpperPcLink_IsSessionActive(&link, 310U));
+    assert(!UpperPcLink_IsTimedOut(&link, 310U));
+    assert(link.remote_active);
 
     frame_size = PcProtocol_Encode(PC_MSG_HEARTBEAT,
                                    24U,
@@ -689,8 +748,8 @@ int main(void)
                                    TEST_FRAME_CAPACITY);
     assert(frame_size > 0U);
     UpperPcLink_Push(&link, frame, frame_size, 311U);
-    assert(!UpperPcLink_IsSessionActive(&link, 311U));
-    assert(link.last_rx_tick_ms == 109U);
+    assert(UpperPcLink_IsSessionActive(&link, 311U));
+    assert(link.last_rx_tick_ms == 311U);
 
     frame_size = Test_BuildHandshake(25U, frame);
     assert(frame_size > 0U);
@@ -709,11 +768,11 @@ int main(void)
     frame_size = Test_BuildHandshake(26U, frame);
     assert(frame_size > 0U);
     UpperPcLink_Push(&link, frame, frame_size, 513U);
-    assert(!link.remote_active);
+    assert(link.remote_active);
     assert(!UpperPcLink_IsSessionActive(&link, 513U));
     UpperPcLink_MarkHandshakeAckSent(&link, 26U);
     assert(UpperPcLink_IsSessionActive(&link, 513U));
-    assert(UpperPcLink_IsTimedOut(&link, 513U));
+    assert(!UpperPcLink_IsTimedOut(&link, 513U));
     assert(UpperPcLink_IsSessionActive(&link, 513U));
 
     {
@@ -729,7 +788,21 @@ int main(void)
         UpperPcLink_Push(&link, frame, frame_size, 514U);
         assert(test_estop_received);
         assert(!link.remote_active);
-        assert(!UpperPcLink_IsSessionActive(&link, 514U));
+        assert(UpperPcLink_IsSessionActive(&link, 514U));
     }
+
+    test_target_received = false;
+    frame_size = Test_BuildCommand(UPPER_PC_CMD_PAYLOAD_SIZE, frame);
+    assert(frame_size > 0U);
+    UpperPcLink_Push(&link, frame, frame_size, 515U);
+    assert(test_target_received);
+    assert(link.remote_active);
+
+    frame_size = Test_BuildHandshake(28U, frame);
+    assert(frame_size > 0U);
+    UpperPcLink_Push(&link, frame, frame_size, 516U);
+    assert(!UpperPcLink_IsSessionActive(&link, 516U));
+    UpperPcLink_MarkHandshakeAckSent(&link, 28U);
+    assert(UpperPcLink_IsSessionActive(&link, 516U));
     return 0;
 }

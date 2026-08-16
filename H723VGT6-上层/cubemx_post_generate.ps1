@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = $PSScriptRoot
 $projectFile = Join-Path $projectRoot 'MDK-ARM\H723VGT6.uvprojx'
+$dmaFile = Join-Path $projectRoot 'Core\Src\dma.c'
 $portableRoot = Join-Path $projectRoot 'Middlewares\Third_Party\FreeRTOS\Source\portable'
 
 if (-not (Test-Path -LiteralPath $projectFile)) {
@@ -78,6 +79,13 @@ if (Test-Path -LiteralPath $freertosFile) {
         'vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName)',
         'vApplicationStackOverflowHook(xTaskHandle xTask, char *pcTaskName)')
     [IO.File]::WriteAllText($freertosFile, $freertosText, [Text.UTF8Encoding]::new($false))
+}
+
+if (Test-Path -LiteralPath $dmaFile) {
+    $dmaText = [IO.File]::ReadAllText($dmaFile)
+    $dma2Stream0IrqPattern = '(?m)^[ \t]*/\* DMA2_Stream0_IRQn interrupt configuration \*/\r?\n[ \t]*HAL_NVIC_SetPriority\(DMA2_Stream0_IRQn, 5, 0\);\r?\n[ \t]*HAL_NVIC_EnableIRQ\(DMA2_Stream0_IRQn\);\r?\n'
+    $dmaText = [regex]::Replace($dmaText, $dma2Stream0IrqPattern, '', 1)
+    [IO.File]::WriteAllText($dmaFile, $dmaText, [Text.UTF8Encoding]::new($false))
 }
 
 foreach ($obsolete in @('RVDS', 'GCC\ARM_CM4F')) {

@@ -4,7 +4,7 @@
 
 #include "upper_config.h"
 
-/* 功能：初始化上层机器人对象和电机管理器；用途：建立控制状态与发送接口；返回 true 表示机器人进入就绪态。 */
+/* 功能：初始化上层机器人对象和电机管理器；用途：让 DJI 电机以上电位置零点进入位控；返回 true 表示机器人进入运行态。 */
 bool UpperRobot_Init(upper_robot_t *robot,
                      motor_send_t send,
                      void *user_data)
@@ -25,7 +25,14 @@ bool UpperRobot_Init(upper_robot_t *robot,
         return false;
     }
 
-    robot->state = ROBOT_READY;
+    robot->target.position_mode = true;
+    robot->target.arm.position_mode = true;
+    robot->target.arm.m3508_enabled = true;
+    robot->target.conveyor.position_mode = true;
+    robot->target.conveyor.enabled = true;
+    robot->target.gripper.position_mode = true;
+    robot->target.gripper.enabled = true;
+    robot->state = ROBOT_RUN;
     return true;
 }
 
@@ -61,7 +68,7 @@ void UpperRobot_Stop(upper_robot_t *robot)
     robot->state = ROBOT_STOP;
 }
 
-/* 功能：紧急停止全部电机并进入错误态；用途：处理控制或通信异常；无返回值表示系统被锁定等待清错。 */
+/* 功能：紧急停止全部电机并进入停止态；用途：立即撤销输出并等待新的显式控制目标。 */
 void UpperRobot_EStop(upper_robot_t *robot)
 {
     if (robot == NULL)
@@ -70,7 +77,12 @@ void UpperRobot_EStop(upper_robot_t *robot)
     }
 
     MotorManager_StopAll(&robot->motor_manager);
-    robot->state = ROBOT_ERROR;
+    robot->target.arm.enabled = false;
+    robot->target.arm.m3508_enabled = false;
+    robot->target.arm.j4310_commanded = false;
+    robot->target.conveyor.enabled = false;
+    robot->target.gripper.enabled = false;
+    robot->state = ROBOT_STOP;
 }
 
 /* 功能：把错误态恢复为就绪态；用途：故障排除后重新允许启动；无返回值表示仅在当前为错误态时生效。 */
@@ -82,7 +94,40 @@ void UpperRobot_ClearError(upper_robot_t *robot)
     }
 }
 
-/* 功能：执行整机 1 ms 控制周期；用途：计算各机构命令、提交电机并统一发送；异常时会触发急停。 */
+/* 功能：关闭机械臂全部电机；用途：把机械臂局部计算或应用失败限制在本机构内。 */
+static void UpperRobot_DisableArm(motor_manager_t *manager)
+{
+    uint32_t index;
+
+    (void)MotorManager_SetEnabled(manager,
+                                  UPPER_MOTOR_ARM_J4310,
+                                  false);
+    for (index = 0U; index < UPPER_ARM_M3508_COUNT; index++)
+    {
+        (void)MotorManager_SetEnabled(
+            manager,
+            (size_t)UPPER_MOTOR_ARM_M3508_1 + index,
+            false);
+    }
+}
+
+/* 功能：关闭传送机构电机；用途：阻止无效传送目标继续使用旧命令。 */
+static void UpperRobot_DisableConveyor(motor_manager_t *manager)
+{
+    (void)MotorManager_SetEnabled(manager,
+                                  UPPER_MOTOR_CONVEYOR_M2006,
+                                  false);
+}
+
+/* 功能：关闭夹爪电机；用途：阻止无效夹爪目标继续使用旧命令。 */
+static void UpperRobot_DisableGripper(motor_manager_t *manager)
+{
+    (void)MotorManager_SetEnabled(manager,
+                                  UPPER_MOTOR_GRIPPER_M2006,
+                                  false);
+}
+
+/* 功能：执行整机 1 ms 控制周期；用途：独立计算并提交各机构命令；单个机构异常时仅关闭对应电机。 */
 void UpperRobot_Control1ms(upper_robot_t *robot, uint32_t tick_ms)
 {
     arm_output_t arm_output;
@@ -94,17 +139,20 @@ void UpperRobot_Control1ms(upper_robot_t *robot, uint32_t tick_ms)
         return;
     }
 
-    /* Build one target snapshot, stage every module, then dispatch CAN frames
-     * only after J4310/M3508/M2006 targets are all ready for this 1 ms cycle. */
     if (!Arm_Calc(&robot->target.arm, &arm_output) ||
-        !Conveyor_Calc(&robot->target.conveyor, &conveyor_output) ||
-        !Gripper_Calc(&robot->target.gripper, &gripper_output) ||
-        !Arm_Apply(&robot->motor_manager, &arm_output) ||
-        !Conveyor_Apply(&robot->motor_manager, &conveyor_output) ||
+        !Arm_Apply(&robot->motor_manager, &arm_output))
+    {
+        UpperRobot_DisableArm(&robot->motor_manager);
+    }
+    if (!Conveyor_Calc(&robot->target.conveyor, &conveyor_output) ||
+        !Conveyor_Apply(&robot->motor_manager, &conveyor_output))
+    {
+        UpperRobot_DisableConveyor(&robot->motor_manager);
+    }
+    if (!Gripper_Calc(&robot->target.gripper, &gripper_output) ||
         !Gripper_Apply(&robot->motor_manager, &gripper_output))
     {
-        UpperRobot_EStop(robot);
-        return;
+        UpperRobot_DisableGripper(&robot->motor_manager);
     }
 
     MotorManager_Process(&robot->motor_manager, tick_ms);

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import json
 import math
 import queue
 import struct
@@ -14,8 +15,15 @@ import main
 from main import (
     DJI_REDUCTION_RATIOS,
     GATE_M2006_ID,
+    GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG,
     GRIPPER_M2006_ID,
+    J4310_POSITION_MAX_DEG,
+    J4310_POSITION_MIN_DEG,
     J4310_RAW_MAX_DEG,
+    M3508_SYNC_POSITION_MAX_DEG,
+    M3508_SYNC_POSITION_MIN_DEG,
+    M2006_POSITION_MAX_DEG,
+    M2006_POSITION_MIN_DEG,
     M2006_NODE_IDS,
     POSITION_MAX_DEG,
     POSITION_MIN_DEG,
@@ -33,8 +41,6 @@ from protocol import (
     HEADER_SIZE,
     MSG_ACK,
     MSG_ESTOP,
-    MSG_FLASH_INFO,
-    MSG_FLASH_INFO_REQUEST,
     MSG_HEARTBEAT,
     MOTOR_ACTION_J4310_SAVE_ZERO,
     MOTOR_ACTION_J4310_AUTO_RETURN,
@@ -46,7 +52,6 @@ from protocol import (
     Frame,
     FrameParser,
     decode_dji_telemetry,
-    decode_flash_info,
     decode_motor_action_result,
     decode_robot_state,
     encode_frame,
@@ -55,6 +60,13 @@ from protocol import (
 
 class UpperConsoleTest(unittest.TestCase):
     def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.parameter_path_patch = mock.patch.object(
+            main,
+            "MOTOR_PARAMETER_PATH",
+            Path(self.temp_dir.name) / "motor_parameters.json",
+        )
+        self.parameter_path_patch.start()
         self.root = tk.Tk()
         self.root.withdraw()
         with mock.patch.object(UpperConsole, "refresh_ports"):
@@ -63,6 +75,427 @@ class UpperConsoleTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.app.close()
+        self.parameter_path_patch.stop()
+        self.temp_dir.cleanup()
+
+    def test_j4310_defaults_use_gentle_position_hold(self) -> None:
+        self.assertEqual(self.app._values()[:4], (0.0, 0.0, 5.0, 0.5))
+
+    def test_numeric_input_validator_enforces_configured_range(self) -> None:
+        self.assertTrue(UpperConsole._validate_numeric_edit("-10", "-10", "10"))
+        self.assertTrue(UpperConsole._validate_numeric_edit("10", "-10", "10"))
+        self.assertTrue(UpperConsole._validate_numeric_edit("-", "-10", "10"))
+        self.assertFalse(
+            UpperConsole._validate_numeric_edit("10.01", "-10", "10")
+        )
+        self.assertFalse(
+            UpperConsole._validate_numeric_edit("-10.01", "-10", "10")
+        )
+        self.assertFalse(UpperConsole._validate_numeric_edit("nan", "-10", "10"))
+
+    def test_j4310_torque_limit_above_tmax_is_not_sent(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.write.return_value = True
+        self.app.transport = transport
+        self.app.handshaken = True
+        self.app.j_torque_limit.set(20.0)
+
+        with mock.patch("main.messagebox.showerror") as showerror:
+            sent = self.app.send_arm_group_now("j4310")
+
+        self.assertFalse(sent)
+        transport.write.assert_not_called()
+        showerror.assert_called_once()
+        message = showerror.call_args.args[1]
+        self.assertIn("J4310 力矩限幅", message)
+        self.assertIn("0.1 .. 10 Nm", message)
+
+    def test_j4310_tau_must_fit_selected_torque_limit(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.write.return_value = True
+        self.app.transport = transport
+        self.app.handshaken = True
+        self.app.j_tau.set(6.0)
+        self.app.j_torque_limit.set(5.0)
+
+        with mock.patch("main.messagebox.showerror") as showerror:
+            sent = self.app.send_arm_group_now("j4310")
+
+        self.assertFalse(sent)
+        transport.write.assert_not_called()
+        self.assertIn("超过当前力矩限幅", showerror.call_args.args[1])
+
+    def test_stop_command_is_not_blocked_by_invalid_target(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.write.return_value = True
+        self.app.transport = transport
+        self.app.handshaken = True
+        self.app.j_torque_limit.set(20.0)
+
+        with mock.patch("main.messagebox.showerror") as showerror:
+            self.app.stop_page("机械臂")
+
+        transport.write.assert_called_once()
+        showerror.assert_not_called()
+
+    def test_parameter_range_dialog_lists_j4310_torque_limits(self) -> None:
+        with mock.patch("main.messagebox.showinfo") as showinfo:
+            self.app.show_parameter_ranges()
+
+        showinfo.assert_called_once()
+        message = showinfo.call_args.args[1]
+        self.assertIn("tau：-10 .. 10 Nm", message)
+        self.assertIn("力矩限幅：0.1 .. 10 Nm", message)
+
+    def test_m3508_defaults_match_original_parameters(self) -> None:
+        self.assertEqual(
+            tuple(var.get() for var in self.app.m3508_speed_pid_vars.values()),
+            (80.0, 40.0, 0.0, 57.2958, 2458.0),
+        )
+        self.assertEqual(
+            tuple(var.get() for var in self.app.m3508_position_pid_vars.values()),
+            (60.0, 0.0, 0.0, 0.0, 150.0),
+        )
+
+    def test_save_button_is_immediately_right_of_stop_button(self) -> None:
+        for stop_button, save_button in (
+            (self.app.j4310_stop_button, self.app.j4310_save_button),
+            (self.app.m3508_stop_button, self.app.m3508_save_button),
+            (
+                self.app.page_action_buttons["开关门"][1],
+                self.app.page_save_buttons["开关门"],
+            ),
+            (
+                self.app.page_action_buttons["夹爪"][1],
+                self.app.page_save_buttons["夹爪"],
+            ),
+        ):
+            siblings = stop_button.master.pack_slaves()
+            self.assertEqual(
+                siblings.index(save_button), siblings.index(stop_button) + 1
+            )
+
+    def test_save_j4310_persists_and_immediately_sends(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.write.return_value = True
+        self.app.transport = transport
+        self.app.handshaken = True
+        self.app.j_position.set(25.0)
+        self.app.j_kp.set(12.0)
+
+        self.assertTrue(self.app.save_motor_parameters("j4310"))
+
+        transport.write.assert_called_once()
+        with main.MOTOR_PARAMETER_PATH.open("r", encoding="utf-8") as stream:
+            saved = json.load(stream)
+        self.assertEqual(saved["j4310"]["position_deg"], 25.0)
+        self.assertEqual(saved["j4310"]["kp"], 12.0)
+        self.assertEqual(self.app.status_var.get(), "机械臂 参数已保存并立即应用")
+
+    def test_m2006_parameters_are_saved_and_restored_independently(self) -> None:
+        self.app.m2006_speed_pid_vars_by_motor["conveyor"]["kp"].set(111.0)
+        self.app.m2006_speed_pid_vars_by_motor["gripper"]["kp"].set(222.0)
+        self.assertTrue(self.app.save_motor_parameters("conveyor"))
+        self.assertTrue(self.app.save_motor_parameters("gripper"))
+
+        other_root = tk.Toplevel(self.root)
+        other_root.withdraw()
+        with mock.patch.object(UpperConsole, "refresh_ports"):
+            other_app = UpperConsole(other_root)
+        try:
+            self.assertEqual(
+                other_app.m2006_speed_pid_vars_by_motor["conveyor"]["kp"].get(),
+                111.0,
+            )
+            self.assertEqual(
+                other_app.m2006_speed_pid_vars_by_motor["gripper"]["kp"].get(),
+                222.0,
+            )
+        finally:
+            other_app.close()
+
+    def test_remote_action_parameters_are_saved_and_restored(self) -> None:
+        self.app.remote_action_angles["存块"]["m3508"].set(321.0)
+        self.app.remote_action_angles["开关门"]["angle_off"].set(45.0)
+
+        self.app.save_remote_action_parameters()
+
+        self.assertEqual(
+            self.app.status_var.get(), "遥控动作参数已保存，下次启动自动恢复"
+        )
+        other_root = tk.Toplevel(self.root)
+        other_root.withdraw()
+        with mock.patch.object(UpperConsole, "refresh_ports"):
+            other_app = UpperConsole(other_root)
+        try:
+            self.assertEqual(
+                other_app.remote_action_angles["存块"]["m3508"].get(), 321.0
+            )
+            self.assertEqual(
+                other_app.remote_action_angles["开关门"]["angle_off"].get(),
+                45.0,
+            )
+        finally:
+            other_app.close()
+
+    def test_remote_action_defaults_match_physical_remote(self) -> None:
+        expected = {
+            "存块": (500.0, 90.0, 0.0, -20.0),
+            "取地面一层块": (1000.0, 90.0, 0.0, 180.0),
+            "取台阶二层块": (0.0, 90.0, 0.0, 180.0),
+            "翻转块": (0.0, 30.0, 700.0, 90.0, 0.0, 180.0),
+            "开关门": (180.0, 62.0),
+            "夹爪": (130.0, 55.0),
+        }
+
+        for action, values in expected.items():
+            with self.subTest(action=action):
+                self.assertEqual(
+                    tuple(
+                        variable.get()
+                        for variable in self.app.remote_action_angles[
+                            action
+                        ].values()
+                    ),
+                    values,
+                )
+
+    def test_legacy_remote_action_names_are_migrated(self) -> None:
+        legacy = {
+            "remote_actions": {
+                "取台阶二层块": {
+                    "m3508": 801.0,
+                    "j4310": 91.0,
+                    "m3508_return": 1.0,
+                    "j4310_return": 181.0,
+                },
+                "取地面一层块": {
+                    "m3508": 2.0,
+                    "j4310": 92.0,
+                    "m3508_return": 3.0,
+                    "j4310_return": 182.0,
+                },
+            }
+        }
+        main.MOTOR_PARAMETER_PATH.write_text(
+            json.dumps(legacy, ensure_ascii=False), encoding="utf-8"
+        )
+
+        other_root = tk.Toplevel(self.root)
+        other_root.withdraw()
+        with mock.patch.object(UpperConsole, "refresh_ports"):
+            other_app = UpperConsole(other_root)
+        try:
+            self.assertEqual(
+                other_app.remote_action_angles["取地面一层块"]["m3508"].get(),
+                801.0,
+            )
+            self.assertEqual(
+                other_app.remote_action_angles["取台阶二层块"]["m3508"].get(),
+                2.0,
+            )
+        finally:
+            other_app.close()
+
+    def test_flip_action_cycles_three_targets_and_resets_arm_sequences(self) -> None:
+        sent_values = []
+        self.app.remote_action_states["翻转块"] = 1
+        with mock.patch.object(
+            self.app, "_send_position_values", side_effect=lambda *args, **kwargs: (
+                sent_values.append(args[1]) or True
+            )
+        ):
+            self.assertTrue(self.app.execute_remote_action("翻转块"))
+            self.assertTrue(self.app.execute_remote_action("翻转块"))
+
+        self.assertEqual(
+            [(values[4], values[0]) for values in sent_values],
+            [(700.0, 90.0), (0.0, 180.0)],
+        )
+        self.assertEqual(self.app.remote_action_states["翻转块"], 0)
+        self.assertEqual(
+            self.app.remote_action_buttons["翻转块"].cget("text"), "执行"
+        )
+
+        self.app.remote_action_states["存块"] = 1
+        with mock.patch.object(self.app, "_send_position_values", return_value=True):
+            self.assertTrue(self.app.execute_remote_action("翻转块"))
+            self.assertEqual(self.app.remote_action_states["存块"], 0)
+            self.assertTrue(self.app.execute_remote_action("存块"))
+        self.assertEqual(self.app.remote_action_states["存块"], 1)
+
+    def test_flip_first_moves_m3508_then_j4310_after_one_second(self) -> None:
+        self.app._sent_arm_values = (
+            45.0, 0.0, 5.0, 0.5, 321.0, 321.0, 0.0, 0.0
+        )
+        with (
+            mock.patch.object(self.app, "_send_position_values", return_value=True) as send,
+            mock.patch.object(self.root, "after", return_value="pd8-first") as after,
+        ):
+            self.assertTrue(self.app.execute_remote_action("翻转块"))
+
+        sent = send.call_args.args[1]
+        self.assertEqual(sent[0], 45.0)
+        self.assertEqual(sent[4], 0.0)
+        self.assertEqual(sent[5], 0.0)
+        self.assertEqual(send.call_args.kwargs["enable_mask"], ENABLE_M3508_ONLY)
+        self.assertEqual(
+            self.app.status_var.get(),
+            "翻转块第一段：M3508 已发送，1 秒后进行 J4310 动作",
+        )
+        after.assert_called_once()
+        self.assertEqual(after.call_args.args[0], main.REMOTE_PD8_FIRST_DELAY_MS)
+        delayed_values = after.call_args.args[2]
+        self.assertEqual(delayed_values[0], 30.0)
+        self.assertEqual(delayed_values[4], 0.0)
+        self.assertEqual(delayed_values[5], 0.0)
+
+        with mock.patch.object(
+            self.app, "_send_position_values", return_value=True
+        ) as delayed_send:
+            self.app._complete_remote_pd8_first(delayed_values)
+        self.assertEqual(delayed_send.call_args.args[1][0], 30.0)
+        self.assertEqual(
+            delayed_send.call_args.kwargs["enable_mask"], ENABLE_J4310_ONLY
+        )
+
+    def test_store_reset_moves_m3508_then_j4310_after_one_second(self) -> None:
+        self.app.remote_action_states["存块"] = 1
+        self.app._sent_arm_values = (
+            90.0, 0.0, 5.0, 0.5, 500.0, 500.0, 0.0, 0.0
+        )
+        with (
+            mock.patch.object(self.app, "_send_position_values", return_value=True) as send,
+            mock.patch.object(self.root, "after", return_value="pd13-reset") as after,
+        ):
+            self.assertTrue(self.app.execute_remote_action("存块"))
+
+        sent = send.call_args.args[1]
+        self.assertEqual(sent[0], 90.0)
+        self.assertEqual(sent[4], 0.0)
+        self.assertEqual(sent[5], 0.0)
+        self.assertEqual(send.call_args.kwargs["enable_mask"], ENABLE_M3508_ONLY)
+        self.assertEqual(
+            self.app.status_var.get(),
+            "存块复位：M3508 已发送，1 秒后进行 J4310 动作",
+        )
+        after.assert_called_once()
+        self.assertEqual(after.call_args.args[0], main.REMOTE_PD13_RESET_DELAY_MS)
+        delayed_values = after.call_args.args[2]
+        self.assertEqual(delayed_values[0], -20.0)
+        self.assertEqual(delayed_values[4], 0.0)
+
+        with mock.patch.object(
+            self.app, "_send_position_values", return_value=True
+        ) as delayed_send:
+            self.app._complete_remote_pd13_reset(delayed_values)
+        self.assertEqual(delayed_send.call_args.args[1][0], -20.0)
+        self.assertEqual(
+            delayed_send.call_args.kwargs["enable_mask"], ENABLE_J4310_ONLY
+        )
+
+    def test_remote_controls_use_save_and_execute_button_labels(self) -> None:
+        self.assertEqual(self.app.remote_parameters_save_button.cget("text"), "保存参数")
+        self.assertEqual(self.app.remote_zero_button.cget("text"), "全部归零")
+        zero_grid = self.app.remote_zero_button.grid_info()
+        self.assertEqual(int(zero_grid["row"]), 9)
+        self.assertEqual(int(zero_grid["column"]), 7)
+        for button in self.app.aux_buttons.values():
+            self.assertEqual(button.cget("text"), "执行")
+
+        self.app.aux_output_bits = next(iter(self.app.aux_buttons))
+        self.app._update_aux_buttons()
+
+        for button in self.app.aux_buttons.values():
+            self.assertEqual(button.cget("text"), "执行")
+
+    def test_remote_arm_actions_send_equal_m3508_targets(self) -> None:
+        for action in ("存块", "翻转块"):
+            with self.subTest(action=action):
+                self.app.remote_action_angles[action]["m3508"].set(321.0)
+                with mock.patch.object(
+                    self.app, "_send_position_values", return_value=True
+                ) as send:
+                    self.assertTrue(self.app.execute_remote_action(action))
+
+                values = send.call_args.args[1]
+                self.assertEqual(values[4], 321.0)
+                self.assertEqual(values[5], 321.0)
+
+    def test_remote_zero_sends_all_motor_targets_in_one_frame(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.write.return_value = True
+        self.app.transport = transport
+        self.app.handshaken = True
+        self.app.remote_action_states["存块"] = True
+        self.app.remote_action_buttons["存块"].configure(text="复位/第二次动作")
+
+        self.assertTrue(self.app.return_all_motors_to_zero())
+
+        transport.write.assert_called_once()
+        frame = transport.write.call_args.args[0]
+        payload_size = struct.unpack_from("<H", frame, 6)[0]
+        self.assertEqual(payload_size, 42)
+        payload = frame[HEADER_SIZE:HEADER_SIZE + payload_size]
+        sent = struct.unpack("<H10f", payload)
+        self.assertEqual(
+            sent[0],
+            ENABLE_J4310_ONLY
+            | ENABLE_M3508_ONLY
+            | ENABLE_CONVEYOR
+            | ENABLE_GRIPPER,
+        )
+        zero_fields = (
+            sent[1], sent[2], sent[5], sent[7], sent[8], sent[9], sent[10]
+        )
+        for target in zero_fields:
+            self.assertAlmostEqual(target, 0.0, places=7)
+        self.assertEqual(self.app.status_var.get(), "全部电机归零目标已发送")
+        self.assertEqual(self.app.remote_action_states, {})
+        for button in self.app.remote_action_buttons.values():
+            self.assertEqual(button.cget("text"), "执行")
+        self.assertEqual(self.app.j_position.get(), 0.0)
+        self.assertEqual(self.app.m3508_position_1.get(), 0.0)
+        self.assertEqual(self.app.m3508_position_2.get(), 0.0)
+        self.assertEqual(self.app.conveyor_position.get(), 0.0)
+        self.assertEqual(self.app.gripper_position.get(), 0.0)
+
+    def test_remote_zero_does_not_change_state_when_not_connected(self) -> None:
+        self.app.remote_action_states["存块"] = True
+
+        self.assertFalse(self.app.return_all_motors_to_zero())
+
+        self.assertEqual(self.app.remote_action_states, {"存块": True})
+        self.assertEqual(self.app.status_var.get(), "未连接，目标未发送")
+
+    def test_m2006_defaults_match_saved_parameters(self) -> None:
+        self.assertEqual(
+            tuple(var.get() for var in self.app.m2006_speed_pid_vars.values()),
+            (350.0, 250.0, 0.0, 0.5, 10000.0),
+        )
+        self.assertEqual(
+            tuple(var.get() for var in self.app.m2006_position_pid_vars.values()),
+            (220.0, 500.0, 5.0, 0.002, 50.0),
+        )
+
+    def test_j4310_last_enabled_feedback_angle_is_retained(self) -> None:
+        self.app._apply_j4310_position_feedback(True, math.radians(42.5))
+        self.assertEqual(
+            self.app.j4310_output_position_var.get(),
+            "当前输出轴角度: 42.50 deg",
+        )
+
+        self.app._apply_j4310_position_feedback(False, 0.0)
+
+        self.assertEqual(
+            self.app.j4310_output_position_var.get(),
+            "当前输出轴角度: 42.50 deg",
+        )
 
     def test_m3508_position_targets_are_independent(self) -> None:
         self.app.m3508_position_1.set(10.0)
@@ -100,9 +533,52 @@ class UpperConsoleTest(unittest.TestCase):
         payload = frame[HEADER_SIZE:FRAME_OVERHEAD + payload_size - 2]
         unpacked = struct.unpack("<H30f", payload)
 
-        self.assertEqual(unpacked[0], ENABLE_M3508_ONLY)
-        for actual, expected in zip(unpacked[7:11], values[4:]):
+        self.assertEqual(
+            unpacked[0], ENABLE_J4310_ONLY | ENABLE_M3508_ONLY
+        )
+        expected_targets = (
+            *values[4:7],
+            values[7] * GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG,
+        )
+        for actual, expected in zip(unpacked[7:11], expected_targets):
             self.assertAlmostEqual(actual, math.radians(expected), places=6)
+
+    def test_gripper_output_target_is_scaled_to_motor_angle(self) -> None:
+        self.app.gripper_enable.set(True)
+        values = (0.0, 0.0, 5.0, 0.5, 0.0, 0.0, 0.0, 90.0)
+
+        frame = self.app._build_position_frame("夹爪", values)
+        unpacked = self._decode_position_frame(frame)
+
+        self.assertEqual(GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG, 2.0)
+        self.assertEqual(unpacked[0], ENABLE_GRIPPER)
+        self.assertAlmostEqual(unpacked[10], math.radians(180.0), places=6)
+
+    def test_m2006_position_limits_are_sent_at_both_endpoints(self) -> None:
+        for output_deg in (M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG):
+            with self.subTest(output_deg=output_deg):
+                values = (0.0, 0.0, 5.0, 0.5, 0.0, 0.0,
+                          output_deg, output_deg)
+
+                gate = self._decode_position_frame(
+                    self.app._build_position_frame("开关门", values)
+                )
+                gripper = self._decode_position_frame(
+                    self.app._build_position_frame("夹爪", values)
+                )
+
+                self.assertEqual(gate[0], ENABLE_CONVEYOR)
+                self.assertAlmostEqual(
+                    gate[9], math.radians(output_deg), places=6
+                )
+                self.assertEqual(gripper[0], ENABLE_GRIPPER)
+                self.assertAlmostEqual(
+                    gripper[10],
+                    math.radians(
+                        output_deg * GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG
+                    ),
+                    places=6,
+                )
 
     def test_each_m2006_page_sends_only_its_own_node(self) -> None:
         transport = mock.Mock()
@@ -120,7 +596,7 @@ class UpperConsoleTest(unittest.TestCase):
         gate = self._decode_position_frame(transport.write.call_args.args[0])
         self.assertEqual(gate[0], ENABLE_CONVEYOR)
         self.assertAlmostEqual(gate[9], 0.0, places=7)
-        self.assertFalse(self.app.gripper_enable.get())
+        self.assertTrue(self.app.gripper_enable.get())
 
         self.app.conveyor_position.set(30.0)
         self.app.gripper_position.set(0.0)
@@ -132,7 +608,7 @@ class UpperConsoleTest(unittest.TestCase):
         )
         self.assertEqual(gripper[0], ENABLE_GRIPPER)
         self.assertAlmostEqual(gripper[10], 0.0, places=7)
-        self.assertFalse(self.app.conveyor_enable.get())
+        self.assertTrue(self.app.conveyor_enable.get())
 
     @staticmethod
     def _decode_position_frame(frame: bytes) -> tuple[float, ...]:
@@ -159,10 +635,10 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertEqual(self.app.m3508_position_2.get(), 35.0)
         self.assertEqual(self.app.conveyor_position.get(), 40.0)
         self.assertEqual(self.app.gripper_position.get(), -45.0)
-        self.assertFalse(self.app.arm_enable.get())
-        self.assertFalse(self.app.m3508_enable.get())
-        self.assertFalse(self.app.conveyor_enable.get())
-        self.assertFalse(self.app.gripper_enable.get())
+        self.assertTrue(self.app.arm_enable.get())
+        self.assertTrue(self.app.m3508_enable.get())
+        self.assertTrue(self.app.conveyor_enable.get())
+        self.assertTrue(self.app.gripper_enable.get())
 
     def test_real_slider_mouse_drag_sends_and_enables(self) -> None:
         self.root.deiconify()
@@ -187,7 +663,7 @@ class UpperConsoleTest(unittest.TestCase):
 
         sent = self._decode_position_frame(transport.write.call_args.args[0])
         self.assertEqual(sent[0], ENABLE_J4310_ONLY)
-        self.assertGreater(sent[1], 0.1)
+        self.assertGreater(sent[1], 0.0)
         self.assertTrue(self.app.arm_enable.get())
         self.assertIsNone(self.app._drag_target)
 
@@ -243,11 +719,11 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertEqual(sent[0], ENABLE_CONVEYOR)
         self.assertAlmostEqual(sent[9], math.radians(75.0), places=6)
 
-    def test_manual_output_controls_remain_available(self) -> None:
-        self.assertEqual(self.app.j4310_enable_check.cget("text"), "使能 J4310 输出")
+    def test_manual_enable_controls_are_removed(self) -> None:
+        self.assertFalse(hasattr(self.app, "j4310_enable_check"))
+        self.assertFalse(hasattr(self.app, "m3508_enable_check"))
         self.assertEqual(self.app.j4310_send_button.cget("text"), "发送目标")
         self.assertEqual(self.app.j4310_stop_button.cget("text"), "停止发送")
-        self.assertEqual(self.app.m3508_enable_check.cget("text"), "允许 M3508 输出")
         self.assertEqual(self.app.m3508_send_button.cget("text"), "发送目标")
         self.assertEqual(self.app.m3508_stop_button.cget("text"), "停止发送")
 
@@ -380,25 +856,135 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertEqual(self.app.m3508_position_2.get(), 90.0)
         self.assertEqual(self.app.conveyor_position.get(), -45.0)
 
-    def test_all_position_sliders_use_full_rotation_range(self) -> None:
-        self.assertEqual(POSITION_MIN_DEG, -360.0)
-        self.assertEqual(POSITION_MAX_DEG, 360.0)
+    def test_position_sliders_use_motor_specific_ranges(self) -> None:
+        self.assertEqual(J4310_POSITION_MIN_DEG, -90.0)
+        self.assertEqual(J4310_POSITION_MAX_DEG, 270.0)
+        self.assertEqual(POSITION_MIN_DEG, -1000.0)
+        self.assertEqual(POSITION_MAX_DEG, 1000.0)
+        self.assertEqual(M3508_SYNC_POSITION_MIN_DEG, -1000.0)
+        self.assertEqual(M3508_SYNC_POSITION_MAX_DEG, 1000.0)
+        self.assertEqual(M2006_POSITION_MIN_DEG, -360.0)
+        self.assertEqual(M2006_POSITION_MAX_DEG, 360.0)
         self.assertEqual(
             set(self.app.position_slider_controls),
             {"j4310", "m3508", "conveyor", "gripper"},
         )
-        for controls in self.app.position_slider_controls.values():
+        for control in self.app.position_slider_controls["j4310"]:
+            self.assertEqual(float(control.cget("from")), J4310_POSITION_MIN_DEG)
+            self.assertEqual(float(control.cget("to")), J4310_POSITION_MAX_DEG)
+        m3508_controls = self.app.position_slider_controls["m3508"]
+        for control in m3508_controls[:2]:
+            self.assertEqual(float(control.cget("from")), POSITION_MIN_DEG)
+            self.assertEqual(float(control.cget("to")), POSITION_MAX_DEG)
+        for control in m3508_controls[2:]:
+            self.assertEqual(
+                float(control.cget("from")),
+                M3508_SYNC_POSITION_MIN_DEG,
+            )
+            self.assertEqual(
+                float(control.cget("to")),
+                M3508_SYNC_POSITION_MAX_DEG,
+            )
+        for key in ("conveyor", "gripper"):
+            controls = self.app.position_slider_controls[key]
             for control in controls:
-                self.assertEqual(float(control.cget("from")), POSITION_MIN_DEG)
-                self.assertEqual(float(control.cget("to")), POSITION_MAX_DEG)
+                self.assertEqual(
+                    float(control.cget("from")), M2006_POSITION_MIN_DEG
+                )
+                self.assertEqual(
+                    float(control.cget("to")), M2006_POSITION_MAX_DEG
+                )
 
-    def test_m3508_has_two_inputs_and_one_shared_slider(self) -> None:
+    def test_j4310_slider_endpoints_pass_send_validation(self) -> None:
+        for position_deg in (J4310_POSITION_MIN_DEG,
+                             J4310_POSITION_MAX_DEG):
+            values = (position_deg, 0.0, 5.0, 0.5,
+                      0.0, 0.0, 0.0, 0.0)
+            with self.subTest(position_deg=position_deg):
+                self.assertEqual(
+                    self.app._send_parameter_errors(
+                        "机械臂",
+                        values,
+                        True,
+                        {"enable_mask": ENABLE_J4310_ONLY},
+                    ),
+                    [],
+                )
+
+    def test_m3508_input_endpoints_pass_send_validation(self) -> None:
+        for position_deg in (POSITION_MIN_DEG, POSITION_MAX_DEG):
+            values = (0.0, 0.0, 5.0, 0.5,
+                      position_deg, position_deg, 0.0, 0.0)
+            with self.subTest(position_deg=position_deg):
+                self.assertEqual(
+                    self.app._send_parameter_errors(
+                        "机械臂",
+                        values,
+                        True,
+                        {"enable_mask": ENABLE_M3508_ONLY},
+                    ),
+                    [],
+                )
+
+    def test_m3508_sync_slider_endpoints_pass_send_validation(self) -> None:
+        for position_deg in (
+            M3508_SYNC_POSITION_MIN_DEG,
+            M3508_SYNC_POSITION_MAX_DEG,
+        ):
+            self.app._on_m3508_sync_slider_value(str(position_deg))
+            with self.subTest(position_deg=position_deg):
+                self.assertEqual(
+                    self.app._send_parameter_errors(
+                        "机械臂",
+                        self.app._values(),
+                        True,
+                        {"enable_mask": ENABLE_M3508_ONLY},
+                    ),
+                    [],
+                )
+
+    def test_m3508_has_independent_and_sync_inputs_with_shared_slider(self) -> None:
         controls = self.app.m3508_position_controls
 
-        self.assertEqual(len(controls), 3)
+        self.assertEqual(len(controls), 4)
         self.assertIsInstance(controls[0], ttk.Spinbox)
         self.assertIsInstance(controls[1], ttk.Spinbox)
-        self.assertIsInstance(controls[2], ttk.Scale)
+        self.assertIsInstance(controls[2], ttk.Spinbox)
+        self.assertIsInstance(controls[3], ttk.Scale)
+
+        self.root.deiconify()
+        self.root.update()
+        self.assertIs(controls[0].master, controls[2].master)
+        self.assertGreater(controls[2].winfo_x(), controls[0].winfo_x())
+
+    def test_m3508_sync_input_stages_equal_targets_without_sending(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.rx_queue = queue.Queue()
+        transport.error_queue = queue.Queue()
+        transport.write.return_value = True
+        self.app.transport = transport
+        self.app.handshaken = True
+        sync_input = self.app.m3508_sync_input_spinbox
+
+        self.root.deiconify()
+        self.root.update()
+        sync_input.focus_force()
+        self.root.update()
+        sync_input.delete(0, "end")
+        sync_input.insert(0, "125.5")
+        sync_input.event_generate("<Return>")
+        self.root.update()
+
+        self.assertEqual(self.app.m3508_position_1.get(), 125.5)
+        self.assertEqual(self.app.m3508_position_2.get(), 125.5)
+        transport.write.assert_not_called()
+
+        self.app.send_arm_group_now("m3508")
+        sent = self._decode_position_frame(transport.write.call_args.args[0])
+        self.assertEqual(sent[0], ENABLE_M3508_ONLY)
+        self.assertAlmostEqual(sent[7], math.radians(125.5), places=6)
+        self.assertAlmostEqual(sent[8], math.radians(125.5), places=6)
 
     def test_slider_value_change_without_drag_does_not_send(self) -> None:
         transport = mock.Mock()
@@ -413,17 +999,17 @@ class UpperConsoleTest(unittest.TestCase):
                 self.app._on_m3508_sync_slider_value(str(position))
                 transport.write.assert_not_called()
                 self.assertEqual(
-                    self.app.m3508_position_1.get(), -position
+                    self.app.m3508_position_1.get(), position
                 )
                 self.assertEqual(
                     self.app.m3508_position_2.get(), position
                 )
 
-    def test_m3508_sync_slider_keeps_opposite_targets_with_equal_magnitude(self) -> None:
-        for value in (-360.0, -12.5, 0.0, 42.0, 360.0):
+    def test_m3508_sync_slider_keeps_equal_targets(self) -> None:
+        for value in (-1000.0, -360.0, -12.5, 0.0, 42.0, 360.0, 1000.0):
             self.app._on_m3508_sync_slider_value(str(value))
             self.assertEqual(
-                self.app.m3508_position_1.get(), -value if value else 0.0
+                self.app.m3508_position_1.get(), value
             )
             self.assertEqual(self.app.m3508_position_2.get(), value)
 
@@ -626,7 +1212,7 @@ class UpperConsoleTest(unittest.TestCase):
             ),
         )
 
-    def test_handshake_automatically_queries_flash_once(self) -> None:
+    def test_handshake_does_not_query_flash(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         transport.write.return_value = True
@@ -638,24 +1224,8 @@ class UpperConsoleTest(unittest.TestCase):
             Frame(MSG_ACK, 0x1234, HANDSHAKE_MAGIC)
         )
 
-        written = transport.write.call_args.args[0]
         self.assertTrue(self.app.handshaken)
-        self.assertEqual(written[3], MSG_FLASH_INFO_REQUEST)
-        self.assertEqual(struct.unpack_from("<H", written, 6)[0], 0)
-        self.assertEqual(self.app.flash_info_var.get(), "Flash: 查询中...")
-
-    def test_manual_flash_query_uses_binary_protocol(self) -> None:
-        transport = mock.Mock()
-        transport.connected = True
-        transport.write.return_value = True
-        self.app.transport = transport
-        self.app.handshaken = True
-
-        self.assertTrue(self.app.request_flash_info())
-
-        written = transport.write.call_args.args[0]
-        self.assertEqual(written[3], MSG_FLASH_INFO_REQUEST)
-        self.assertEqual(struct.unpack_from("<H", written, 6)[0], 0)
+        transport.write.assert_not_called()
 
     def test_handshake_timeout_keeps_wireless_cdc_open(self) -> None:
         transport = mock.Mock()
@@ -712,7 +1282,7 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertTrue(self.app.connection_requested)
         self.assertEqual(self.app.handshake_started_at, 10.0)
 
-    def test_missing_board_state_restarts_handshake_without_revoking_enable(self) -> None:
+    def test_missing_board_state_does_not_restart_handshake(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         self.app.transport = transport
@@ -729,10 +1299,9 @@ class UpperConsoleTest(unittest.TestCase):
             self.app._periodic_send()
         self.app._send_after_id = send_after_id
 
-        self.assertFalse(self.app.handshaken)
+        self.assertTrue(self.app.handshaken)
         self.assertTrue(self.app.arm_enable.get())
-        self.assertEqual(self.app.handshake_started_at, 2.1)
-        self.assertEqual(self.app.status_var.get(), "主控无响应，重新握手中...")
+        self.assertEqual(self.app.handshake_started_at, 0.0)
 
     def test_robot_state_refreshes_board_response_time(self) -> None:
         transport = mock.Mock()
@@ -816,7 +1385,7 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertNotEqual(written[3], MSG_UPPER_POSITION_CMD)
         self.assertEqual(transport.write.call_count, 1)
 
-    def test_all_enable_checkboxes_do_not_send_motor_targets(self) -> None:
+    def test_outputs_start_allowed_without_enable_checkboxes(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         transport.write.return_value = True
@@ -824,16 +1393,13 @@ class UpperConsoleTest(unittest.TestCase):
         self.app.connection_requested = True
         self.app.handshaken = True
 
-        for check in self.app.output_enable_checks.values():
-            check.invoke()
-
         transport.write.assert_not_called()
         self.assertTrue(self.app.arm_enable.get())
         self.assertTrue(self.app.m3508_enable.get())
         self.assertTrue(self.app.conveyor_enable.get())
         self.assertTrue(self.app.gripper_enable.get())
 
-    def test_j4310_waits_for_send_target_button(self) -> None:
+    def test_j4310_send_button_directly_sends_target(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         transport.write.return_value = True
@@ -842,14 +1408,10 @@ class UpperConsoleTest(unittest.TestCase):
         self.app.handshaken = True
         self.app.j_position.set(30.0)
 
-        self.app.j4310_enable_check.invoke()
-        transport.write.assert_not_called()
+        self.app.send_arm_group_now("j4310")
 
-        self.app.j4310_send_button.invoke()
-
-        sent = self._decode_position_frame(transport.write.call_args.args[0])
-        self.assertEqual(sent[0], ENABLE_J4310_ONLY)
-        self.assertAlmostEqual(sent[1], math.radians(30.0), places=6)
+        parsed = FrameParser().feed(transport.write.call_args.args[0])[0]
+        self.assertEqual(parsed.msg_type, MSG_UPPER_POSITION_CMD)
         self.assertEqual(transport.write.call_count, 1)
 
     def test_j4310_target_stays_in_absolute_motor_range(self) -> None:
@@ -870,14 +1432,14 @@ class UpperConsoleTest(unittest.TestCase):
             bytes((MOTOR_ACTION_J4310_SAVE_ZERO, 1, 0x06)),
         )
 
-    def test_j4310_auto_return_button_persists_board_setting(self) -> None:
+    def test_j4310_auto_return_button_sets_runtime_setting(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         transport.write.return_value = True
         self.app.transport = transport
         self.app.handshaken = True
         self.app.j4310_auto_return_status_received = True
-        self.app.j4310_auto_return_storage_ready = True
+        self.app.j4310_auto_return_available = True
         self.app.j4310_auto_return_enabled = False
         self.app._update_j4310_auto_return_button()
 
@@ -912,32 +1474,32 @@ class UpperConsoleTest(unittest.TestCase):
             "重启归零：开启",
         )
 
-    def test_j4310_auto_return_button_explains_missing_flash(self) -> None:
+    def test_j4310_auto_return_button_reports_unsupported_board(self) -> None:
         transport = mock.Mock()
         transport.connected = True
         self.app.transport = transport
         self.app.handshaken = True
         self.app.j4310_auto_return_status_received = True
-        self.app.j4310_auto_return_storage_ready = False
+        self.app.j4310_auto_return_available = False
         self.app._update_j4310_auto_return_button()
 
         self.assertEqual(
-            str(self.app.j4310_auto_return_button.cget("state")), "normal"
+            str(self.app.j4310_auto_return_button.cget("state")), "disabled"
         )
         self.assertEqual(
             self.app.j4310_auto_return_button.cget("text"),
-            "重启归零：Flash未就绪",
+            "重启归零：不可用",
         )
 
-        self.app.j4310_auto_return_button.invoke()
+        self.app.toggle_j4310_auto_return()
 
         transport.write.assert_not_called()
         self.assertEqual(
             self.app.status_var.get(),
-            "J4310 重启归零不可用：Flash 未就绪",
+            "J4310 重启归零不可用：板端不支持",
         )
 
-    def test_j4310_status_hides_bus_counters_and_shows_flash(self) -> None:
+    def test_j4310_status_hides_bus_counters(self) -> None:
         rx_diagnostic = {
             "bus_rx_frames": 38105,
             "accepted_frames": 38105,
@@ -965,12 +1527,12 @@ class UpperConsoleTest(unittest.TestCase):
 
         self.app._update_j4310_diagnostic(rx_diagnostic, tx_diagnostic)
         self.app._apply_j4310_auto_return_state(
-            {"storage_ready": True, "enabled": False, "active": False,
+            {"available": True, "enabled": False, "active": False,
              "stage": 0}
         )
 
         text = self.app.j4310_bus_label.cget("text")
-        self.assertEqual(text, "反馈状态: 电机已使能\nFlash 是否就绪: 是")
+        self.assertEqual(text, "反馈状态: 电机已使能")
         self.assertNotIn("TX 尝试", text)
         self.assertNotIn("最近 TX", text)
         self.assertNotIn("RX 38105", text)
@@ -1072,50 +1634,6 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertEqual(state["j4310_position_valid"], 1)
         self.assertAlmostEqual(state["j4310_position_rad"], 1.25)
 
-    def test_decode_flash_info_includes_init_result_and_geometry(self) -> None:
-        payload = struct.pack(
-            "<BBIIIHI", 0, 1, 0xEF4015, 2048, 512, 256, 4096
-        )
-
-        info = decode_flash_info(payload)
-
-        self.assertEqual(info["init_status"], 0)
-        self.assertTrue(info["initialized"])
-        self.assertEqual(info["jedec_id"], 0xEF4015)
-        self.assertEqual(info["capacity_kb"], 2048)
-        self.assertEqual(info["sector_count"], 512)
-        self.assertEqual(info["page_size_byte"], 256)
-        self.assertEqual(info["sector_size_byte"], 4096)
-
-    def test_flash_info_response_is_displayed(self) -> None:
-        transport = mock.Mock()
-        transport.connected = True
-        transport.rx_queue = queue.Queue()
-        transport.error_queue = queue.Queue()
-        payload = struct.pack(
-            "<BBIIIHI", 3, 0, 0, 0, 0, 0, 4096
-        )
-        transport.rx_queue.put(encode_frame(MSG_FLASH_INFO, 7, payload))
-        self.app.transport = transport
-        self.app.connection_requested = True
-        self.app.handshaken = True
-        poll_after_id = self.app._poll_after_id
-
-        with (
-            mock.patch("main.time.monotonic", return_value=12.5),
-            mock.patch.object(self.root, "after"),
-        ):
-            self.app._poll_io()
-        self.app._poll_after_id = poll_after_id
-
-        text = self.app.flash_info_var.get()
-        self.assertIn("未初始化", text)
-        self.assertIn("未知型号", text)
-        self.assertIn("w25q_init_status=3 W25Q_ERROR_UNSUPPORTED_DEVICE", text)
-        self.assertIn("JEDEC=0x000000", text)
-        self.assertIn("容量=0 KB", text)
-        self.assertEqual(self.app.last_board_response, 12.5)
-
     def test_decode_robot_state_includes_j4310_rx_diagnostic(self) -> None:
         payload = struct.pack(
             "<BBIHIIIfB5IHBBB",
@@ -1180,7 +1698,7 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertEqual(
             state["j4310_auto_return"],
             {
-                "storage_ready": True,
+                "available": True,
                 "enabled": True,
                 "active": True,
                 "stage": 2,

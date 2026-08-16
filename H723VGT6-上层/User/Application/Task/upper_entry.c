@@ -6,9 +6,11 @@
 #include "cmsis_os2.h"
 #include "comm_runtime.h"
 #include "j4310_auto_return.h"
+#include "j4310_position_control.h"
 #include "upper_config.h"
 #include "upper_motor_port.h"
 #include "upper_pc_link.h"
+#include "upper_remote_link.h"
 #include "W25Qxx.h"
 
 #define UPPER_CMD_QUEUE_DEPTH  4U
@@ -16,27 +18,36 @@
 #define UPPER_DJI_TELEMETRY_PERIOD_MS 10U
 #define UPPER_TX_BUFFER_SIZE   160U
 #define UPPER_HANDSHAKE_ACK_GUARD_MS 20U
-#define UPPER_J4310_AUTO_RETURN_CONFIG_MAGIC 0x5A523134UL
-#define UPPER_J4310_AUTO_RETURN_CONFIG_VERSION 1U
-#define UPPER_J4310_AUTO_RETURN_CONFIG_XOR 0xA5C33C5AUL
-#define UPPER_J4310_AUTO_RETURN_STORAGE_WAIT_MS 5000U
 #define UPPER_J4310_AUTO_RETURN_KP 5.0f
 #define UPPER_J4310_AUTO_RETURN_KD 0.5f
+#define UPPER_J4310_STARTUP_ENABLE_RETRY_MS 20U
+#define UPPER_REMOTE_KEY_PD13        (1U << 0U)
+#define UPPER_REMOTE_KEY_PD12        (1U << 1U)
+#define UPPER_REMOTE_KEY_PD11        (1U << 2U)
+#define UPPER_REMOTE_KEY_PD8         (1U << 3U)
+#define UPPER_REMOTE_KEY_PD9         (1U << 4U)
+#define UPPER_REMOTE_KEY_PD10        (1U << 5U)
+#define UPPER_REMOTE_ANGLE_DEG_TO_RAD 0.017453292519943295f
+#define UPPER_REMOTE_GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG 2.0f
+#define UPPER_AUX_SPI_FRAME_SIZE       8U
+#define UPPER_AUX_SPI_TARGET_RECEIVER  0x01U
+#define UPPER_AUX_SPI_TYPE_CONTROL     0x02U
+#define UPPER_AUX_SPI_PAYLOAD_SIZE     1U
+#define UPPER_AUX_SPI_REPEAT_PERIOD_MS 50U
 
-typedef struct
-{
-    uint32_t magic;
-    uint16_t version;
-    uint8_t enabled;
-    uint8_t reserved;
-    uint32_t checksum;
-} upper_j4310_auto_return_config_t;
-
-typedef char upper_j4310_auto_return_config_size_check[
-    (sizeof(upper_j4310_auto_return_config_t) == 12U) ? 1 : -1];
+#define UPPER_REMOTE_PD13_RESET_KEYS \
+    (UPPER_REMOTE_KEY_PD12 | UPPER_REMOTE_KEY_PD11 | \
+     UPPER_REMOTE_KEY_PD8)
+#define UPPER_REMOTE_PD12_RESET_KEYS \
+    (UPPER_REMOTE_KEY_PD13 | UPPER_REMOTE_KEY_PD11 | \
+     UPPER_REMOTE_KEY_PD8)
+#define UPPER_REMOTE_PD11_RESET_KEYS \
+    (UPPER_REMOTE_KEY_PD13 | UPPER_REMOTE_KEY_PD12 | \
+     UPPER_REMOTE_KEY_PD8)
 
 static upper_robot_t upper_robot;
 static upper_pc_link_t upper_pc_link;
+static upper_remote_link_t upper_remote_link;
 static osMessageQueueId_t upper_cmd_queue;
 static volatile bool upper_estop_pending;
 static volatile bool upper_motor_action_pending;
@@ -56,9 +67,28 @@ static uint32_t upper_state_last_sent_tick_ms;
 static uint32_t upper_dji_telemetry_last_sent_tick_ms;
 static size_t upper_dji_telemetry_next_index;
 static j4310_auto_return_t upper_j4310_auto_return;
-static bool upper_j4310_auto_return_storage_checked;
-static bool upper_j4310_auto_return_storage_ready;
-static bool upper_j4310_auto_return_config_enabled;
+static j4310_position_control_t upper_j4310_position_control;
+static bool upper_j4310_auto_return_enabled;
+static bool upper_j4310_startup_enable_pending;
+static bool upper_j4310_startup_enable_attempted;
+static uint32_t upper_j4310_startup_enable_last_tick_ms;
+static uint8_t upper_remote_previous_key_bits;
+static bool upper_remote_pd13_second;
+static bool upper_remote_pd13_reset_pending;
+static uint32_t upper_remote_pd13_reset_due_tick_ms;
+static bool upper_remote_pd12_second;
+static bool upper_remote_pd11_second;
+static uint8_t upper_remote_pd8_stage;
+static bool upper_remote_pd8_first_pending;
+static uint32_t upper_remote_pd8_first_due_tick_ms;
+static bool upper_remote_pd9_second;
+static bool upper_remote_pd10_second;
+static volatile bool upper_aux_spi3_pending;
+static volatile uint8_t upper_aux_output_bits;
+static uint8_t upper_aux_spi3_sequence;
+static uint8_t upper_aux_spi3_frame[UPPER_AUX_SPI_FRAME_SIZE];
+static uint32_t upper_aux_spi3_last_sent_tick_ms;
+static bool upper_aux_spi3_have_sent;
 volatile uint32_t upper_handshake_ack_sent_count;
 volatile uint32_t upper_handshake_ack_busy_count;
 volatile uint32_t upper_handshake_ack_fail_count;
@@ -68,6 +98,8 @@ volatile uint32_t upper_state_fail_count;
 volatile uint32_t upper_dji_telemetry_sent_count;
 volatile uint32_t upper_dji_telemetry_busy_count;
 volatile uint32_t upper_dji_telemetry_fail_count;
+volatile uint32_t upper_aux_spi3_sent_count;
+volatile uint32_t upper_aux_spi3_fail_count;
 __ALIGNED(32) static uint8_t upper_tx_buffer[UPPER_TX_BUFFER_SIZE];
 
 /* 功能：接收上位机目标回调并暂存命令；用途：把通信上下文的数据安全移交给控制周期；无返回值表示设置待处理标志。 */
@@ -87,16 +119,94 @@ static void UpperEntry_OnPcEStop(void *user_data)
     upper_estop_pending = true;
 }
 
+static void UpperEntry_OnPcAuxControl(uint8_t output_bits, void *user_data)
+{
+    (void)user_data;
+    upper_aux_output_bits = output_bits & 0x0FU;
+    upper_aux_spi3_pending = true;
+}
+
+static uint8_t UpperEntry_Crc8(const uint8_t *data, size_t size)
+{
+    uint8_t crc;
+    size_t index;
+    uint8_t bit;
+
+    crc = 0U;
+    for (index = 0U; index < size; index++)
+    {
+        crc ^= data[index];
+        for (bit = 0U; bit < 8U; bit++)
+        {
+            crc = ((crc & 0x80U) != 0U) ?
+                  (uint8_t)((crc << 1U) ^ 0x07U) :
+                  (uint8_t)(crc << 1U);
+        }
+    }
+    return crc;
+}
+
+static void UpperEntry_ProcessAuxSpi3(uint32_t tick_ms)
+{
+    uint8_t output_bits;
+
+    if (!upper_aux_spi3_pending &&
+        upper_aux_spi3_have_sent &&
+        ((tick_ms - upper_aux_spi3_last_sent_tick_ms) <
+         UPPER_AUX_SPI_REPEAT_PERIOD_MS))
+    {
+        return;
+    }
+    if (!CommRuntime_Spi3TxReady())
+    {
+        return;
+    }
+    output_bits = upper_aux_output_bits;
+    upper_aux_spi3_frame[0] = 0xA5U;
+    upper_aux_spi3_frame[1] = 0x5AU;
+    upper_aux_spi3_frame[2] = UPPER_AUX_SPI_TARGET_RECEIVER;
+    upper_aux_spi3_frame[3] = UPPER_AUX_SPI_TYPE_CONTROL;
+    upper_aux_spi3_frame[4] = UPPER_AUX_SPI_PAYLOAD_SIZE;
+    upper_aux_spi3_frame[5] = upper_aux_spi3_sequence++;
+    upper_aux_spi3_frame[6] = output_bits;
+    upper_aux_spi3_frame[7] = UpperEntry_Crc8(
+                                   &upper_aux_spi3_frame[2],
+                                   UPPER_AUX_SPI_FRAME_SIZE - 3U);
+    if (CommRuntime_Spi3Transmit(upper_aux_spi3_frame,
+                                 UPPER_AUX_SPI_FRAME_SIZE))
+    {
+        if (upper_aux_output_bits == output_bits)
+        {
+            upper_aux_spi3_pending = false;
+        }
+        upper_aux_spi3_last_sent_tick_ms = tick_ms;
+        upper_aux_spi3_have_sent = true;
+        upper_aux_spi3_sent_count++;
+    }
+    else
+    {
+        upper_aux_spi3_fail_count++;
+    }
+}
+
 /* 功能：处理通信层转交的 UART 数据；用途：仅将选定控制通道数据送入上位机协议；无返回值表示数据已消费或忽略。 */
 static void UpperEntry_OnUart(comm_uart_channel_t channel,
                               const uint8_t *data,
                               size_t size,
                               void *user_data)
 {
+    /* UART4 is the PC link; UART5 carries the fixed 10-byte remote frame. */
     (void)user_data;
     if (channel == COMM_UART_PC)
     {
         UpperEntry_OnPcData(data, size, CommRuntime_GetTickMs());
+    }
+    else if (channel == COMM_UART_UART5)
+    {
+        UpperRemoteLink_Push(&upper_remote_link,
+                             data,
+                             size,
+                             CommRuntime_GetTickMs());
     }
 }
 
@@ -124,175 +234,477 @@ static void UpperEntry_OnPcMotorAction(uint8_t action,
     upper_motor_action_pending = true;
 }
 
-static uint32_t UpperEntry_J4310AutoReturnChecksum(
-    const upper_j4310_auto_return_config_t *config)
+static void UpperEntry_CancelJ4310AutoReturn(void)
 {
-    return config->magic ^ ((uint32_t)config->version << 16U) ^
-           ((uint32_t)config->enabled << 8U) ^
-           UPPER_J4310_AUTO_RETURN_CONFIG_XOR;
+    J4310AutoReturn_Cancel(&upper_j4310_auto_return);
+    (void)MotorManager_ClearOverride(&upper_robot.motor_manager,
+                                     UPPER_MOTOR_ARM_J4310);
 }
 
-static uint32_t UpperEntry_J4310AutoReturnConfigAddress(void)
+static bool UpperEntry_ResetJ4310PositionControl(void)
 {
-    w25q_handle_t *flash;
-    uint32_t capacity_bytes;
-
-    flash = W25Q_PortGetDevice();
-    if ((flash == NULL) || !flash->is_initialized ||
-        (flash->sector_count == 0U))
-    {
-        return UINT32_MAX;
-    }
-    capacity_bytes = flash->capacity_kb * 1024UL;
-    if (capacity_bytes < W25Q_SECTOR_SIZE_BYTE)
-    {
-        return UINT32_MAX;
-    }
-    return capacity_bytes - W25Q_SECTOR_SIZE_BYTE;
+    return J4310PositionControl_Init(
+        &upper_j4310_position_control,
+        UPPER_J4310_TRAJECTORY_MAX_VEL_RAD_S,
+        UPPER_J4310_TRAJECTORY_MAX_ACCEL_RAD_S2,
+        UPPER_J4310_GRAVITY_MODEL_LIMIT_NM,
+        UPPER_J4310_GRAVITY_LEARNING_RATE);
 }
 
-static void UpperEntry_LoadJ4310AutoReturnConfig(uint32_t tick_ms)
+static void UpperEntry_StartJ4310Trajectory(uint32_t tick_ms,
+                                             float target_position_rad)
 {
-    upper_j4310_auto_return_config_t config;
-    w25q_handle_t *flash;
-    uint32_t address;
-    bool enabled;
+    upper_j4310_feedback_t feedback;
+    float start_position_rad;
 
-    if (upper_j4310_auto_return_storage_checked)
+    if (UpperMotorPort_GetJ4310Feedback(CAN_BUS_ARM_J4310,
+                                        NODE_ARM_J4310,
+                                        &feedback))
+    {
+        start_position_rad = feedback.position_rad;
+    }
+    else if (upper_robot.target.arm.enabled)
+    {
+        start_position_rad = upper_robot.target.arm.grip_pos_rad;
+    }
+    else
+    {
+        start_position_rad = target_position_rad;
+    }
+    if (!J4310PositionControl_Start(&upper_j4310_position_control,
+                                     tick_ms,
+                                     start_position_rad,
+                                     target_position_rad))
+    {
+        J4310PositionControl_Hold(&upper_j4310_position_control,
+                                  target_position_rad);
+    }
+}
+
+/* 功能：上电使能 J4310 并锁存首个有效角度；用途：确认使能后直接保持当时位置。 */
+static void UpperEntry_ServiceJ4310StartupEnable(uint32_t tick_ms)
+{
+    upper_j4310_tx_diagnostic_t diagnostic;
+    upper_j4310_feedback_t feedback;
+
+    if (!upper_j4310_startup_enable_pending)
     {
         return;
     }
-    flash = W25Q_PortGetDevice();
-    if ((flash == NULL) || !flash->is_initialized)
+    if (UpperMotorPort_GetJ4310TxDiagnostic(CAN_BUS_ARM_J4310,
+                                            NODE_ARM_J4310,
+                                            &diagnostic) &&
+        diagnostic.enable_confirmed)
     {
-        if (tick_ms >= UPPER_J4310_AUTO_RETURN_STORAGE_WAIT_MS)
+        if (UpperMotorPort_GetJ4310Feedback(CAN_BUS_ARM_J4310,
+                                            NODE_ARM_J4310,
+                                            &feedback))
         {
-            upper_j4310_auto_return_storage_checked = true;
-            upper_j4310_auto_return_storage_ready = false;
-            J4310AutoReturn_Init(&upper_j4310_auto_return, false);
+            upper_target_t target = upper_robot.target;
+
+            target.arm.enabled = true;
+            target.arm.j4310_commanded = false;
+            target.arm.position_mode = true;
+            target.arm.grip_pos_rad = feedback.position_rad;
+            target.arm.grip_vel_rad_s = 0.0f;
+            target.arm.grip_kp = UPPER_J4310_AUTO_RETURN_KP;
+            target.arm.grip_kd = UPPER_J4310_AUTO_RETURN_KD;
+            target.arm.grip_torque_nm = 0.0f;
+            target.arm.grip_torque_limit_nm =
+                UPPER_J4310_TORQUE_MAP_MAX_NM;
+            J4310PositionControl_Hold(&upper_j4310_position_control,
+                                      feedback.position_rad);
+            UpperRobot_SetTarget(&upper_robot, &target);
+            UpperRobot_Start(&upper_robot);
+            upper_j4310_startup_enable_pending = false;
         }
         return;
     }
-
-    address = UpperEntry_J4310AutoReturnConfigAddress();
-    if ((address == UINT32_MAX) ||
-        (W25Q_ReadData(flash,
-                       address,
-                       (uint8_t *)&config,
-                       sizeof(config)) != W25Q_OK))
+    if (upper_j4310_startup_enable_attempted &&
+        ((tick_ms - upper_j4310_startup_enable_last_tick_ms) <
+         UPPER_J4310_STARTUP_ENABLE_RETRY_MS))
     {
-        upper_j4310_auto_return_storage_checked = true;
-        upper_j4310_auto_return_storage_ready = false;
-        J4310AutoReturn_Init(&upper_j4310_auto_return, false);
         return;
     }
 
-    enabled = (config.magic == UPPER_J4310_AUTO_RETURN_CONFIG_MAGIC) &&
-              (config.version ==
-               UPPER_J4310_AUTO_RETURN_CONFIG_VERSION) &&
-              (config.enabled <= 1U) && (config.reserved == 0U) &&
-              (config.checksum ==
-               UpperEntry_J4310AutoReturnChecksum(&config)) &&
-              (config.enabled != 0U);
-    upper_j4310_auto_return_storage_checked = true;
-    upper_j4310_auto_return_storage_ready = true;
-    upper_j4310_auto_return_config_enabled = enabled;
-    J4310AutoReturn_Init(&upper_j4310_auto_return, enabled);
+    upper_j4310_startup_enable_attempted = true;
+    upper_j4310_startup_enable_last_tick_ms = tick_ms;
+    (void)UpperMotorPort_EnableJ4310(CAN_BUS_ARM_J4310,
+                                     NODE_ARM_J4310);
 }
 
-static bool UpperEntry_SaveJ4310AutoReturnConfig(bool enabled)
+static void UpperEntry_ServiceJ4310Control(uint32_t tick_ms)
 {
-    upper_j4310_auto_return_config_t config;
-    upper_j4310_auto_return_config_t verify;
-    w25q_handle_t *flash;
-    uint32_t address;
-
-    if (!upper_j4310_auto_return_storage_ready)
-    {
-        return false;
-    }
-    flash = W25Q_PortGetDevice();
-    address = UpperEntry_J4310AutoReturnConfigAddress();
-    if ((flash == NULL) || (address == UINT32_MAX))
-    {
-        return false;
-    }
-    (void)memset(&config, 0, sizeof(config));
-    config.magic = UPPER_J4310_AUTO_RETURN_CONFIG_MAGIC;
-    config.version = UPPER_J4310_AUTO_RETURN_CONFIG_VERSION;
-    config.enabled = enabled ? 1U : 0U;
-    config.checksum = UpperEntry_J4310AutoReturnChecksum(&config);
-    if ((W25Q_WriteData(flash,
-                        address,
-                        (const uint8_t *)&config,
-                        sizeof(config)) != W25Q_OK) ||
-        (W25Q_ReadData(flash,
-                       address,
-                       (uint8_t *)&verify,
-                       sizeof(verify)) != W25Q_OK) ||
-        (memcmp(&config, &verify, sizeof(config)) != 0))
-    {
-        return false;
-    }
-    return true;
-}
-
-static void UpperEntry_ReleaseJ4310AutoReturn(void)
-{
-    upper_target_t target;
-
-    target = upper_robot.target;
-    target.arm.enabled = false;
-    target.arm.j4310_commanded = false;
-    UpperRobot_SetTarget(&upper_robot, &target);
-}
-
-static void UpperEntry_ServiceJ4310AutoReturn(uint32_t tick_ms)
-{
+    const size_t index = UPPER_MOTOR_ARM_J4310;
     upper_j4310_feedback_t feedback;
-    upper_target_t target;
     bool feedback_fresh;
-    bool was_active;
+    motor_cmd_t command;
 
     feedback_fresh = UpperMotorPort_GetJ4310Feedback(
                          CAN_BUS_ARM_J4310,
                          NODE_ARM_J4310,
                          &feedback);
-    was_active = upper_j4310_auto_return.owns_control;
     J4310AutoReturn_Update(
         &upper_j4310_auto_return,
         tick_ms,
         feedback_fresh,
         feedback_fresh ? feedback.position_rad : 0.0f,
         feedback_fresh ? feedback.velocity_rad_s : 0.0f,
-        upper_robot.state != ROBOT_ERROR);
-    if (was_active && !upper_j4310_auto_return.owns_control)
+        upper_robot.state == ROBOT_RUN);
+    if ((upper_robot.state != ROBOT_RUN) ||
+        !upper_robot.target.arm.enabled)
     {
-        UpperEntry_ReleaseJ4310AutoReturn();
-        return;
-    }
-    if (!upper_j4310_auto_return.owns_control)
-    {
+        (void)MotorManager_ClearOverride(&upper_robot.motor_manager,
+                                         index);
         return;
     }
 
+    (void)memset(&command, 0, sizeof(command));
+    command.mode = MOTOR_CMD_MIT;
+    if (J4310AutoReturn_IsActive(&upper_j4310_auto_return))
+    {
+        J4310PositionControl_CancelTrajectory(
+            &upper_j4310_position_control);
+        command.pos_rad = upper_j4310_auto_return.target_position_rad;
+        command.vel_rad_s = 0.0f;
+        command.kp = UPPER_J4310_AUTO_RETURN_KP;
+        command.kd = UPPER_J4310_AUTO_RETURN_KD;
+    }
+    else
+    {
+        J4310PositionControl_Sample(&upper_j4310_position_control,
+                                    tick_ms,
+                                    &command.pos_rad,
+                                    NULL);
+        command.vel_rad_s = 0.0f;
+        command.kp = upper_robot.target.arm.grip_kp;
+        command.kd = upper_robot.target.arm.grip_kd;
+    }
+    command.torque_nm = J4310PositionControl_ComposeTorque(
+        &upper_j4310_position_control,
+        feedback_fresh,
+        feedback_fresh ? feedback.updated_at_ms : 0U,
+        feedback_fresh ? feedback.position_rad : 0.0f,
+        feedback_fresh ? feedback.velocity_rad_s : 0.0f,
+        feedback_fresh ? feedback.torque_nm : 0.0f,
+        command.pos_rad,
+        command.vel_rad_s,
+        upper_robot.target.arm.grip_torque_nm,
+        upper_robot.target.arm.grip_torque_limit_nm);
+    (void)MotorManager_SetOverride(&upper_robot.motor_manager,
+                                   index,
+                                   &command);
+    UpperRobot_Start(&upper_robot);
+}
+
+static float UpperEntry_RemoteDegreesToRadians(float degrees)
+{
+    return degrees * UPPER_REMOTE_ANGLE_DEG_TO_RAD;
+}
+
+/* Apply one complete arm target so the two M3508s and J4310 move together. */
+static void UpperEntry_ApplyRemoteArm(float m3508_angle_deg,
+                                      float j4310_angle_deg,
+                                      uint32_t tick_ms)
+{
+    upper_target_t target;
+    float m3508_angle_rad;
+
     target = upper_robot.target;
+    m3508_angle_rad = UpperEntry_RemoteDegreesToRadians(m3508_angle_deg);
+    target.position_mode = true;
     target.arm.enabled = true;
-    target.arm.j4310_commanded = false;
+    target.arm.j4310_commanded = true;
+    target.arm.m3508_enabled = true;
+    target.arm.position_mode = true;
     target.arm.grip_pos_rad =
-        upper_j4310_auto_return.target_position_rad;
-    target.arm.grip_vel_rad_s =
-        upper_j4310_auto_return.target_velocity_rad_s;
+        UpperEntry_RemoteDegreesToRadians(j4310_angle_deg);
+    target.arm.grip_vel_rad_s = 0.0f;
     target.arm.grip_kp = UPPER_J4310_AUTO_RETURN_KP;
     target.arm.grip_kd = UPPER_J4310_AUTO_RETURN_KD;
     target.arm.grip_torque_nm = 0.0f;
+    target.arm.grip_torque_limit_nm = UPPER_J4310_TORQUE_MAP_MAX_NM;
+    target.arm.pid_update = false;
+    target.arm.m3508_pos_rad[0] = m3508_angle_rad;
+    target.arm.m3508_pos_rad[1] = m3508_angle_rad;
+
+    upper_j4310_startup_enable_pending = false;
+    UpperEntry_CancelJ4310AutoReturn();
+    UpperEntry_StartJ4310Trajectory(tick_ms,
+                                     target.arm.grip_pos_rad);
     UpperRobot_SetTarget(&upper_robot, &target);
     UpperRobot_Start(&upper_robot);
+}
+
+/* Hold the current J4310 target while moving only the two M3508s. */
+static void UpperEntry_ApplyRemoteM3508(float angle_deg)
+{
+    upper_target_t target;
+    float angle_rad;
+
+    target = upper_robot.target;
+    angle_rad = UpperEntry_RemoteDegreesToRadians(angle_deg);
+    target.position_mode = true;
+    target.arm.enabled = true;
+    target.arm.j4310_commanded = false;
+    target.arm.m3508_enabled = true;
+    target.arm.position_mode = true;
+    target.arm.pid_update = false;
+    target.arm.m3508_pos_rad[0] = angle_rad;
+    target.arm.m3508_pos_rad[1] = angle_rad;
+
+    upper_j4310_startup_enable_pending = false;
+    UpperEntry_CancelJ4310AutoReturn();
+    UpperRobot_SetTarget(&upper_robot, &target);
+    UpperRobot_Start(&upper_robot);
+}
+
+/* Keep the M3508 target unchanged while moving only J4310. */
+static void UpperEntry_ApplyRemoteJ4310(float angle_deg, uint32_t tick_ms)
+{
+    upper_target_t target;
+
+    target = upper_robot.target;
+    target.position_mode = true;
+    target.arm.enabled = true;
+    target.arm.j4310_commanded = true;
+    target.arm.position_mode = true;
+    target.arm.grip_pos_rad = UpperEntry_RemoteDegreesToRadians(angle_deg);
+    target.arm.grip_vel_rad_s = 0.0f;
+    target.arm.grip_kp = UPPER_J4310_AUTO_RETURN_KP;
+    target.arm.grip_kd = UPPER_J4310_AUTO_RETURN_KD;
+    target.arm.grip_torque_nm = 0.0f;
+    target.arm.grip_torque_limit_nm = UPPER_J4310_TORQUE_MAP_MAX_NM;
+
+    upper_j4310_startup_enable_pending = false;
+    UpperEntry_CancelJ4310AutoReturn();
+    UpperEntry_StartJ4310Trajectory(tick_ms, target.arm.grip_pos_rad);
+    UpperRobot_SetTarget(&upper_robot, &target);
+    UpperRobot_Start(&upper_robot);
+}
+
+static void UpperEntry_ApplyRemoteGate(float angle_deg)
+{
+    upper_target_t target;
+
+    target = upper_robot.target;
+    target.position_mode = true;
+    target.conveyor.enabled = true;
+    target.conveyor.position_mode = true;
+    target.conveyor.pid_update = false;
+    target.conveyor.m2006_pos_rad =
+        UpperEntry_RemoteDegreesToRadians(angle_deg);
+    UpperRobot_SetTarget(&upper_robot, &target);
+    UpperRobot_Start(&upper_robot);
+}
+
+static void UpperEntry_ApplyRemoteGripper(float angle_deg)
+{
+    upper_target_t target;
+
+    target = upper_robot.target;
+    target.position_mode = true;
+    target.gripper.enabled = true;
+    target.gripper.position_mode = true;
+    target.gripper.pid_update = false;
+    target.gripper.m2006_pos_rad =
+        UpperEntry_RemoteDegreesToRadians(
+            angle_deg * UPPER_REMOTE_GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG);
+    UpperRobot_SetTarget(&upper_robot, &target);
+    UpperRobot_Start(&upper_robot);
+}
+
+/* Consume only rising edges; the received remote frame is a level snapshot. */
+/* Consume rising edges from the UART5 fixed-frame remote level snapshot. */
+static void UpperEntry_ProcessRemote(uint32_t tick_ms)
+{
+    upper_remote_control_t control;
+    bool remote_online;
+    uint8_t key_bits;
+    uint8_t rising_bits;
+
+    remote_online = UpperEntry_GetSecondaryRemoteControl(&control, tick_ms) &&
+                    control.online;
+    if (!remote_online)
+    {
+        key_bits = 0U;
+        upper_remote_pd13_reset_pending = false;
+        upper_remote_pd8_first_pending = false;
+    }
+    else
+    {
+        key_bits = control.key_bits & UPPER_REMOTE_KEY_MASK;
+    }
+    rising_bits = key_bits & (uint8_t)~upper_remote_previous_key_bits;
+    upper_remote_previous_key_bits = key_bits;
+    if (rising_bits != 0U)
+    {
+        /* A fresh action supersedes any delayed remote action. */
+        upper_remote_pd13_reset_pending = false;
+        upper_remote_pd8_first_pending = false;
+    }
+
+    if ((rising_bits & UPPER_REMOTE_PD13_RESET_KEYS) != 0U)
+    {
+        upper_remote_pd13_second = false;
+    }
+    if ((rising_bits & UPPER_REMOTE_PD12_RESET_KEYS) != 0U)
+    {
+        upper_remote_pd12_second = false;
+    }
+    if ((rising_bits & UPPER_REMOTE_PD11_RESET_KEYS) != 0U)
+    {
+        upper_remote_pd11_second = false;
+    }
+    if ((rising_bits & (UPPER_REMOTE_KEY_PD13 |
+                       UPPER_REMOTE_KEY_PD12 |
+                       UPPER_REMOTE_KEY_PD11)) != 0U)
+    {
+        upper_remote_pd8_stage = 0U;
+    }
+
+    if ((rising_bits & UPPER_REMOTE_KEY_PD13) != 0U)
+    {
+        if (upper_remote_pd13_second)
+        {
+            UpperEntry_ApplyRemoteM3508(
+                UPPER_REMOTE_PD13_SECOND_M3508_DEG);
+            upper_remote_pd13_reset_pending = true;
+            upper_remote_pd13_reset_due_tick_ms =
+                tick_ms + UPPER_REMOTE_PD13_RESET_DELAY_MS;
+            upper_remote_pd13_second = false;
+        }
+        else
+        {
+            UpperEntry_ApplyRemoteArm(
+                UPPER_REMOTE_PD13_FIRST_M3508_DEG,
+                UPPER_REMOTE_PD13_FIRST_J4310_DEG,
+                tick_ms);
+            upper_remote_pd13_second = true;
+        }
+    }
+    if ((rising_bits & UPPER_REMOTE_KEY_PD12) != 0U)
+    {
+        if (upper_remote_pd12_second)
+        {
+            UpperEntry_ApplyRemoteArm(
+                UPPER_REMOTE_PD12_SECOND_M3508_DEG,
+                UPPER_REMOTE_PD12_SECOND_J4310_DEG,
+                tick_ms);
+            upper_remote_pd12_second = false;
+        }
+        else
+        {
+            UpperEntry_ApplyRemoteArm(
+                UPPER_REMOTE_PD12_FIRST_M3508_DEG,
+                UPPER_REMOTE_PD12_FIRST_J4310_DEG,
+                tick_ms);
+            upper_remote_pd12_second = true;
+        }
+    }
+    if ((rising_bits & UPPER_REMOTE_KEY_PD11) != 0U)
+    {
+        if (upper_remote_pd11_second)
+        {
+            UpperEntry_ApplyRemoteArm(
+                UPPER_REMOTE_PD11_SECOND_M3508_DEG,
+                UPPER_REMOTE_PD11_SECOND_J4310_DEG,
+                tick_ms);
+            upper_remote_pd11_second = false;
+        }
+        else
+        {
+            UpperEntry_ApplyRemoteArm(
+                UPPER_REMOTE_PD11_FIRST_M3508_DEG,
+                UPPER_REMOTE_PD11_FIRST_J4310_DEG,
+                tick_ms);
+            upper_remote_pd11_second = true;
+        }
+    }
+    if ((rising_bits & UPPER_REMOTE_KEY_PD8) != 0U)
+    {
+        if (upper_remote_pd8_stage == 0U)
+        {
+            UpperEntry_ApplyRemoteM3508(
+                UPPER_REMOTE_PD8_FIRST_M3508_DEG);
+            upper_remote_pd8_first_pending = true;
+            upper_remote_pd8_first_due_tick_ms =
+                tick_ms + UPPER_REMOTE_PD8_FIRST_DELAY_MS;
+            upper_remote_pd8_stage = 1U;
+        }
+        else if (upper_remote_pd8_stage == 1U)
+        {
+            UpperEntry_ApplyRemoteArm(
+                UPPER_REMOTE_PD8_SECOND_M3508_DEG,
+                UPPER_REMOTE_PD8_SECOND_J4310_DEG,
+                tick_ms);
+            upper_remote_pd8_stage = 2U;
+        }
+        else
+        {
+            UpperEntry_ApplyRemoteArm(
+                UPPER_REMOTE_PD8_THIRD_M3508_DEG,
+                UPPER_REMOTE_PD8_THIRD_J4310_DEG,
+                tick_ms);
+            upper_remote_pd8_stage = 0U;
+        }
+    }
+    if ((rising_bits & UPPER_REMOTE_KEY_PD9) != 0U)
+    {
+        UpperEntry_ApplyRemoteGate(
+            upper_remote_pd9_second ?
+                UPPER_REMOTE_PD9_SECOND_GATE_DEG :
+                UPPER_REMOTE_PD9_FIRST_GATE_DEG);
+        upper_remote_pd9_second = !upper_remote_pd9_second;
+    }
+    if ((rising_bits & UPPER_REMOTE_KEY_PD10) != 0U)
+    {
+        UpperEntry_ApplyRemoteGripper(
+            upper_remote_pd10_second ?
+                UPPER_REMOTE_PD10_SECOND_GRIPPER_DEG :
+                UPPER_REMOTE_PD10_FIRST_GRIPPER_DEG);
+        upper_remote_pd10_second = !upper_remote_pd10_second;
+    }
+
+    /* A different edge in the same frame supersedes the delayed reset. */
+    if ((rising_bits & (UPPER_REMOTE_KEY_PD12 |
+                       UPPER_REMOTE_KEY_PD11 |
+                       UPPER_REMOTE_KEY_PD8 |
+                       UPPER_REMOTE_KEY_PD9 |
+                       UPPER_REMOTE_KEY_PD10)) != 0U)
+    {
+        upper_remote_pd13_reset_pending = false;
+    }
+    if ((rising_bits & (UPPER_REMOTE_KEY_PD13 |
+                       UPPER_REMOTE_KEY_PD12 |
+                       UPPER_REMOTE_KEY_PD11 |
+                       UPPER_REMOTE_KEY_PD9 |
+                       UPPER_REMOTE_KEY_PD10)) != 0U)
+    {
+        upper_remote_pd8_first_pending = false;
+    }
+
+    if (upper_remote_pd13_reset_pending &&
+        ((int32_t)(tick_ms - upper_remote_pd13_reset_due_tick_ms) >= 0))
+    {
+        UpperEntry_ApplyRemoteJ4310(
+            UPPER_REMOTE_PD13_SECOND_J4310_DEG, tick_ms);
+        upper_remote_pd13_reset_pending = false;
+    }
+    if (upper_remote_pd8_first_pending &&
+        ((int32_t)(tick_ms - upper_remote_pd8_first_due_tick_ms) >= 0))
+    {
+        UpperEntry_ApplyRemoteJ4310(
+            UPPER_REMOTE_PD8_FIRST_J4310_DEG, tick_ms);
+        upper_remote_pd8_first_pending = false;
+    }
 }
 
 /* 功能：初始化上层入口、机器人、链路和通信回调；用途：完成用户应用启动；返回 true 表示所有子模块初始化成功。 */
 bool UpperEntry_Init(void)
 {
+    bool robot_ready;
+
     if (!UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT))
     {
         return false;
@@ -310,35 +722,93 @@ bool UpperEntry_Init(void)
                      UpperEntry_OnPcEStop,
                      UpperEntry_OnPcMotorAction,
                      NULL);
+    UpperPcLink_SetAuxControlHandler(&upper_pc_link,
+                                     UpperEntry_OnPcAuxControl);
+    UpperRemoteLink_Init(&upper_remote_link);
     J4310AutoReturn_Init(&upper_j4310_auto_return, false);
-    upper_j4310_auto_return_storage_checked = false;
-    upper_j4310_auto_return_storage_ready = false;
-    upper_j4310_auto_return_config_enabled = false;
+    if (!UpperEntry_ResetJ4310PositionControl())
+    {
+        return false;
+    }
+    upper_j4310_auto_return_enabled = false;
+    upper_j4310_startup_enable_pending = true;
+    upper_j4310_startup_enable_attempted = false;
+    upper_j4310_startup_enable_last_tick_ms = 0U;
+    upper_remote_previous_key_bits = 0U;
+    upper_remote_pd13_second = false;
+    upper_remote_pd13_reset_pending = false;
+    upper_remote_pd13_reset_due_tick_ms = 0U;
+    upper_remote_pd12_second = false;
+    upper_remote_pd11_second = false;
+    upper_remote_pd8_stage = 0U;
+    upper_remote_pd8_first_pending = false;
+    upper_remote_pd8_first_due_tick_ms = 0U;
+    upper_remote_pd9_second = false;
+    upper_remote_pd10_second = false;
+    /* Send an initial zero state and keep repeating it until the receiver is up. */
+    upper_aux_spi3_pending = true;
+    upper_aux_output_bits = 0U;
+    upper_aux_spi3_sequence = 0U;
+    upper_aux_spi3_last_sent_tick_ms = 0U;
+    upper_aux_spi3_have_sent = false;
+    upper_aux_spi3_sent_count = 0U;
+    upper_aux_spi3_fail_count = 0U;
     CommRuntime_SetHandlers(UpperEntry_OnUart, UpperEntry_OnCan, NULL);
-    return UpperRobot_Init(&upper_robot, UpperMotorPort_Send, NULL);
+    robot_ready = UpperRobot_Init(&upper_robot, UpperMotorPort_Send, NULL);
+    return robot_ready;
 }
 
 /* 功能：处理待执行的上位机整机目标；用途：更新机器人目标并按需启动运行；无返回值表示待处理标志被消费。 */
-static void UpperEntry_ProcessCmd(void)
+static void UpperEntry_ProcessCmd(uint32_t tick_ms)
 {
     upper_target_t target;
+    upper_target_t next_target;
     bool received;
     bool j4310_commanded;
 
     received = false;
     j4310_commanded = false;
-    while (osMessageQueueGet(upper_cmd_queue, &target, NULL, 0U) == osOK)
+    while (osMessageQueueGet(upper_cmd_queue,
+                             &next_target,
+                             NULL,
+                             0U) == osOK)
     {
+        const arm_target_t *previous_arm;
+
+        previous_arm = received ? &target.arm : &upper_robot.target.arm;
+        if (!next_target.arm.j4310_commanded)
+        {
+            next_target.arm.enabled = previous_arm->enabled;
+            next_target.arm.grip_pos_rad = previous_arm->grip_pos_rad;
+            next_target.arm.grip_vel_rad_s = previous_arm->grip_vel_rad_s;
+            next_target.arm.grip_kp = previous_arm->grip_kp;
+            next_target.arm.grip_kd = previous_arm->grip_kd;
+            next_target.arm.grip_torque_nm = previous_arm->grip_torque_nm;
+            next_target.arm.grip_torque_limit_nm =
+                previous_arm->grip_torque_limit_nm;
+        }
+        target = next_target;
         received = true;
         j4310_commanded = j4310_commanded ||
-                          target.arm.j4310_commanded;
+                          next_target.arm.j4310_commanded;
     }
 
     if (received)
     {
         if (j4310_commanded)
         {
-            J4310AutoReturn_Cancel(&upper_j4310_auto_return);
+            upper_j4310_startup_enable_pending = false;
+            UpperEntry_CancelJ4310AutoReturn();
+            if (target.arm.enabled)
+            {
+                UpperEntry_StartJ4310Trajectory(
+                    tick_ms, target.arm.grip_pos_rad);
+            }
+            else
+            {
+                J4310PositionControl_CancelTrajectory(
+                    &upper_j4310_position_control);
+            }
         }
         UpperRobot_SetTarget(&upper_robot, &target);
         UpperRobot_Start(&upper_robot);
@@ -354,7 +824,6 @@ static void UpperEntry_ProcessMotorAction(uint32_t tick_ms)
     uint8_t value;
     bool success;
     bool feedback_fresh;
-    bool was_active;
     upper_j4310_feedback_t feedback;
 
     if (!upper_motor_action_pending)
@@ -370,31 +839,37 @@ static void UpperEntry_ProcessMotorAction(uint32_t tick_ms)
     success = false;
     if (action == UPPER_PC_ACTION_J4310_SAVE_ZERO)
     {
+        upper_j4310_startup_enable_pending = false;
         J4310AutoReturn_Cancel(&upper_j4310_auto_return);
+        (void)UpperEntry_ResetJ4310PositionControl();
         UpperRobot_Stop(&upper_robot);
         success = UpperMotorPort_SaveJ4310Zero(can_bus, node_id);
+    }
+    else if ((action == UPPER_PC_ACTION_J4310_ENABLE) &&
+             (can_bus == CAN_BUS_ARM_J4310) &&
+             (node_id == NODE_ARM_J4310))
+    {
+        success = UpperMotorPort_EnableJ4310(can_bus, node_id);
     }
     else if ((action == UPPER_PC_ACTION_J4310_AUTO_RETURN) &&
              (can_bus == CAN_BUS_ARM_J4310) &&
              (node_id == NODE_ARM_J4310) && (value <= 1U))
     {
-        was_active = upper_j4310_auto_return.owns_control;
-        success = UpperEntry_SaveJ4310AutoReturnConfig(value != 0U);
-        if (success)
-        {
-            feedback_fresh = UpperMotorPort_GetJ4310Feedback(
-                                 CAN_BUS_ARM_J4310,
-                                 NODE_ARM_J4310,
-                                 &feedback);
-            upper_j4310_auto_return_config_enabled = value != 0U;
-            J4310AutoReturn_Configure(&upper_j4310_auto_return,
-                                      value != 0U,
-                                      feedback_fresh);
-            if (was_active)
-            {
-                UpperEntry_ReleaseJ4310AutoReturn();
-            }
-        }
+        upper_j4310_auto_return_enabled = value != 0U;
+        feedback_fresh = UpperMotorPort_GetJ4310Feedback(
+                             CAN_BUS_ARM_J4310,
+                             NODE_ARM_J4310,
+                             &feedback);
+        J4310AutoReturn_Configure(&upper_j4310_auto_return,
+                                  upper_j4310_auto_return_enabled,
+                                  feedback_fresh);
+        J4310PositionControl_Hold(
+            &upper_j4310_position_control,
+            feedback_fresh ? feedback.position_rad :
+                             upper_robot.target.arm.grip_pos_rad);
+        (void)MotorManager_ClearOverride(&upper_robot.motor_manager,
+                                         UPPER_MOTOR_ARM_J4310);
+        success = true;
     }
     upper_motor_action_result_status = success ? 0U : 1U;
     upper_motor_action_result_action = action;
@@ -434,22 +909,6 @@ static void UpperEntry_CheckMotorHealth(uint32_t tick_ms)
             break;
         }
     }
-}
-
-/* 功能：处理上位机链路超时；用途：停止其他机构但保持 J4310 的已确认使能和最后目标；无返回值表示目标已更新。 */
-static void UpperEntry_HandlePcTimeout(void)
-{
-    upper_target_t target;
-
-    if (upper_robot.state != ROBOT_RUN)
-    {
-        return;
-    }
-    target = upper_robot.target;
-    target.arm.m3508_enabled = false;
-    target.conveyor.enabled = false;
-    target.gripper.enabled = false;
-    UpperRobot_SetTarget(&upper_robot, &target);
 }
 
 /* 功能：在保护延时后发送待处理握手确认；用途：建立上位机控制会话；无返回值表示发送状态写入链路和统计。 */
@@ -597,12 +1056,11 @@ static void UpperEntry_SendState(uint32_t tick_ms)
                                     CAN_BUS_ARM_J4310,
                                     NODE_ARM_J4310,
                                     &j4310_tx_diagnostic);
-    j4310_auto_return_status.storage_ready =
-        upper_j4310_auto_return_storage_ready;
+    j4310_auto_return_status.available = true;
     j4310_auto_return_status.enabled =
-        upper_j4310_auto_return_config_enabled;
+        upper_j4310_auto_return_enabled;
     j4310_auto_return_status.active =
-        upper_j4310_auto_return.owns_control;
+        J4310AutoReturn_IsActive(&upper_j4310_auto_return);
     j4310_auto_return_status.stage =
         (uint8_t)upper_j4310_auto_return.stage;
     frame_size = UpperPcLink_BuildState(&upper_pc_link,
@@ -692,24 +1150,24 @@ static void UpperEntry_SendDjiTelemetry(uint32_t tick_ms)
 void UpperEntry_Control1ms(uint32_t tick_ms)
 {
     UpperMotorPort_BeginCycle(tick_ms);
-    UpperEntry_LoadJ4310AutoReturnConfig(tick_ms);
-    UpperEntry_ProcessCmd();
+    UpperEntry_ProcessCmd(tick_ms);
+    UpperEntry_ProcessRemote(tick_ms);
+    UpperEntry_ProcessAuxSpi3(tick_ms);
     UpperEntry_ProcessMotorAction(tick_ms);
     if (upper_estop_pending)
     {
         upper_estop_pending = false;
+        upper_remote_pd13_reset_pending = false;
+        upper_remote_pd8_first_pending = false;
+        upper_j4310_startup_enable_pending = false;
         J4310AutoReturn_Cancel(&upper_j4310_auto_return);
+        J4310PositionControl_CancelTrajectory(
+            &upper_j4310_position_control);
         UpperRobot_EStop(&upper_robot);
     }
-    else
-    {
-        if (UpperPcLink_IsTimedOut(&upper_pc_link, tick_ms))
-        {
-            UpperEntry_HandlePcTimeout();
-        }
-    }
 
-    UpperEntry_ServiceJ4310AutoReturn(tick_ms);
+    UpperEntry_ServiceJ4310StartupEnable(tick_ms);
+    UpperEntry_ServiceJ4310Control(tick_ms);
     UpperRobot_Control1ms(&upper_robot, tick_ms);
     if (!UpperMotorPort_Flush())
     {
@@ -734,6 +1192,19 @@ void UpperEntry_OnCanFrame(uint8_t can_bus,
                            uint32_t tick_ms)
 {
     UpperMotorPort_OnFrame(can_bus, frame, tick_ms);
+}
+
+/* 功能：取得遥控第二组控制快照；用途：向上层机构逻辑提供按键、开关和在线状态。 */
+bool UpperEntry_GetSecondaryRemoteControl(upper_remote_control_t *control,
+                                          uint32_t tick_ms)
+{
+    return UpperRemoteLink_GetControl(&upper_remote_link, tick_ms, control);
+}
+
+void UpperEntry_GetSecondaryRemoteDiagnostics(
+    upper_remote_diagnostics_t *diagnostics)
+{
+    UpperRemoteLink_GetDiagnostics(&upper_remote_link, diagnostics);
 }
 
 /* 功能：使用 HAL 毫秒时基调用上层控制周期；用途：提供给系统任务的固定入口；无返回值表示完成本次 1 ms 调用。 */

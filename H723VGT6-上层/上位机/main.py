@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import queue
 import threading
@@ -10,7 +11,7 @@ import time
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 try:
     import serial
@@ -29,25 +30,29 @@ from protocol import (
     MOTOR_ACTION_J4310_SAVE_ZERO,
     MOTOR_ACTION_J4310_AUTO_RETURN,
     MSG_ACK,
+    MSG_AUX_CONTROL,
     MSG_ESTOP,
     MSG_FAULT,
-    MSG_FLASH_INFO,
-    MSG_FLASH_INFO_REQUEST,
     MSG_HEARTBEAT,
     MSG_MOTOR_ACTION,
     MSG_MOTOR_ACTION_RESULT,
     MSG_DJI_TELEMETRY,
     MSG_ROBOT_STATE,
     MSG_UPPER_POSITION_CMD,
+    AUX_OUTPUT_ARM_CYLINDER,
+    AUX_OUTPUT_PUSH_CYLINDER,
+    AUX_OUTPUT_GRIPPER_CYLINDER,
+    AUX_OUTPUT_ESTOP,
     Frame,
     FrameParser,
     build_motor_action_payload,
+    build_aux_control_payload,
     build_handshake_frame,
     build_extended_position_payload,
+    build_position_torque_payload,
     decode_motor_event,
     decode_motor_action_result,
     decode_dji_telemetry,
-    decode_flash_info,
     decode_robot_state,
     encode_frame,
 )
@@ -55,11 +60,12 @@ from protocol import (
 
 BAUD_RATES = (115200, 230400, 460800, 921600)
 SEND_PERIOD_MS = 50
+REMOTE_PD13_RESET_DELAY_MS = 1000
+REMOTE_PD8_FIRST_DELAY_MS = 1000
 HEARTBEAT_PERIOD_MS = 100
 HANDSHAKE_PERIOD_MS = 150
 HANDSHAKE_TIMEOUT_MS = 3000
 HANDSHAKE_OPEN_DELAY_MS = 300
-BOARD_RESPONSE_TIMEOUT_MS = 1000
 HANDSHAKE_SEQUENCE = 0x1234
 J4310_POSITION_LIMIT = 12.5
 J4310_VELOCITY_LIMIT = 30.0
@@ -68,8 +74,34 @@ J4310_KD_LIMIT = 5.0
 J4310_TORQUE_LIMIT = 10.0
 J4310_RAW_MIN_DEG = -math.degrees(J4310_POSITION_LIMIT)
 J4310_RAW_MAX_DEG = math.degrees(J4310_POSITION_LIMIT)
-POSITION_MIN_DEG = -360.0
-POSITION_MAX_DEG = 360.0
+J4310_POSITION_MIN_DEG = -90.0
+J4310_POSITION_MAX_DEG = 270.0
+POSITION_MIN_DEG = -1000.0
+POSITION_MAX_DEG = 1000.0
+M3508_SYNC_POSITION_MIN_DEG = -1000.0
+M3508_SYNC_POSITION_MAX_DEG = 1000.0
+M3508_TARGET_RANGES_DEG = (
+    (
+        min(POSITION_MIN_DEG, M3508_SYNC_POSITION_MIN_DEG),
+        max(POSITION_MAX_DEG, M3508_SYNC_POSITION_MAX_DEG),
+    ),
+    (
+        min(POSITION_MIN_DEG, M3508_SYNC_POSITION_MIN_DEG),
+        max(POSITION_MAX_DEG, M3508_SYNC_POSITION_MAX_DEG),
+    ),
+)
+M2006_POSITION_MIN_DEG = -360.0
+M2006_POSITION_MAX_DEG = 360.0
+GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG = 2.0
+J4310_CAN_BUS = 1
+J4310_NODE_ID = 0x06
+PID_GAIN_MIN = 0.0
+PID_KP_KI_MAX = 10000.0
+PID_KD_MAX = 1000.0
+PID_INTEGRAL_LIMIT_MAX = 100000.0
+PID_OUTPUT_LIMIT_MIN = 0.1
+PID_SPEED_OUTPUT_LIMIT_MAX = 32767.0
+PID_POSITION_OUTPUT_LIMIT_MAX = 1000.0
 GATE_M2006_ID = 1
 GRIPPER_M2006_ID = 2
 M2006_NODE_IDS = {
@@ -81,6 +113,8 @@ DJI_REDUCTION_RATIOS = {
     2: 36.0,
 }
 MOTOR_LOG_PATH = Path(__file__).resolve().parents[2] / "电机日志.log"
+MOTOR_PARAMETER_PATH = Path(__file__).resolve().with_name("motor_parameters.json")
+REMOTE_ACTION_PARAMETER_VERSION = 2
 
 MOTOR_MODEL_NAMES = {
     0: "J4310",
@@ -108,8 +142,8 @@ REFERENCE_PID_VALUES = {
         ("位置环", "60", "0", "0", "0", "150 rpm"),
     ),
     "M2006 / C610": (
-        ("速度环", "30", "10", "0", "95.493", "2000"),
-        ("位置环", "40", "0", "0", "0", "100 rpm"),
+        ("速度环", "350", "250", "0", "0.5", "10000"),
+        ("位置环", "220", "500", "5", "0.002", "50 rpm"),
     ),
 }
 
@@ -120,42 +154,6 @@ STATE_NAMES = {
     3: "停止",
     4: "错误",
 }
-
-W25Q_STATUS_NAMES = {
-    0: "W25Q_OK",
-    1: "W25Q_ERROR_INVALID_ARG",
-    2: "W25Q_ERROR_NOT_INIT",
-    3: "W25Q_ERROR_UNSUPPORTED_DEVICE",
-    4: "W25Q_ERROR_OUT_OF_RANGE",
-    5: "W25Q_ERROR_NOT_ALIGNED",
-    6: "W25Q_ERROR_TIMEOUT",
-    7: "W25Q_ERROR_SPI",
-    8: "W25Q_ERROR_WRITE_ENABLE",
-    9: "W25Q_ERROR_LOCK_TIMEOUT",
-}
-
-W25Q_MODEL_NAMES = {
-    0xEF4015: "W25Q16",
-    0xEF4016: "W25Q32",
-    0xEF4017: "W25Q64",
-    0xEF4018: "W25Q128",
-}
-
-
-def format_flash_info(info: dict[str, int | bool]) -> str:
-    init_status = int(info["init_status"])
-    initialized = bool(info["initialized"])
-    jedec_id = int(info["jedec_id"])
-    capacity_kb = int(info["capacity_kb"])
-    status_name = W25Q_STATUS_NAMES.get(init_status, "W25Q_ERROR_UNKNOWN")
-    model_name = W25Q_MODEL_NAMES.get(jedec_id, "未知型号")
-    state_name = "已初始化" if initialized else "未初始化"
-    return (
-        f"Flash: {state_name} · {model_name} · "
-        f"w25q_init_status={init_status} {status_name} · "
-        f"JEDEC=0x{jedec_id:06X} · 容量={capacity_kb} KB"
-    )
-
 
 def format_dji_feedback(
     name: str,
@@ -340,6 +338,9 @@ class UpperConsole:
         self.tx_count = 0
         self.rx_count = 0
         self.active_page = "机械臂"
+        self.remote_action_states: dict[str, int] = {}
+        self.remote_pd13_reset_after_id: str | None = None
+        self.remote_pd8_first_after_id: str | None = None
         self.connection_requested = False
         self.last_heartbeat = 0.0
         self.last_board_response = 0.0
@@ -371,7 +372,6 @@ class UpperConsole:
         self.rx_var = tk.StringVar(value="RX 0")
         self.board_state_var = tk.StringVar(value="板端状态: --")
         self.remote_var = tk.StringVar(value="远程链路: --")
-        self.flash_info_var = tk.StringVar(value="Flash: --")
         self.j4310_output_position_var = tk.StringVar(value="当前输出轴角度: -- deg")
         self.dji_diagnostic_vars = {
             (1, 2, 1): tk.StringVar(
@@ -396,8 +396,8 @@ class UpperConsole:
             ),
         }
         self.j_position = tk.DoubleVar(value=0.0)
-        self.j_velocity = tk.DoubleVar(value=2.0)
-        self.j_kp = tk.DoubleVar(value=20.0)
+        self.j_velocity = tk.DoubleVar(value=0.0)
+        self.j_kp = tk.DoubleVar(value=5.0)
         self.j_kd = tk.DoubleVar(value=0.5)
         self.j_tau = tk.DoubleVar(value=0.0)
         self.j_torque_limit = tk.DoubleVar(value=10.0)
@@ -412,25 +412,71 @@ class UpperConsole:
         self.m3508_position_pid_vars = self._pid_vars(
             REFERENCE_PID_VALUES["M3508 / C620"][1]
         )
-        self.m2006_speed_pid_vars = self._pid_vars(
-            REFERENCE_PID_VALUES["M2006 / C610"][0]
-        )
-        self.m2006_position_pid_vars = self._pid_vars(
-            REFERENCE_PID_VALUES["M2006 / C610"][1]
-        )
-        self.arm_enable = tk.BooleanVar(value=False)
-        self.m3508_enable = tk.BooleanVar(value=False)
-        self.conveyor_enable = tk.BooleanVar(value=False)
-        self.gripper_enable = tk.BooleanVar(value=False)
+        self.m2006_speed_pid_vars_by_motor = {
+            "conveyor": self._pid_vars(REFERENCE_PID_VALUES["M2006 / C610"][0]),
+            "gripper": self._pid_vars(REFERENCE_PID_VALUES["M2006 / C610"][0]),
+        }
+        self.m2006_position_pid_vars_by_motor = {
+            "conveyor": self._pid_vars(REFERENCE_PID_VALUES["M2006 / C610"][1]),
+            "gripper": self._pid_vars(REFERENCE_PID_VALUES["M2006 / C610"][1]),
+        }
+        # Keep the old attributes as aliases for callers/tests that inspect the
+        # default M2006 (the conveyor) parameter set.
+        self.m2006_speed_pid_vars = self.m2006_speed_pid_vars_by_motor["conveyor"]
+        self.m2006_position_pid_vars = self.m2006_position_pid_vars_by_motor["conveyor"]
+        self._saved_motor_parameters: dict[str, object] = {}
+        self.arm_enable = tk.BooleanVar(value=True)
+        self.m3508_enable = tk.BooleanVar(value=True)
+        self.conveyor_enable = tk.BooleanVar(value=True)
+        self.gripper_enable = tk.BooleanVar(value=True)
+        self.aux_output_bits = 0
+        self.remote_action_angles: dict[str, dict[str, tk.DoubleVar]] = {
+            "存块": {
+                "m3508": tk.DoubleVar(value=500.0),
+                "j4310": tk.DoubleVar(value=90.0),
+                "m3508_return": tk.DoubleVar(value=0.0),
+                "j4310_return": tk.DoubleVar(value=-20.0),
+            },
+            "取地面一层块": {
+                "m3508": tk.DoubleVar(value=1000.0),
+                "j4310": tk.DoubleVar(value=90.0),
+                "m3508_return": tk.DoubleVar(value=0.0),
+                "j4310_return": tk.DoubleVar(value=180.0),
+            },
+            "取台阶二层块": {
+                "m3508": tk.DoubleVar(value=0.0),
+                "j4310": tk.DoubleVar(value=90.0),
+                "m3508_return": tk.DoubleVar(value=0.0),
+                "j4310_return": tk.DoubleVar(value=180.0),
+            },
+            "翻转块": {
+                "m3508": tk.DoubleVar(value=0.0),
+                "j4310": tk.DoubleVar(value=30.0),
+                "m3508_second": tk.DoubleVar(value=700.0),
+                "j4310_second": tk.DoubleVar(value=90.0),
+                "m3508_third": tk.DoubleVar(value=0.0),
+                "j4310_third": tk.DoubleVar(value=180.0),
+            },
+            "开关门": {
+                "angle_on": tk.DoubleVar(value=180.0),
+                "angle_off": tk.DoubleVar(value=62.0),
+            },
+            "夹爪": {
+                "angle_on": tk.DoubleVar(value=130.0),
+                "angle_off": tk.DoubleVar(value=55.0),
+            },
+        }
+        self._restore_motor_parameters()
         self.j4310_feedback_status = "未收到反馈"
         self.j4310_auto_return_status_received = False
         self.j4310_auto_return_enabled = False
-        self.j4310_auto_return_storage_ready = False
+        self.j4310_auto_return_available = False
         self.j4310_auto_return_active = False
         self.j4310_auto_return_stage = 0
         self.j4310_auto_return_pending: bool | None = None
         self.position_slider_controls: dict[str, tuple[tk.Widget, ...]] = {}
-        self.output_enable_checks: dict[str, ttk.Checkbutton] = {}
+        self.page_action_buttons: dict[str, tuple[ttk.Button, ttk.Button]] = {}
+        self.page_save_buttons: dict[str, ttk.Button] = {}
         self._space_estop_pressed = False
         self._drag_target: str | None = None
         self._active_arm_mask = 0
@@ -462,49 +508,8 @@ class UpperConsole:
         style.map("AutoReturnOn.TButton", background=[("active", "#a9ddb5")])
         style.configure("AutoReturnOff.TButton", background="#e6e6e6", foreground="#555555", font=("Microsoft YaHei UI", 10, "bold"))
         style.map("AutoReturnOff.TButton", background=[("active", "#d4d4d4")])
-        style.configure("TCheckbutton", background="#dff3fa", foreground="#1f3442", font=("Microsoft YaHei UI", 10))
-        style.map("TCheckbutton", background=[("active", "#dff3fa")])
-        self._output_check_off = self._checkbox_indicator_image(selected=False)
-        self._output_check_on = self._checkbox_indicator_image(selected=True)
-        style.element_create(
-            "OutputCheckbutton.indicator",
-            "image",
-            self._output_check_off,
-            ("selected", self._output_check_on),
-        )
-        style.layout(
-            "Output.TCheckbutton",
-            [
-                (
-                    "Checkbutton.padding",
-                    {
-                        "sticky": "nswe",
-                        "children": [
-                            ("OutputCheckbutton.indicator", {"side": "left", "sticky": ""}),
-                            (
-                                "Checkbutton.focus",
-                                {
-                                    "side": "left",
-                                    "sticky": "w",
-                                    "children": [("Checkbutton.label", {"sticky": "nswe"})],
-                                },
-                            ),
-                        ],
-                    },
-                )
-            ],
-        )
-        style.configure("Output.TCheckbutton", background="#dff3fa", foreground="#1f3442", font=("Microsoft YaHei UI", 10))
-        style.map("Output.TCheckbutton", background=[("active", "#dff3fa")])
         style.configure("TEntry", fieldbackground="#f7fdff", foreground="#1f3442", insertcolor="#143747")
         style.configure("TCombobox", fieldbackground="#f7fdff", foreground="#1f3442")
-
-    def _checkbox_indicator_image(self, selected: bool) -> tk.PhotoImage:
-        image = tk.PhotoImage(width=14, height=14)
-        image.put("#000000" if selected else "#8b9aa2", to=(0, 0, 14, 14))
-        if not selected:
-            image.put("#f7fdff", to=(1, 1, 13, 13))
-        return image
 
     def _build_ui(self) -> None:
         root = ttk.Frame(self.root, padding=18)
@@ -533,13 +538,6 @@ class UpperConsole:
         ttk.Label(connection_status, textvariable=self.tx_var, style="CardMuted.TLabel").pack(side="right", padx=(12, 0))
         ttk.Label(connection_status, textvariable=self.rx_var, style="CardMuted.TLabel").pack(side="right")
         ttk.Button(connection_status, text="急停", style="Danger.TButton", command=self.estop).pack(side="right", padx=(0, 22))
-        self.flash_query_button = ttk.Button(
-            connection_status,
-            text="查询 Flash",
-            command=self.request_flash_info,
-            state="disabled",
-        )
-        self.flash_query_button.pack(side="right", padx=(0, 8))
         self.disconnect_button.configure(state="disabled")
 
         status = ttk.Frame(root, style="Card.TFrame", padding=10)
@@ -547,12 +545,10 @@ class UpperConsole:
         status.columnconfigure(2, weight=1)
         ttk.Label(status, textvariable=self.board_state_var, style="CardTitle.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(status, textvariable=self.remote_var, style="CardMuted.TLabel").grid(row=0, column=1, sticky="w", padx=20)
-        ttk.Label(status, text="断开或 200 ms 无有效帧后停止输出", style="CardMuted.TLabel").grid(row=0, column=2, sticky="e")
-        ttk.Label(status, textvariable=self.flash_info_var, style="CardMuted.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
-
+        ttk.Label(status, text="通信与反馈超时自动停输出：已关闭", style="CardMuted.TLabel").grid(row=0, column=2, sticky="e")
         navigation = tk.Frame(root, bg="#e8f6fb")
         navigation.pack(fill="x", pady=(0, 2))
-        for page in ("机械臂", "开关门", "夹爪"):
+        for page in ("机械臂", "开关门", "夹爪", "遥控控制"):
             tab = tk.Button(
                 navigation,
                 text=page,
@@ -575,8 +571,9 @@ class UpperConsole:
 
         self.page_container = ttk.Frame(root, style="PageContainer.TFrame", padding=2)
         self._build_arm_page()
-        self._build_single_motor_page("开关门", ENABLE_CONVEYOR, self.conveyor_position, self.conveyor_enable, "conveyor")
-        self._build_single_motor_page("夹爪", ENABLE_GRIPPER, self.gripper_position, self.gripper_enable, "gripper")
+        self._build_single_motor_page("开关门", self.conveyor_position, "conveyor")
+        self._build_single_motor_page("夹爪", self.gripper_position, "gripper")
+        self._build_remote_control_page()
         self._select_page("机械臂", log_change=False)
 
         log_frame = ttk.Frame(root, style="Card.TFrame", padding=10, height=150)
@@ -586,6 +583,443 @@ class UpperConsole:
         self.log_text = tk.Text(log_frame, height=5, bg="#f4fcff", fg="#1e2a33", insertbackground="#143747", relief="flat", state="disabled", font=("Consolas", 9))
         self.log_text.pack(fill="both", expand=True, pady=(6, 0))
         self.page_container.pack(fill="both", expand=True)
+
+    def _build_remote_control_page(self) -> None:
+        frame, canvas = self._new_scrollable_page("遥控控制", 16)
+        columns = ttk.Frame(frame)
+        columns.pack(fill="both", expand=True)
+        columns.columnconfigure(0, weight=1)
+        columns.columnconfigure(1, weight=1)
+
+        motor_card = ttk.Frame(columns, style="Card.TFrame", padding=14)
+        motor_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=(0, 12))
+        aux_card = ttk.Frame(columns, style="Card.TFrame", padding=14)
+        aux_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0), pady=(0, 12))
+        self._make_columns_responsive(canvas, columns, motor_card, aux_card)
+
+        ttk.Label(
+            motor_card,
+            text="遥控电机动作",
+            style="CardTitle.TLabel",
+        ).grid(row=0, column=0, columnspan=8, sticky="w", pady=(0, 4))
+        ttk.Label(
+            motor_card,
+            text="参数修改后点击“保存参数”，下次启动会自动恢复。每个动作沿用遥控器的电机目标。",
+            style="CardMuted.TLabel",
+            wraplength=520,
+        ).grid(row=1, column=0, columnspan=8, sticky="w", pady=(0, 12))
+
+        action_rows = (
+            ("存块", "PD13", (("m3508", "M3508", -1000.0, 1000.0), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_return", "M3508", -1000.0, 1000.0), ("j4310_return", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
+            ("取地面一层块", "PD12", (("m3508", "M3508", -1000.0, 1000.0), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_return", "M3508", -1000.0, 1000.0), ("j4310_return", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
+            ("取台阶二层块", "PD11", (("m3508", "M3508", -1000.0, 1000.0), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_return", "M3508", -1000.0, 1000.0), ("j4310_return", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
+            ("翻转块", "PD8", (("m3508", "M3508", -1000.0, 1000.0), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_second", "M3508", -1000.0, 1000.0), ("j4310_second", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_third", "M3508", -1000.0, 1000.0), ("j4310_third", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
+            ("开关门", "PD9", (("angle_on", "打开", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), (None, "", 0.0, 0.0), ("angle_off", "关闭", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0))),
+            ("夹爪", "PD10", (("angle_on", "夹紧", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), (None, "", 0.0, 0.0), ("angle_off", "松开", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0))),
+        )
+        ttk.Label(motor_card, text="动作", style="CardMuted.TLabel").grid(row=2, column=0, sticky="w")
+        ttk.Label(motor_card, text="第一次动作（角度 deg）", style="CardMuted.TLabel").grid(row=2, column=1, columnspan=2, sticky="w")
+        ttk.Label(motor_card, text="第二次动作（取特殊块，角度 deg）", style="CardMuted.TLabel").grid(row=2, column=3, columnspan=2, sticky="w")
+        ttk.Label(motor_card, text="第三次动作/复位（收特殊块，角度 deg）", style="CardMuted.TLabel").grid(row=2, column=5, columnspan=2, sticky="w")
+        ttk.Label(motor_card, text="执行", style="CardMuted.TLabel").grid(row=2, column=7, sticky="w")
+        self.remote_action_buttons: dict[str, ttk.Button] = {}
+        for row, (name, key_name, fields) in enumerate(action_rows, start=3):
+            values = self.remote_action_angles[name]
+            ttk.Label(motor_card, text=f"{name} ({key_name})", style="Card.TLabel").grid(
+                row=row, column=0, sticky="w", pady=4
+            )
+            for column, (field_name, label, lower, upper) in zip(range(1, 7), fields):
+                if field_name is None:
+                    continue
+                spin = self._bounded_spinbox(
+                    motor_card, label, textvariable=values[field_name],
+                    from_=lower, to=upper, increment=1.0, width=8,
+                )
+                spin.grid(row=row, column=column, sticky="ew", padx=(8 if column in (1, 3) else 4, 0), pady=4)
+            button = ttk.Button(
+                motor_card,
+                text="执行",
+                command=lambda action=name: self.execute_remote_action(action),
+            )
+            button.grid(row=row, column=7, sticky="ew", padx=(14, 0), pady=4)
+            self.remote_action_buttons[name] = button
+        for column in range(1, 7):
+            motor_card.columnconfigure(column, weight=1)
+        motor_card.columnconfigure(7, weight=1)
+        self.remote_parameters_save_button = ttk.Button(
+            motor_card, text="保存参数", style="Accent.TButton",
+            command=self.save_remote_action_parameters,
+        )
+        self.remote_parameters_save_button.grid(
+            row=9, column=0, columnspan=2, sticky="w", pady=(12, 0)
+        )
+        self.remote_zero_button = ttk.Button(
+            motor_card, text="全部归零", command=self.return_all_motors_to_zero,
+        )
+        self.remote_zero_button.grid(
+            row=9, column=7, sticky="ew", padx=(14, 0), pady=(12, 0),
+        )
+
+        ttk.Label(aux_card, text="气缸与电子急停", style="CardTitle.TLabel").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 4)
+        )
+        ttk.Label(
+            aux_card,
+            text="状态帧经 H723 SPI3 转发到接收板，再由接收板控制输出。",
+            style="CardMuted.TLabel", wraplength=430,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 14))
+        self.aux_buttons: dict[int, ttk.Button] = {}
+        aux_items = (
+            (AUX_OUTPUT_ARM_CYLINDER, "机械臂气缸", "PB3"),
+            (AUX_OUTPUT_PUSH_CYLINDER, "推块气缸", "PB5"),
+            (AUX_OUTPUT_GRIPPER_CYLINDER, "夹爪气缸", "PB7"),
+            (AUX_OUTPUT_ESTOP, "电子急停", "PB8 / PB9"),
+        )
+        for row, (bit, label, pin) in enumerate(aux_items, start=2):
+            ttk.Label(aux_card, text=f"{label} ({pin})", style="Card.TLabel").grid(
+                row=row, column=0, sticky="w", pady=6
+            )
+            button = ttk.Button(
+                aux_card, text="执行",
+                command=lambda output_bit=bit: self.toggle_aux_output(output_bit),
+                width=12,
+            )
+            button.grid(row=row, column=1, sticky="e", pady=6)
+            self.aux_buttons[bit] = button
+        self.aux_status_var = tk.StringVar(value="气缸/电子急停状态：全部关闭")
+        ttk.Label(aux_card, textvariable=self.aux_status_var, style="CardMuted.TLabel").grid(
+            row=6, column=0, columnspan=2, sticky="w", pady=(14, 0)
+        )
+        aux_card.columnconfigure(0, weight=1)
+        self._update_aux_buttons()
+        self._bind_page_mousewheel(self.page_frames["遥控控制"], canvas)
+
+    def save_remote_action_parameters(self) -> None:
+        """Validate and persist the editable remote-action angle table."""
+
+        ranges = {
+            "m3508": (-1000.0, 1000.0),
+            "m3508_return": (-1000.0, 1000.0),
+            "m3508_second": (-1000.0, 1000.0),
+            "m3508_third": (-1000.0, 1000.0),
+            "j4310": (J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG),
+            "j4310_return": (J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG),
+            "j4310_second": (J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG),
+            "j4310_third": (J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG),
+            "angle_on": (M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG),
+            "angle_off": (M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG),
+        }
+        errors: list[str] = []
+        for action, values in self.remote_action_angles.items():
+            for name, variable in values.items():
+                lower, upper = ranges[name]
+                value = self._read_numeric(variable)
+                if not math.isfinite(value) or not lower <= value <= upper:
+                    errors.append(
+                        f"{action} {name}: {self._format_range(lower, upper, 'deg')}"
+                    )
+        if errors:
+            messagebox.showerror(
+                "遥控动作参数无效",
+                "以下参数超出范围：\n" + "\n".join(errors),
+                parent=self.root,
+            )
+            self.status_var.set("遥控动作参数未保存")
+            return
+        self._saved_motor_parameters["remote_actions"] = {
+            action: {
+                name: float(variable.get())
+                for name, variable in variables.items()
+            }
+            for action, variables in self.remote_action_angles.items()
+        }
+        self._saved_motor_parameters["remote_actions_version"] = (
+            REMOTE_ACTION_PARAMETER_VERSION
+        )
+        try:
+            self._write_motor_parameters()
+        except (OSError, TypeError, ValueError) as exc:
+            self.status_var.set("遥控动作参数保存失败")
+            self.log(f"遥控动作参数保存失败：{exc}")
+            messagebox.showerror(
+                "参数保存失败", f"无法写入参数文件：{exc}", parent=self.root
+            )
+            return
+        self.status_var.set("遥控动作参数已保存，下次启动自动恢复")
+        self.log("遥控电机动作角度参数已保存")
+
+    def _update_aux_buttons(self) -> None:
+        names = {
+            AUX_OUTPUT_ARM_CYLINDER: "机械臂气缸",
+            AUX_OUTPUT_PUSH_CYLINDER: "推块气缸",
+            AUX_OUTPUT_GRIPPER_CYLINDER: "夹爪气缸",
+            AUX_OUTPUT_ESTOP: "电子急停",
+        }
+        active_names = []
+        for bit in self.aux_buttons:
+            active = (self.aux_output_bits & bit) != 0
+            if active:
+                active_names.append(names[bit])
+        self.aux_status_var.set(
+            "气缸/电子急停状态：" + ("、".join(active_names) if active_names else "全部关闭")
+        )
+
+    def _send_aux_control(self, output_bits: int) -> bool:
+        if not self.transport.connected:
+            self.status_var.set("未连接，气缸/电子急停未发送")
+            return False
+        if not self.handshaken:
+            self.status_var.set("尚未握手，气缸/电子急停未发送")
+            return False
+        try:
+            payload = build_aux_control_payload(output_bits)
+        except ValueError:
+            return False
+        if self._send(MSG_AUX_CONTROL, payload):
+            self.status_var.set("气缸/电子急停状态已发送")
+            return True
+        self.status_var.set("气缸/电子急停发送失败")
+        return False
+
+    def toggle_aux_output(self, output_bit: int) -> None:
+        next_bits = self.aux_output_bits ^ output_bit
+        if self._send_aux_control(next_bits):
+            self.aux_output_bits = next_bits
+            self._update_aux_buttons()
+            self.log(f"辅助输出 {'打开' if next_bits & output_bit else '关闭'}: 0x{output_bit:02X}")
+
+    def _reset_remote_action_state(self, action: str) -> None:
+        self.remote_action_states[action] = 0
+        button = self.remote_action_buttons.get(action)
+        if button is not None:
+            button.configure(text="执行")
+
+    def _cancel_remote_pd13_reset(self) -> None:
+        after_id = self.remote_pd13_reset_after_id
+        if after_id is None:
+            return
+        try:
+            self.root.after_cancel(after_id)
+        except tk.TclError:
+            pass
+        self.remote_pd13_reset_after_id = None
+
+    def _cancel_remote_pd8_first(self) -> None:
+        after_id = self.remote_pd8_first_after_id
+        if after_id is None:
+            return
+        try:
+            self.root.after_cancel(after_id)
+        except tk.TclError:
+            pass
+        self.remote_pd8_first_after_id = None
+
+    def _cancel_remote_delayed_actions(self) -> None:
+        self._cancel_remote_pd13_reset()
+        self._cancel_remote_pd8_first()
+
+    def _complete_remote_pd13_reset(self, values: tuple[float, ...]) -> None:
+        self.remote_pd13_reset_after_id = None
+        enable_mask = ENABLE_J4310_ONLY
+        if not self._send_position_values(
+            "机械臂", values, True, enable_mask=enable_mask
+        ):
+            self.status_var.set("存块复位：J4310 目标未发送")
+            self.log("存块复位：J4310 延时目标发送失败")
+            return
+        self._sent_arm_values = values
+        self._active_arm_mask = enable_mask
+        self.status_var.set("存块复位：J4310 目标已发送")
+        self.log("存块复位：M3508 回位 1 秒后，J4310 目标已发送")
+
+    def _complete_remote_pd8_first(self, values: tuple[float, ...]) -> None:
+        self.remote_pd8_first_after_id = None
+        enable_mask = ENABLE_J4310_ONLY
+        if not self._send_position_values(
+            "机械臂", values, True, enable_mask=enable_mask
+        ):
+            self.status_var.set("翻转块第一段：J4310 目标未发送")
+            self.log("翻转块第一段：J4310 延时目标发送失败")
+            return
+        self._sent_arm_values = values
+        self._active_arm_mask = enable_mask
+        self.status_var.set("翻转块第一段：J4310 目标已发送")
+        self.log("翻转块第一段：M3508 动作 1 秒后，J4310 目标已发送")
+
+    def _reset_remote_sequences_for(self, action: str) -> None:
+        arm_actions = ("存块", "取地面一层块", "取台阶二层块")
+        if action == "翻转块":
+            for name in arm_actions:
+                self._reset_remote_action_state(name)
+        elif action in arm_actions:
+            for name in arm_actions:
+                if name != action:
+                    self._reset_remote_action_state(name)
+            self._reset_remote_action_state("翻转块")
+
+    def execute_remote_action(self, action: str) -> bool:
+        arm_actions = ("存块", "取地面一层块", "取台阶二层块", "翻转块")
+        if action in arm_actions:
+            self._cancel_remote_delayed_actions()
+        values = list(self._values())
+        params = self.remote_action_angles[action]
+        delayed_pd13_values: tuple[float, ...] | None = None
+        delayed_pd8_values: tuple[float, ...] | None = None
+        if action == "翻转块":
+            stage = int(self.remote_action_states.get(action, 0)) % 3
+            m3508_name = ("m3508", "m3508_second", "m3508_third")[stage]
+            j4310_name = ("j4310", "j4310_second", "j4310_third")[stage]
+            if stage == 0:
+                values = list(self._sent_arm_values)
+                delayed_pd8_values = list(values)
+                delayed_pd8_values[0] = self._read_numeric(params[j4310_name])
+            values[0] = self._read_numeric(params[j4310_name])
+            values[4] = self._read_numeric(params[m3508_name])
+            values[5] = self._read_numeric(params[m3508_name])
+            if delayed_pd8_values is not None:
+                values[0] = self._sent_arm_values[0]
+                delayed_pd8_values[4] = values[4]
+                delayed_pd8_values[5] = values[5]
+                delayed_pd8_values = tuple(delayed_pd8_values)
+            page = "机械臂"
+            mask = (
+                ENABLE_M3508_ONLY
+                if delayed_pd8_values is not None
+                else ENABLE_J4310_ONLY | ENABLE_M3508_ONLY
+            )
+            next_state = (stage + 1) % 3
+            state_text = f"第{stage + 1}段"
+        elif action in ("存块", "取台阶二层块", "取地面一层块"):
+            active = bool(self.remote_action_states.get(action, False))
+            m3508_name = "m3508" if not active else "m3508_return"
+            j4310_name = "j4310" if not active else "j4310_return"
+            if action == "存块" and active:
+                values = list(self._sent_arm_values)
+                delayed_pd13_values = list(values)
+                delayed_pd13_values[0] = self._read_numeric(
+                    params["j4310_return"]
+                )
+            values[0] = self._read_numeric(params[j4310_name])
+            values[4] = self._read_numeric(params[m3508_name])
+            values[5] = self._read_numeric(params[m3508_name])
+            if delayed_pd13_values is not None:
+                values[0] = self._sent_arm_values[0]
+                delayed_pd13_values[4] = values[4]
+                delayed_pd13_values[5] = values[5]
+                delayed_pd13_values = tuple(delayed_pd13_values)
+            page = "机械臂"
+            mask = (
+                ENABLE_M3508_ONLY
+                if delayed_pd13_values is not None
+                else ENABLE_J4310_ONLY | ENABLE_M3508_ONLY
+            )
+            next_state = int(not active)
+            state_text = "第二段" if not active else "复位段"
+        elif action == "开关门":
+            active = bool(self.remote_action_states.get(action, False))
+            values[6] = self._read_numeric(params["angle_on" if not active else "angle_off"])
+            page = "开关门"
+            mask = ENABLE_CONVEYOR
+            next_state = int(not active)
+            state_text = "第二段" if not active else "复位段"
+        else:
+            active = bool(self.remote_action_states.get(action, False))
+            values[7] = self._read_numeric(params["angle_on" if not active else "angle_off"])
+            page = "夹爪"
+            mask = ENABLE_GRIPPER
+            next_state = int(not active)
+            state_text = "第二段" if not active else "复位段"
+        if not self._send_position_values(page, tuple(values), True, enable_mask=mask):
+            return False
+        self._reset_remote_sequences_for(action)
+        self.remote_action_states[action] = next_state
+        if action in arm_actions:
+            sent_values = tuple(values)
+            self._sent_arm_values = sent_values
+            self._active_arm_mask = mask
+        button = self.remote_action_buttons.get(action)
+        if button is not None:
+            if action == "翻转块":
+                button_text = ("执行", "第二次动作", "第三次动作")[next_state]
+            else:
+                button_text = "复位/第二次动作" if next_state else "执行"
+            button.configure(text=button_text)
+        if delayed_pd8_values is not None:
+            self.remote_pd8_first_after_id = self.root.after(
+                REMOTE_PD8_FIRST_DELAY_MS,
+                self._complete_remote_pd8_first,
+                delayed_pd8_values,
+            )
+            self.status_var.set("翻转块第一段：M3508 已发送，1 秒后进行 J4310 动作")
+            self.log("翻转块第一段：先发送 M3508，1 秒后仅发送 J4310")
+        elif delayed_pd13_values is not None:
+            self.remote_pd13_reset_after_id = self.root.after(
+                REMOTE_PD13_RESET_DELAY_MS,
+                self._complete_remote_pd13_reset,
+                delayed_pd13_values,
+            )
+            self.status_var.set("存块复位：M3508 已发送，1 秒后进行 J4310 动作")
+            self.log("存块复位：先发送 M3508 回位，1 秒后仅发送 J4310 复位")
+        else:
+            self.status_var.set(f"{action} 已执行")
+            self.log(f"遥控动作 {action} 已执行，状态={state_text}")
+        return True
+
+    def return_all_motors_to_zero(self) -> bool:
+        """Send one absolute-position snapshot that holds every motor at zero."""
+
+        self._cancel_remote_delayed_actions()
+        values = (
+            0.0,
+            0.0,
+            self._sent_arm_values[2],
+            self._sent_arm_values[3],
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        )
+        enable_mask = (
+            ENABLE_J4310_ONLY
+            | ENABLE_M3508_ONLY
+            | ENABLE_CONVEYOR
+            | ENABLE_GRIPPER
+        )
+        if not self._send_position_values(
+            "机械臂",
+            values,
+            True,
+            enable_mask=enable_mask,
+            j_tau=0.0,
+            j_torque_limit=self._sent_j_torque_limit,
+            pid_values=self._sent_pid_values,
+            include_pid=False,
+        ):
+            return False
+
+        self.j_position.set(0.0)
+        self.j_velocity.set(0.0)
+        self.m3508_position_1.set(0.0)
+        self.m3508_position_2.set(0.0)
+        self.m3508_sync_position.set(0.0)
+        self.conveyor_position.set(0.0)
+        self.gripper_position.set(0.0)
+        self._sent_arm_values = values
+        self._sent_j_tau = 0.0
+        self._active_arm_mask = ENABLE_J4310_ONLY | ENABLE_M3508_ONLY
+        for variable in (
+            self.arm_enable,
+            self.m3508_enable,
+            self.conveyor_enable,
+            self.gripper_enable,
+        ):
+            variable.set(True)
+        self.remote_action_states.clear()
+        for button in self.remote_action_buttons.values():
+            button.configure(text="执行")
+        self.status_var.set("全部电机归零目标已发送")
+        self.log("遥控动作：全部电机已下发 0 deg 归零目标")
+        return True
 
     def _new_scrollable_page(self, title: str, padding: int) -> tuple[ttk.Frame, tk.Canvas]:
         wrapper = ttk.Frame(self.page_container)
@@ -661,6 +1095,11 @@ class UpperConsole:
         right.grid(row=0, column=1, sticky="nsew")
         self._make_columns_responsive(canvas, columns, left, right)
         ttk.Label(left, text="J4310 · MIT 控制", style="CardTitle.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
+        ttk.Button(
+            left,
+            text="参数范围",
+            command=self.show_parameter_ranges,
+        ).grid(row=0, column=3, columnspan=3, sticky="e", pady=(0, 10))
         self._field_at(left, 1, 0, "前馈 tau (t_ff)", self.j_tau, "Nm", -J4310_TORQUE_LIMIT, J4310_TORQUE_LIMIT, 0.05)
         self._field_at(left, 1, 3, "力矩限幅", self.j_torque_limit, "Nm", 0.1, J4310_TORQUE_LIMIT, 0.05)
         self._field_at(left, 2, 0, "刚度 Kp", self.j_kp, "", 0, J4310_KP_LIMIT, 1)
@@ -671,34 +1110,23 @@ class UpperConsole:
             0,
             "目标位置 p_des",
             self.j_position,
-            POSITION_MIN_DEG,
-            POSITION_MAX_DEG,
+            J4310_POSITION_MIN_DEG,
+            J4310_POSITION_MAX_DEG,
             "j4310",
         )
         self.position_slider_controls["j4310"] = self.j_position_controls
         self._field_at(left, 3, 3, "目标速度 v_des", self.j_velocity, "rad/s", -J4310_VELOCITY_LIMIT, J4310_VELOCITY_LIMIT, 0.1)
-        self.j4310_enable_check = ttk.Checkbutton(
-            left,
-            text="使能 J4310 输出",
-            variable=self.arm_enable,
-            style="Output.TCheckbutton",
-        )
-        self.output_enable_checks["j4310"] = self.j4310_enable_check
-        self.j4310_enable_check.grid(
-            row=4, column=0, columnspan=3, sticky="w", pady=(6, 3)
-        )
         self.j4310_bus_label = ttk.Label(
             left,
-            text="反馈状态: 未收到反馈\nFlash 是否就绪: --",
+            text="反馈状态: 未收到反馈",
             style="CardMuted.TLabel",
             justify="left",
         )
         self.j4310_bus_label.grid(
             row=4,
-            column=3,
-            columnspan=3,
+            column=0,
+            columnspan=6,
             sticky="w",
-            padx=(18, 0),
             pady=(6, 3),
         )
         actions = ttk.Frame(left, style="Card.TFrame")
@@ -715,6 +1143,12 @@ class UpperConsole:
             command=lambda: self.stop_arm_group("j4310"),
         )
         self.j4310_stop_button.pack(side="left", padx=(0, 8))
+        self.j4310_save_button = ttk.Button(
+            actions,
+            text="保存参数",
+            command=lambda: self.save_motor_parameters("j4310"),
+        )
+        self.j4310_save_button.pack(side="left", padx=(0, 8))
         ttk.Button(actions, text="永久标定", command=self.permanently_calibrate_j4310).pack(side="left", padx=(0, 8))
         self.j4310_auto_return_button = ttk.Button(
             actions,
@@ -728,7 +1162,12 @@ class UpperConsole:
         ttk.Label(actions, textvariable=self.j4310_output_position_var, style="CardMuted.TLabel").pack(side="left")
         ttk.Label(left, text="M3508 × 2 · 位置目标", style="CardTitle.TLabel").grid(row=6, column=0, columnspan=6, sticky="w", pady=(4, 4))
         self.m3508_position_1_spinbox = self._angle_input_at(
-            left, 7, 0, "M3508 #1", self.m3508_position_1
+            left,
+            7,
+            0,
+            "M3508 #1",
+            self.m3508_position_1,
+            include_sync_input=True,
         )
         self.m3508_position_2_spinbox = self._angle_input_at(
             left, 8, 0, "M3508 #2", self.m3508_position_2
@@ -739,23 +1178,14 @@ class UpperConsole:
         self.m3508_position_controls = (
             self.m3508_position_1_spinbox,
             self.m3508_position_2_spinbox,
+            self.m3508_sync_input_spinbox,
             self.m3508_sync_slider,
         )
         self.position_slider_controls["m3508"] = self.m3508_position_controls
         ttk.Label(left, text="FDCAN2 · ID 1 / ID 2", style="CardMuted.TLabel").grid(row=7, column=3, columnspan=3, rowspan=2, sticky="w", padx=(18, 0))
-        self.m3508_enable_check = ttk.Checkbutton(
-            left,
-            text="允许 M3508 输出",
-            variable=self.m3508_enable,
-            style="Output.TCheckbutton",
-        )
-        self.output_enable_checks["m3508"] = self.m3508_enable_check
-        self.m3508_enable_check.grid(
-            row=10, column=0, columnspan=6, sticky="w", pady=(7, 3)
-        )
         m3508_actions = ttk.Frame(left, style="Card.TFrame")
         m3508_actions.grid(
-            row=11, column=0, columnspan=6, sticky="w", pady=(3, 0)
+            row=10, column=0, columnspan=6, sticky="w", pady=(7, 0)
         )
         self.m3508_send_button = ttk.Button(
             m3508_actions,
@@ -768,10 +1198,16 @@ class UpperConsole:
             text="停止发送",
             command=lambda: self.stop_arm_group("m3508"),
         )
-        self.m3508_stop_button.pack(side="left")
+        self.m3508_stop_button.pack(side="left", padx=(0, 8))
+        self.m3508_save_button = ttk.Button(
+            m3508_actions,
+            text="保存参数",
+            command=lambda: self.save_motor_parameters("m3508"),
+        )
+        self.m3508_save_button.pack(side="left")
         m3508_feedback = ttk.Frame(left, style="Card.TFrame")
         m3508_feedback.grid(
-            row=12, column=0, columnspan=6, sticky="ew", pady=(8, 0)
+            row=11, column=0, columnspan=6, sticky="ew", pady=(8, 0)
         )
         m3508_feedback.columnconfigure(0, weight=1, uniform="m3508_feedback")
         m3508_feedback.columnconfigure(1, weight=1, uniform="m3508_feedback")
@@ -803,7 +1239,7 @@ class UpperConsole:
         )
         self._bind_page_mousewheel(self.page_frames["机械臂"], canvas)
 
-    def _build_single_motor_page(self, title: str, _mask: int, position_var: tk.DoubleVar, enable_var: tk.BooleanVar, key: str) -> None:
+    def _build_single_motor_page(self, title: str, position_var: tk.DoubleVar, key: str) -> None:
         frame, canvas = self._new_scrollable_page(title, 16)
         columns = ttk.Frame(frame)
         columns.pack(fill="both", expand=True)
@@ -821,23 +1257,13 @@ class UpperConsole:
             1,
             "输出轴目标位置",
             position_var,
-            POSITION_MIN_DEG,
-            POSITION_MAX_DEG,
+            M2006_POSITION_MIN_DEG,
+            M2006_POSITION_MAX_DEG,
             key,
         )
         ttk.Label(left, text=f"FDCAN3 · ID {node_id} · {title}", style="CardMuted.TLabel").grid(row=2, column=0, columnspan=3, sticky="w", pady=(8, 12))
-        enable_check = ttk.Checkbutton(
-            left,
-            text="允许 M2006 输出",
-            variable=enable_var,
-            style="Output.TCheckbutton",
-        )
-        enable_check.grid(
-            row=3, column=0, columnspan=3, sticky="w", pady=(4, 4)
-        )
-        self.output_enable_checks[key] = enable_check
         buttons = ttk.Frame(left, style="Card.TFrame")
-        buttons.grid(row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        buttons.grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
         self._add_page_buttons(buttons, title, key, "M2006")
         diagnostic_key = (2, 3, node_id)
         ttk.Label(
@@ -845,12 +1271,12 @@ class UpperConsole:
             textvariable=self.dji_diagnostic_vars[diagnostic_key],
             style="CardMuted.TLabel",
             wraplength=440,
-        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        ).grid(row=4, column=0, columnspan=3, sticky="w", pady=(10, 0))
         self._build_pid_editor(
             right,
             "M2006 / C610 · PID 参数",
-            self.m2006_speed_pid_vars,
-            self.m2006_position_pid_vars,
+            self.m2006_speed_pid_vars_by_motor[key],
+            self.m2006_position_pid_vars_by_motor[key],
         )
         self._bind_page_mousewheel(self.page_frames[title], canvas)
 
@@ -891,8 +1317,9 @@ class UpperConsole:
         )
         controls = ttk.Frame(parent, style="Card.TFrame")
         controls.grid(row=row, column=column + 1, sticky="ew", padx=8, pady=4)
-        spin = ttk.Spinbox(
+        spin = self._bounded_spinbox(
             controls,
+            "目标位置",
             textvariable=variable,
             from_=lower,
             to=upper,
@@ -940,19 +1367,54 @@ class UpperConsole:
         column: int,
         label: str,
         variable: tk.DoubleVar,
+        include_sync_input: bool = False,
     ) -> ttk.Spinbox:
         ttk.Label(parent, text=label, style="Card.TLabel").grid(
             row=row, column=column, sticky="w", pady=4
         )
-        spinbox = ttk.Spinbox(
-            parent,
+        controls = ttk.Frame(parent, style="Card.TFrame")
+        controls.grid(
+            row=row,
+            column=column + 1,
+            sticky="ew",
+            padx=8,
+            pady=4,
+        )
+        spinbox = self._bounded_spinbox(
+            controls,
+            label,
             textvariable=variable,
             from_=POSITION_MIN_DEG,
             to=POSITION_MAX_DEG,
             increment=1.0,
             width=7,
         )
-        spinbox.grid(row=row, column=column + 1, sticky="w", padx=8, pady=4)
+        spinbox.pack(side="left")
+        if include_sync_input:
+            ttk.Label(
+                controls,
+                text="同步输入",
+                style="CardMuted.TLabel",
+            ).pack(side="left", padx=(24, 8))
+            self.m3508_sync_input_spinbox = self._bounded_spinbox(
+                controls,
+                "M3508 同步输入",
+                textvariable=self.m3508_sync_position,
+                from_=M3508_SYNC_POSITION_MIN_DEG,
+                to=M3508_SYNC_POSITION_MAX_DEG,
+                increment=1.0,
+                width=7,
+            )
+            self.m3508_sync_input_spinbox.configure(
+                command=self._on_m3508_sync_input_value
+            )
+            for event_name in ("<KeyRelease>", "<Return>", "<FocusOut>"):
+                self.m3508_sync_input_spinbox.bind(
+                    event_name,
+                    self._on_m3508_sync_input_value,
+                    add="+",
+                )
+            self.m3508_sync_input_spinbox.pack(side="left")
         ttk.Label(parent, text="deg", style="CardMuted.TLabel").grid(
             row=row, column=column + 2, sticky="w", padx=(0, 18), pady=4
         )
@@ -967,8 +1429,8 @@ class UpperConsole:
         scale = ttk.Scale(
             parent,
             variable=self.m3508_sync_position,
-            from_=POSITION_MIN_DEG,
-            to=POSITION_MAX_DEG,
+            from_=M3508_SYNC_POSITION_MIN_DEG,
+            to=M3508_SYNC_POSITION_MAX_DEG,
             orient="horizontal",
             length=224,
             command=self._on_m3508_sync_slider_value,
@@ -994,7 +1456,20 @@ class UpperConsole:
     def _on_m3508_sync_slider_value(self, value: str) -> None:
         position = round(float(value), 1)
         self.m3508_sync_position.set(position)
-        self.m3508_position_1.set(-position if position else 0.0)
+        self._set_m3508_sync_targets(position)
+
+    def _on_m3508_sync_input_value(self, _event: tk.Event | None = None) -> None:
+        position = self._read_numeric(self.m3508_sync_position)
+        if (
+            math.isfinite(position)
+            and M3508_SYNC_POSITION_MIN_DEG
+            <= position
+            <= M3508_SYNC_POSITION_MAX_DEG
+        ):
+            self._set_m3508_sync_targets(position)
+
+    def _set_m3508_sync_targets(self, position: float) -> None:
+        self.m3508_position_1.set(position)
         self.m3508_position_2.set(position)
 
     def _field_at(self, parent: ttk.Frame, row: int, column: int, label: str, variable: tk.DoubleVar, unit: str, lower: float, upper: float, increment: float) -> None:
@@ -1005,8 +1480,9 @@ class UpperConsole:
             padx=(18 if column > 0 else 0, 0),
             pady=4,
         )
-        spin = ttk.Spinbox(
+        spin = self._bounded_spinbox(
             parent,
+            label,
             textvariable=variable,
             from_=lower,
             to=upper,
@@ -1033,6 +1509,182 @@ class UpperConsole:
             "output_limit": tk.DoubleVar(value=float(values[5].split()[0])),
         }
 
+    @staticmethod
+    def _pid_snapshot(variables: dict[str, tk.DoubleVar]) -> dict[str, float]:
+        return {
+            name: float(variables[name].get())
+            for name in ("kp", "ki", "kd", "integral_limit", "output_limit")
+        }
+
+    @staticmethod
+    def _restore_number(
+        section: object,
+        name: str,
+        variable: tk.DoubleVar,
+        lower: float,
+        upper: float,
+    ) -> None:
+        if not isinstance(section, dict) or name not in section:
+            return
+        try:
+            value = float(section[name])
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(value) and lower <= value <= upper:
+            variable.set(value)
+
+    def _restore_pid_group(
+        self,
+        section: object,
+        variables: dict[str, tk.DoubleVar],
+        position: bool,
+    ) -> None:
+        upper_output = (
+            PID_POSITION_OUTPUT_LIMIT_MAX
+            if position
+            else PID_SPEED_OUTPUT_LIMIT_MAX
+        )
+        for name, lower, upper in (
+            ("kp", PID_GAIN_MIN, PID_KP_KI_MAX),
+            ("ki", PID_GAIN_MIN, PID_KP_KI_MAX),
+            ("kd", PID_GAIN_MIN, PID_KD_MAX),
+            ("integral_limit", PID_GAIN_MIN, PID_INTEGRAL_LIMIT_MAX),
+            ("output_limit", PID_OUTPUT_LIMIT_MIN, upper_output),
+        ):
+            self._restore_number(section, name, variables[name], lower, upper)
+
+    def _restore_motor_parameters(self) -> None:
+        try:
+            with MOTOR_PARAMETER_PATH.open("r", encoding="utf-8") as stream:
+                data = json.load(stream)
+        except (OSError, ValueError, TypeError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        self._saved_motor_parameters = data
+
+        j4310 = data.get("j4310")
+        self._restore_number(j4310, "position_deg", self.j_position, J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG)
+        self._restore_number(j4310, "velocity_rad_s", self.j_velocity, -J4310_VELOCITY_LIMIT, J4310_VELOCITY_LIMIT)
+        self._restore_number(j4310, "kp", self.j_kp, 0.0, J4310_KP_LIMIT)
+        self._restore_number(j4310, "kd", self.j_kd, 0.0, J4310_KD_LIMIT)
+        self._restore_number(j4310, "tau_nm", self.j_tau, -J4310_TORQUE_LIMIT, J4310_TORQUE_LIMIT)
+        self._restore_number(j4310, "torque_limit_nm", self.j_torque_limit, 0.1, J4310_TORQUE_LIMIT)
+
+        remote_actions = data.get("remote_actions")
+        if isinstance(remote_actions, dict):
+            remote_actions_version = data.get("remote_actions_version", 1)
+            legacy_names = {
+                "取地面一层块": "取台阶二层块",
+                "取台阶二层块": "取地面一层块",
+            }
+            for action, variables in self.remote_action_angles.items():
+                stored_action = action
+                if remote_actions_version != REMOTE_ACTION_PARAMETER_VERSION:
+                    stored_action = legacy_names.get(action, action)
+                section = remote_actions.get(stored_action)
+                if not isinstance(section, dict):
+                    continue
+                for name, variable in variables.items():
+                    if name.startswith("j4310"):
+                        lower, upper = J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG
+                    elif name.startswith("m3508"):
+                        lower, upper = -1000.0, 1000.0
+                    else:
+                        lower, upper = M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG
+                    self._restore_number(section, name, variable, lower, upper)
+
+        m3508 = data.get("m3508")
+        self._restore_number(m3508, "position_1_deg", self.m3508_position_1, *M3508_TARGET_RANGES_DEG[0])
+        self._restore_number(m3508, "position_2_deg", self.m3508_position_2, *M3508_TARGET_RANGES_DEG[1])
+        self._restore_number(m3508, "sync_position_deg", self.m3508_sync_position, M3508_SYNC_POSITION_MIN_DEG, M3508_SYNC_POSITION_MAX_DEG)
+        self._restore_pid_group(m3508.get("speed_pid") if isinstance(m3508, dict) else None, self.m3508_speed_pid_vars, False)
+        self._restore_pid_group(m3508.get("position_pid") if isinstance(m3508, dict) else None, self.m3508_position_pid_vars, True)
+
+        for key, position_var in (
+            ("conveyor", self.conveyor_position),
+            ("gripper", self.gripper_position),
+        ):
+            section = data.get(key)
+            self._restore_number(section, "position_deg", position_var, M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG)
+            self._restore_pid_group(
+                section.get("speed_pid") if isinstance(section, dict) else None,
+                self.m2006_speed_pid_vars_by_motor[key],
+                False,
+            )
+            self._restore_pid_group(
+                section.get("position_pid") if isinstance(section, dict) else None,
+                self.m2006_position_pid_vars_by_motor[key],
+                True,
+            )
+
+    def _motor_parameter_snapshot(self, target: str) -> dict[str, object]:
+        if target == "j4310":
+            return {
+                "position_deg": float(self.j_position.get()),
+                "velocity_rad_s": float(self.j_velocity.get()),
+                "kp": float(self.j_kp.get()),
+                "kd": float(self.j_kd.get()),
+                "tau_nm": float(self.j_tau.get()),
+                "torque_limit_nm": float(self.j_torque_limit.get()),
+            }
+        if target == "m3508":
+            return {
+                "position_1_deg": float(self.m3508_position_1.get()),
+                "position_2_deg": float(self.m3508_position_2.get()),
+                "sync_position_deg": float(self.m3508_sync_position.get()),
+                "speed_pid": self._pid_snapshot(self.m3508_speed_pid_vars),
+                "position_pid": self._pid_snapshot(self.m3508_position_pid_vars),
+            }
+        if target not in self.m2006_speed_pid_vars_by_motor:
+            raise ValueError(f"unknown motor parameter target: {target}")
+        position_var = self.conveyor_position if target == "conveyor" else self.gripper_position
+        return {
+            "position_deg": float(position_var.get()),
+            "speed_pid": self._pid_snapshot(self.m2006_speed_pid_vars_by_motor[target]),
+            "position_pid": self._pid_snapshot(self.m2006_position_pid_vars_by_motor[target]),
+        }
+
+    def _write_motor_parameters(self) -> None:
+        with MOTOR_PARAMETER_PATH.open("w", encoding="utf-8") as stream:
+            json.dump(self._saved_motor_parameters, stream, indent=2, ensure_ascii=False)
+
+    def save_motor_parameters(self, target: str) -> bool:
+        page = "机械臂" if target in ("j4310", "m3508") else ("开关门" if target == "conveyor" else "夹爪")
+        values = self._values()
+        options: dict[str, object] = {"pid_values": self._pid_values(page)}
+        if target == "j4310":
+            options.update(
+                enable_mask=ENABLE_J4310_ONLY,
+                j_tau=self._read_numeric(self.j_tau),
+                j_torque_limit=self._read_numeric(self.j_torque_limit),
+            )
+        elif target == "m3508":
+            options["enable_mask"] = ENABLE_M3508_ONLY
+        if not self._validate_send_parameters(page, values, True, options):
+            return False
+        try:
+            self._saved_motor_parameters[target] = self._motor_parameter_snapshot(target)
+            self._write_motor_parameters()
+        except (OSError, TypeError, ValueError) as exc:
+            self.status_var.set("参数保存失败")
+            self.log(f"{target} 参数保存失败：{exc}")
+            messagebox.showerror("参数保存失败", f"无法写入参数文件：{exc}", parent=self.root)
+            return False
+
+        applied = (
+            self.send_arm_group_now(target)
+            if target in ("j4310", "m3508")
+            else self.send_page_now(page)
+        )
+        if applied:
+            self.status_var.set(f"{page} 参数已保存并立即应用")
+            self.log(f"{page} 参数已保存并立即应用")
+        else:
+            self.status_var.set(f"{page} 参数已保存，连接后发送目标时应用")
+            self.log(f"{page} 参数已保存；当前未连接或尚未握手，暂未下发")
+        return True
+
     def _build_pid_editor(
         self,
         parent: ttk.Frame,
@@ -1057,8 +1709,8 @@ class UpperConsole:
         self._pid_row(parent, 3, "速度环", speed_vars, position=False)
         self._pid_row(parent, 4, "位置环", position_vars, position=True)
 
-    @staticmethod
     def _pid_row(
+        self,
         parent: ttk.Frame,
         row: int,
         title: str,
@@ -1069,18 +1721,21 @@ class UpperConsole:
             row=row, column=0, sticky="w", pady=4
         )
         specs = (
-            ("kp", 0.0, 10000.0, 1.0),
-            ("ki", 0.0, 10000.0, 1.0),
-            ("kd", 0.0, 1000.0, 0.1),
-            ("integral_limit", 0.0, 100000.0, 0.01),
-            ("output_limit", 0.1, 1000.0 if position else 32767.0,
+            ("kp", PID_GAIN_MIN, PID_KP_KI_MAX, 1.0),
+            ("ki", PID_GAIN_MIN, PID_KP_KI_MAX, 1.0),
+            ("kd", PID_GAIN_MIN, PID_KD_MAX, 0.1),
+            ("integral_limit", PID_GAIN_MIN, PID_INTEGRAL_LIMIT_MAX, 0.01),
+            ("output_limit", PID_OUTPUT_LIMIT_MIN,
+             PID_POSITION_OUTPUT_LIMIT_MAX if position else
+             PID_SPEED_OUTPUT_LIMIT_MAX,
              0.1 if position else 1.0),
         )
         for column, (name, lower, upper, increment) in enumerate(
             specs, start=1
         ):
-            spin = ttk.Spinbox(
+            spin = self._bounded_spinbox(
                 parent,
+                f"{title} {name}",
                 textvariable=variables[name],
                 from_=lower,
                 to=upper,
@@ -1088,12 +1743,124 @@ class UpperConsole:
                 width=9,
             )
             spin.grid(row=row, column=column, sticky="w", padx=(0, 8), pady=4)
+
+    def _bounded_spinbox(
+        self,
+        parent: ttk.Frame,
+        label: str,
+        *,
+        textvariable: tk.DoubleVar,
+        from_: float,
+        to: float,
+        increment: float,
+        width: int,
+    ) -> ttk.Spinbox:
+        range_text = self._format_range(from_, to)
+        validate_command = (
+            self.root.register(self._validate_numeric_edit),
+            "%P",
+            str(from_),
+            str(to),
+        )
+        invalid_command = (
+            self.root.register(self._reject_numeric_edit),
+            label,
+            range_text,
+        )
+        return ttk.Spinbox(
+            parent,
+            textvariable=textvariable,
+            from_=from_,
+            to=to,
+            increment=increment,
+            width=width,
+            validate="key",
+            validatecommand=validate_command,
+            invalidcommand=invalid_command,
+        )
+
+    @staticmethod
+    def _validate_numeric_edit(proposed: str, lower: str, upper: str) -> bool:
+        if proposed in ("", "-", ".", "-."):
+            return True
+        try:
+            value = float(proposed)
+        except ValueError:
+            return False
+        return math.isfinite(value) and float(lower) <= value <= float(upper)
+
+    def _reject_numeric_edit(self, label: str, range_text: str) -> None:
+        self.status_var.set(f"{label} 允许范围：{range_text}")
+
+    @staticmethod
+    def _read_numeric(variable: tk.DoubleVar) -> float:
+        try:
+            return float(variable.get())
+        except (tk.TclError, TypeError, ValueError):
+            return math.nan
+
+    @staticmethod
+    def _format_number(value: float) -> str:
+        return f"{value:g}"
+
+    @classmethod
+    def _format_range(cls, lower: float, upper: float, unit: str = "") -> str:
+        suffix = f" {unit}" if unit else ""
+        return (
+            f"{cls._format_number(lower)} .. "
+            f"{cls._format_number(upper)}{suffix}"
+        )
+
+    @classmethod
+    def _parameter_range_text(cls) -> str:
+        return "\n".join(
+            (
+                "J4310 MIT：",
+                f"  p_des：{cls._format_range(J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG, 'deg')}",
+                f"  v_des：{cls._format_range(-J4310_VELOCITY_LIMIT, J4310_VELOCITY_LIMIT, 'rad/s')}",
+                f"  Kp：{cls._format_range(0.0, J4310_KP_LIMIT)}",
+                f"  Kd：{cls._format_range(0.0, J4310_KD_LIMIT)}",
+                f"  tau：{cls._format_range(-J4310_TORQUE_LIMIT, J4310_TORQUE_LIMIT, 'Nm')}，且绝对值不能超过力矩限幅",
+                f"  力矩限幅：{cls._format_range(0.1, J4310_TORQUE_LIMIT, 'Nm')}",
+                "位置目标：",
+                f"  M3508 独立输入：{cls._format_range(POSITION_MIN_DEG, POSITION_MAX_DEG, 'deg')}",
+                f"  M3508 同步输入 / 滑块：{cls._format_range(M3508_SYNC_POSITION_MIN_DEG, M3508_SYNC_POSITION_MAX_DEG, 'deg')}",
+                f"  M2006：{cls._format_range(M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG, 'deg')}",
+                "PID 输入：",
+                f"  Kp / Ki：{cls._format_range(PID_GAIN_MIN, PID_KP_KI_MAX)}",
+                f"  Kd：{cls._format_range(PID_GAIN_MIN, PID_KD_MAX)}",
+                f"  积分限幅：{cls._format_range(PID_GAIN_MIN, PID_INTEGRAL_LIMIT_MAX)}",
+                f"  速度环输出限幅：{cls._format_range(PID_OUTPUT_LIMIT_MIN, PID_SPEED_OUTPUT_LIMIT_MAX)}",
+                f"  位置环输出限幅：{cls._format_range(PID_OUTPUT_LIMIT_MIN, PID_POSITION_OUTPUT_LIMIT_MAX)}",
+            )
+        )
+
+    def show_parameter_ranges(self) -> None:
+        messagebox.showinfo(
+            "控制参数范围",
+            self._parameter_range_text(),
+            parent=self.root,
+        )
     def _add_action_buttons(self, parent: ttk.Frame, page: str) -> None:
-        ttk.Button(parent, text="发送目标", command=lambda: self.send_page_now(page)).pack(side="left", padx=(0, 8))
-        ttk.Button(parent, text="停止发送", command=lambda: self.stop_page(page)).pack(side="left", padx=(0, 8))
+        send_button = ttk.Button(
+            parent, text="发送目标", command=lambda: self.send_page_now(page)
+        )
+        send_button.pack(side="left", padx=(0, 8))
+        stop_button = ttk.Button(
+            parent, text="停止发送", command=lambda: self.stop_page(page)
+        )
+        stop_button.pack(side="left", padx=(0, 8))
+        self.page_action_buttons[page] = (send_button, stop_button)
 
     def _add_page_buttons(self, parent: ttk.Frame, page: str, target: str, target_name: str) -> None:
         self._add_action_buttons(parent, page)
+        save_button = ttk.Button(
+            parent,
+            text="保存参数",
+            command=lambda: self.save_motor_parameters(target),
+        )
+        save_button.pack(side="left", padx=(0, 8))
+        self.page_save_buttons[page] = save_button
 
     def _select_page(self, page: str, log_change: bool = True) -> None:
         if page not in self.page_frames:
@@ -1162,10 +1929,8 @@ class UpperConsole:
     def _begin_handshake(self, now: float, *, reset_feedback: bool = True) -> None:
         self.parser = FrameParser()
         self.handshaken = False
-        self.flash_query_button.configure(state="disabled")
         if reset_feedback:
             self._reset_feedback_display("等待握手后反馈")
-            self.flash_info_var.set("Flash: 等待握手")
         self.handshake_started_at = now
         self.last_handshake = 0.0
         self.handshake_sequence = None
@@ -1190,7 +1955,11 @@ class UpperConsole:
             variable.set(format_dji_feedback(names[key], "--", status))
 
     def _reset_connection_state(self) -> None:
+        self._cancel_remote_delayed_actions()
         self._active_arm_mask = 0
+        self.remote_action_states.clear()
+        for button in getattr(self, "remote_action_buttons", {}).values():
+            button.configure(text="执行")
         self.connection_requested = False
         self.handshaken = False
         self.handshake_sequence = None
@@ -1206,8 +1975,6 @@ class UpperConsole:
         self.disconnect_button.configure(state="disabled")
         self.board_state_var.set("板端状态: --")
         self.remote_var.set("远程链路: --")
-        self.flash_info_var.set("Flash: --")
-        self.flash_query_button.configure(state="disabled")
         self.j4310_auto_return_pending = None
         self._update_j4310_auto_return_button()
 
@@ -1248,21 +2015,6 @@ class UpperConsole:
             return True
         return False
 
-    def request_flash_info(self, *, automatic: bool = False) -> bool:
-        if not self.transport.connected or not self.handshaken:
-            if not automatic:
-                self.status_var.set("请先连接并完成握手")
-            return False
-        if not self._send(MSG_FLASH_INFO_REQUEST):
-            self.flash_info_var.set("Flash: 查询发送失败")
-            if not automatic:
-                self.status_var.set("Flash 信息查询发送失败")
-            return False
-        self.flash_info_var.set("Flash: 查询中...")
-        if not automatic:
-            self.status_var.set("Flash 信息查询已发送")
-        return True
-
     def _send_estop_frame(self) -> None:
         self._send(MSG_ESTOP, b"\x01")
 
@@ -1277,10 +2029,11 @@ class UpperConsole:
         return "break"
 
     def estop(self) -> None:
+        self._cancel_remote_delayed_actions()
         self._disable_all_outputs()
         self._send_estop_frame()
         self.status_var.set("已发送急停")
-        self.log("急停：板端进入错误状态，需重新上电或按固件流程清错")
+        self.log("急停：全部电机已停止发送；重新发送目标即可恢复控制")
 
     def _disable_all_outputs(self) -> None:
         self._drag_target = None
@@ -1295,14 +2048,14 @@ class UpperConsole:
 
     def _values(self) -> tuple[float, ...]:
         return (
-            float(self.j_position.get()),
-            float(self.j_velocity.get()),
-            float(self.j_kp.get()),
-            float(self.j_kd.get()),
-            float(self.m3508_position_1.get()),
-            float(self.m3508_position_2.get()),
-            float(self.conveyor_position.get()),
-            float(self.gripper_position.get()),
+            self._read_numeric(self.j_position),
+            self._read_numeric(self.j_velocity),
+            self._read_numeric(self.j_kp),
+            self._read_numeric(self.j_kd),
+            self._read_numeric(self.m3508_position_1),
+            self._read_numeric(self.m3508_position_2),
+            self._read_numeric(self.conveyor_position),
+            self._read_numeric(self.gripper_position),
         )
 
     def _mask_for_page(self, page: str) -> int:
@@ -1318,8 +2071,8 @@ class UpperConsole:
         return 0
 
     def _update_j4310_position_range(self) -> None:
-        lower = POSITION_MIN_DEG
-        upper = POSITION_MAX_DEG
+        lower = J4310_POSITION_MIN_DEG
+        upper = J4310_POSITION_MAX_DEG
         value = float(self.j_position.get())
         self.j_position.set(max(lower, min(upper, value)))
         for control in self.j_position_controls:
@@ -1357,8 +2110,8 @@ class UpperConsole:
         elif not self.j4310_auto_return_status_received:
             text = "重启归零：状态未知"
             style = "AutoReturnOff.TButton"
-        elif not self.j4310_auto_return_storage_ready:
-            text = "重启归零：Flash未就绪"
+        elif not self.j4310_auto_return_available:
+            text = "重启归零：不可用"
             style = "AutoReturnOff.TButton"
         else:
             text = (
@@ -1373,6 +2126,8 @@ class UpperConsole:
         interactive = (
             self.handshaken
             and pending is None
+            and self.j4310_auto_return_status_received
+            and self.j4310_auto_return_available
         )
         self.j4310_auto_return_button.configure(
             text=text,
@@ -1388,9 +2143,9 @@ class UpperConsole:
             self.status_var.set("板端未上报重启归零状态，请烧录新固件")
             self.log("J4310 重启归零设置未发送：板端状态协议不支持")
             return
-        if not self.j4310_auto_return_storage_ready:
-            self.status_var.set("J4310 重启归零不可用：Flash 未就绪")
-            self.log("J4310 重启归零设置未发送：H723 Flash 尚未就绪")
+        if not self.j4310_auto_return_available:
+            self.status_var.set("J4310 重启归零不可用：板端不支持")
+            self.log("J4310 重启归零设置未发送：板端功能不可用")
             return
         requested = not self.j4310_auto_return_enabled
         payload = build_motor_action_payload(
@@ -1407,20 +2162,20 @@ class UpperConsole:
         self.status_var.set("J4310 重启归零设置已发送")
         self.log(
             f"J4310 重启归零请求已发送："
-            f"{'开启' if requested else '关闭'}，等待板端持久化回执"
+            f"{'开启' if requested else '关闭'}，等待板端回执"
         )
 
     def _apply_j4310_auto_return_state(self, status: object) -> None:
         if not isinstance(status, dict):
             self.j4310_auto_return_status_received = False
-            self.j4310_auto_return_storage_ready = False
+            self.j4310_auto_return_available = False
             self.j4310_auto_return_active = False
             self.j4310_auto_return_stage = 0
             self._refresh_j4310_status()
             self._update_j4310_auto_return_button()
             return
         self.j4310_auto_return_status_received = True
-        self.j4310_auto_return_storage_ready = bool(status["storage_ready"])
+        self.j4310_auto_return_available = bool(status["available"])
         self.j4310_auto_return_active = bool(status["active"])
         self.j4310_auto_return_stage = int(status["stage"])
         if self.j4310_auto_return_pending is None:
@@ -1428,18 +2183,182 @@ class UpperConsole:
         self._refresh_j4310_status()
         self._update_j4310_auto_return_button()
 
-    def _pid_values(self) -> tuple[float, ...]:
+    def _pid_values(self, page: str | None = None) -> tuple[float, ...]:
+        m2006_key = {
+            "开关门": "conveyor",
+            "夹爪": "gripper",
+        }.get(page, "conveyor")
         groups = (
             self.m3508_speed_pid_vars,
             self.m3508_position_pid_vars,
-            self.m2006_speed_pid_vars,
-            self.m2006_position_pid_vars,
+            self.m2006_speed_pid_vars_by_motor[m2006_key],
+            self.m2006_position_pid_vars_by_motor[m2006_key],
         )
         return tuple(
-            float(group[name].get())
+            self._read_numeric(group[name])
             for group in groups
             for name in ("kp", "ki", "kd", "integral_limit", "output_limit")
         )
+
+    @staticmethod
+    def _parameter_error(
+        label: str,
+        value: float,
+        lower: float,
+        upper: float,
+        unit: str = "",
+    ) -> str | None:
+        range_text = UpperConsole._format_range(lower, upper, unit)
+        if not math.isfinite(value):
+            return f"{label}：不是有效数字；允许范围 {range_text}"
+        if value < lower or value > upper:
+            suffix = f" {unit}" if unit else ""
+            return (
+                f"{label}：当前 {UpperConsole._format_number(value)}{suffix}；"
+                f"允许范围 {range_text}"
+            )
+        return None
+
+    def _pid_parameter_errors(
+        self,
+        pid_values: tuple[float, ...],
+        group_offset: int,
+        group_name: str,
+    ) -> list[str]:
+        errors: list[str] = []
+        fields = (
+            ("Kp", PID_GAIN_MIN, PID_KP_KI_MAX),
+            ("Ki", PID_GAIN_MIN, PID_KP_KI_MAX),
+            ("Kd", PID_GAIN_MIN, PID_KD_MAX),
+            ("积分限幅", PID_GAIN_MIN, PID_INTEGRAL_LIMIT_MAX),
+            ("输出限幅", PID_OUTPUT_LIMIT_MIN, PID_SPEED_OUTPUT_LIMIT_MAX),
+            ("Kp", PID_GAIN_MIN, PID_KP_KI_MAX),
+            ("Ki", PID_GAIN_MIN, PID_KP_KI_MAX),
+            ("Kd", PID_GAIN_MIN, PID_KD_MAX),
+            ("积分限幅", PID_GAIN_MIN, PID_INTEGRAL_LIMIT_MAX),
+            ("输出限幅", PID_OUTPUT_LIMIT_MIN, PID_POSITION_OUTPUT_LIMIT_MAX),
+        )
+        for index, (label, lower, upper) in enumerate(fields):
+            loop = "速度环" if index < 5 else "位置环"
+            error = self._parameter_error(
+                f"{group_name} {loop} {label}",
+                pid_values[group_offset + index],
+                lower,
+                upper,
+            )
+            if error is not None:
+                errors.append(error)
+        return errors
+
+    def _send_parameter_errors(
+        self,
+        page: str,
+        values: tuple[float, ...],
+        enabled: bool,
+        frame_options: dict[str, object],
+    ) -> list[str]:
+        if not enabled:
+            return []
+
+        enable_mask = int(
+            frame_options.get("enable_mask", self._mask_for_page(page))
+        )
+        pid_values = tuple(
+            frame_options.get("pid_values", self._pid_values(page))
+        )
+        errors: list[str] = []
+
+        if enable_mask & ENABLE_J4310_ONLY:
+            j_tau = float(
+                frame_options.get("j_tau", self._read_numeric(self.j_tau))
+            )
+            torque_limit = float(
+                frame_options.get(
+                    "j_torque_limit",
+                    self._read_numeric(self.j_torque_limit),
+                )
+            )
+            j4310_specs = (
+                ("J4310 p_des", values[0], J4310_POSITION_MIN_DEG,
+                 J4310_POSITION_MAX_DEG, "deg"),
+                ("J4310 v_des", values[1], -J4310_VELOCITY_LIMIT,
+                 J4310_VELOCITY_LIMIT, "rad/s"),
+                ("J4310 Kp", values[2], 0.0, J4310_KP_LIMIT, ""),
+                ("J4310 Kd", values[3], 0.0, J4310_KD_LIMIT, ""),
+                ("J4310 tau", j_tau, -J4310_TORQUE_LIMIT,
+                 J4310_TORQUE_LIMIT, "Nm"),
+                ("J4310 力矩限幅", torque_limit, 0.1,
+                 J4310_TORQUE_LIMIT, "Nm"),
+            )
+            for spec in j4310_specs:
+                error = self._parameter_error(*spec)
+                if error is not None:
+                    errors.append(error)
+            if (
+                math.isfinite(j_tau)
+                and math.isfinite(torque_limit)
+                and torque_limit > 0.0
+                and abs(j_tau) > torque_limit
+            ):
+                errors.append(
+                    f"J4310 tau：绝对值 {self._format_number(abs(j_tau))} Nm "
+                    f"超过当前力矩限幅 {self._format_number(torque_limit)} Nm"
+                )
+
+        if enable_mask & ENABLE_M3508_ONLY:
+            for index, (value, target_range) in enumerate(
+                zip(values[4:6], M3508_TARGET_RANGES_DEG), start=1
+            ):
+                error = self._parameter_error(
+                    f"M3508 #{index} 目标位置",
+                    value,
+                    *target_range,
+                    "deg",
+                )
+                if error is not None:
+                    errors.append(error)
+            errors.extend(
+                self._pid_parameter_errors(pid_values, 0, "M3508 / C620")
+            )
+
+        if page in ("开关门", "夹爪"):
+            value_index = 6 if page == "开关门" else 7
+            error = self._parameter_error(
+                f"{page} M2006 目标位置",
+                values[value_index],
+                M2006_POSITION_MIN_DEG,
+                M2006_POSITION_MAX_DEG,
+                "deg",
+            )
+            if error is not None:
+                errors.append(error)
+            errors.extend(
+                self._pid_parameter_errors(pid_values, 10, "M2006 / C610")
+            )
+        return errors
+
+    def _validate_send_parameters(
+        self,
+        page: str,
+        values: tuple[float, ...],
+        enabled: bool,
+        frame_options: dict[str, object],
+    ) -> bool:
+        errors = self._send_parameter_errors(
+            page, values, enabled, frame_options
+        )
+        if not errors:
+            return True
+        details = "\n".join(f"- {error}" for error in errors)
+        self.status_var.set("参数超出范围，目标未发送")
+        self.log(f"目标未发送：参数校验失败：{'；'.join(errors)}")
+        messagebox.showerror(
+            "参数超出范围",
+            f"以下参数无效，已阻止发送：\n{details}\n\n"
+            f"全部允许范围：\n{self._parameter_range_text()}",
+            parent=self.root,
+        )
+        return False
 
     def _build_position_frame(
         self,
@@ -1452,6 +2371,7 @@ class UpperConsole:
         j_torque_limit: float | None = None,
         pid_values: tuple[float, ...] | None = None,
         j4310_stop: bool = False,
+        include_pid: bool = True,
     ) -> bytes:
         mask = (
             self._mask_for_page(page) if enabled else 0
@@ -1461,55 +2381,56 @@ class UpperConsole:
         lower = J4310_RAW_MIN_DEG
         upper = J4310_RAW_MAX_DEG
         j_position_deg = max(lower, min(upper, values[0]))
-        payload = build_extended_position_payload(
+        common_values = (
             mask,
             math.radians(j_position_deg),
             values[1],
             values[2],
             values[3],
-            float(self.j_tau.get()) if j_tau is None else j_tau,
-            float(self.j_torque_limit.get()) if j_torque_limit is None else j_torque_limit,
+            self._read_numeric(self.j_tau) if j_tau is None else j_tau,
+            self._read_numeric(self.j_torque_limit) if j_torque_limit is None else j_torque_limit,
             math.radians(values[4]),
             math.radians(values[5]),
             math.radians(values[6]),
-            math.radians(values[7]),
-            *(self._pid_values() if pid_values is None else pid_values),
+            math.radians(values[7] * GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG),
         )
+        if include_pid:
+            payload = build_extended_position_payload(
+                *common_values,
+                *(self._pid_values(page) if pid_values is None else pid_values),
+            )
+        else:
+            payload = build_position_torque_payload(*common_values)
         return encode_frame(MSG_UPPER_POSITION_CMD, self._next_sequence(), payload)
 
-    def send_page_now(self, page: str) -> None:
-        if not self._page_output_enabled(page):
-            self.status_var.set("请先勾选本页需要控制的电机")
-            self.log(f"{page} 目标未发送：未允许任何电机输出")
-            return
+    def send_page_now(self, page: str) -> bool:
         if page == "开关门":
-            self.gripper_enable.set(False)
+            self.conveyor_enable.set(True)
         elif page == "夹爪":
-            self.conveyor_enable.set(False)
+            self.gripper_enable.set(True)
         values = self._values()
-        if self._send_position_values(page, values, True) and page == "机械臂":
+        if not self._send_position_values(page, values, True):
+            return False
+        if page == "机械臂":
             self._active_arm_mask = self._mask_for_page(page)
             self._sent_arm_values = values
-            self._sent_j_tau = float(self.j_tau.get())
-            self._sent_j_torque_limit = float(self.j_torque_limit.get())
+            self._sent_j_tau = self._read_numeric(self.j_tau)
+            self._sent_j_torque_limit = self._read_numeric(
+                self.j_torque_limit
+            )
             self._sent_pid_values = self._pid_values()
+        self.status_var.set(f"{page} 目标已发送")
+        self.log(f"{page} 目标已发送")
+        return True
 
     def _start_slider_drag(self, target: str) -> None:
         if self._drag_target is not None and self._drag_target != target:
             self._stop_slider_target(self._drag_target)
         enable_var = self._slider_target_enable_var(target)
-        enabled_by_slider = not enable_var.get()
-        if enabled_by_slider:
-            enable_var.set(True)
+        enable_var.set(True)
         if self._send_slider_target(target):
             self._drag_target = target
             self.status_var.set(f"{self._slider_target_name(target)} 滑块控制中")
-            if enabled_by_slider:
-                self.log(
-                    f"{self._slider_target_name(target)} 滑块已自动允许输出"
-                )
-        elif enabled_by_slider:
-            enable_var.set(False)
 
     def _finish_slider_drag(self, target: str) -> None:
         if self._drag_target != target:
@@ -1554,8 +2475,8 @@ class UpperConsole:
             j_torque_limit = self._sent_j_torque_limit
             pid_values = list(self._sent_pid_values)
             if target == "j4310":
-                j_tau = float(self.j_tau.get())
-                j_torque_limit = float(self.j_torque_limit.get())
+                j_tau = self._read_numeric(self.j_tau)
+                j_torque_limit = self._read_numeric(self.j_torque_limit)
             else:
                 pid_values[:10] = self._pid_values()[:10]
 
@@ -1579,10 +2500,6 @@ class UpperConsole:
                 self._sent_pid_values = tuple(pid_values)
             return sent
 
-        if target == "conveyor":
-            self.gripper_enable.set(False)
-        else:
-            self.conveyor_enable.set(False)
         page = "开关门" if target == "conveyor" else "夹爪"
         return self._send_position_values(page, self._values(), True)
 
@@ -1646,17 +2563,17 @@ class UpperConsole:
         self.j4310_feedback_status = state_text
         self._refresh_j4310_status()
 
+    def _apply_j4310_position_feedback(
+        self, valid: bool, position_rad: float
+    ) -> None:
+        if valid:
+            self.j4310_output_position_var.set(
+                f"当前输出轴角度: {math.degrees(position_rad):.2f} deg"
+            )
+
     def _refresh_j4310_status(self) -> None:
-        flash_status = "--"
-        if self.j4310_auto_return_status_received:
-            flash_status = (
-                "是" if self.j4310_auto_return_storage_ready else "否"
-            )
         self.j4310_bus_label.configure(
-            text=(
-                f"反馈状态: {self.j4310_feedback_status}\n"
-                f"Flash 是否就绪: {flash_status}"
-            )
+            text=f"反馈状态: {self.j4310_feedback_status}"
         )
 
     def _arm_group_controls(
@@ -1670,10 +2587,7 @@ class UpperConsole:
 
     def send_arm_group_now(self, group: str) -> bool:
         bit, enable_var, value_indices, display_name = self._arm_group_controls(group)
-        if not enable_var.get():
-            self.status_var.set(f"请先勾选允许 {display_name} 输出")
-            self.log(f"{display_name} 目标未发送：未允许输出")
-            return False
+        enable_var.set(True)
 
         current_values = self._values()
         sent_values = list(self._sent_arm_values)
@@ -1683,8 +2597,8 @@ class UpperConsole:
         j_torque_limit = self._sent_j_torque_limit
         pid_values = list(self._sent_pid_values)
         if group == "j4310":
-            j_tau = float(self.j_tau.get())
-            j_torque_limit = float(self.j_torque_limit.get())
+            j_tau = self._read_numeric(self.j_tau)
+            j_torque_limit = self._read_numeric(self.j_torque_limit)
         else:
             pid_values[:10] = self._pid_values()[:10]
 
@@ -1763,16 +2677,7 @@ class UpperConsole:
             if page == "机械臂":
                 self._active_arm_mask = 0
         self.status_var.set(f"{page} 已停止发送")
-        self.log(f"{page} 已下发停止帧并取消允许输出")
-
-    def _page_output_enabled(self, page: str) -> bool:
-        if page == "机械臂":
-            return bool(self.arm_enable.get() or self.m3508_enable.get())
-        if page == "开关门":
-            return bool(self.conveyor_enable.get())
-        if page == "夹爪":
-            return bool(self.gripper_enable.get())
-        return False
+        self.log(f"{page} 已下发停止帧")
 
     def _send_position_values(
         self,
@@ -1781,6 +2686,13 @@ class UpperConsole:
         enabled: bool,
         **frame_options,
     ) -> bool:
+        if frame_options.get("j4310_stop"):
+            frame_options["j_tau"] = 0.0
+            frame_options["j_torque_limit"] = J4310_TORQUE_LIMIT
+        if not self._validate_send_parameters(
+            page, values, enabled, frame_options
+        ):
+            return False
         if not self.transport.connected:
             self.status_var.set("未连接，目标未发送")
             return False
@@ -1822,10 +2734,8 @@ class UpperConsole:
         self.status_var.set("已握手")
         self.connect_button.configure(text="已握手", state="disabled")
         self.disconnect_button.configure(state="normal")
-        self.flash_query_button.configure(state="normal")
         self._update_j4310_auto_return_button()
         self.log("已收到单片机握手确认，控制链路就绪")
-        self.request_flash_info(automatic=True)
 
     def _update_dji_diagnostics(
         self,
@@ -1897,16 +2807,6 @@ class UpperConsole:
     def _periodic_send(self) -> None:
         if self.connection_requested and self.transport.connected:
             now = time.monotonic()
-            if (
-                self.handshaken
-                and self.last_board_response > 0.0
-                and now - self.last_board_response >=
-                BOARD_RESPONSE_TIMEOUT_MS / 1000.0
-            ):
-                self._begin_handshake(now, reset_feedback=False)
-                self.status_var.set("主控无响应，重新握手中...")
-                self.connect_button.configure(text="重连中...", state="disabled")
-                self.log("主控状态回包超时，保留输出授权并自动重新握手")
             if not self.handshaken:
                 if (not self.handshake_timeout_reported and
                         now - self.handshake_started_at >=
@@ -1966,13 +2866,10 @@ class UpperConsole:
                         f"远程链路: {'活动' if state['remote_active'] else '空闲'} · "
                         f"RX序号 {state['last_rx_sequence']}{fdcan_text}"
                     )
-                    if state["j4310_position_valid"]:
-                        output_deg = math.degrees(state["j4310_position_rad"])
-                        self.j4310_output_position_var.set(
-                            f"当前输出轴角度: {output_deg:.2f} deg"
-                        )
-                    else:
-                        self.j4310_output_position_var.set("当前输出轴角度: -- deg")
+                    self._apply_j4310_position_feedback(
+                        bool(state["j4310_position_valid"]),
+                        float(state["j4310_position_rad"]),
+                    )
                     self._update_j4310_diagnostic(
                         state["j4310_rx_diagnostic"],
                         state["j4310_tx_diagnostic"],
@@ -1994,24 +2891,6 @@ class UpperConsole:
                         [telemetry["diagnostic"]],
                         telemetry["fdcan_rx_counts"],
                         clear_missing=False,
-                    )
-                elif frame.msg_type == MSG_FLASH_INFO:
-                    try:
-                        flash_info = decode_flash_info(frame.payload)
-                    except ValueError:
-                        continue
-                    self.last_board_response = time.monotonic()
-                    self.flash_info_var.set(format_flash_info(flash_info))
-                    self.log(
-                        "Flash 信息: "
-                        f"initialized={int(flash_info['initialized'])}, "
-                        f"w25q_init_status={flash_info['init_status']} "
-                        f"{W25Q_STATUS_NAMES.get(int(flash_info['init_status']), 'W25Q_ERROR_UNKNOWN')}, "
-                        f"JEDEC=0x{int(flash_info['jedec_id']):06X}, "
-                        f"capacity={flash_info['capacity_kb']} KB, "
-                        f"sectors={flash_info['sector_count']}, "
-                        f"page={flash_info['page_size_byte']} B, "
-                        f"sector={flash_info['sector_size_byte']} B"
                     )
                 elif frame.msg_type == MSG_FAULT:
                     self._handle_motor_fault(frame.payload)
@@ -2100,18 +2979,16 @@ class UpperConsole:
             requested = self.j4310_auto_return_pending
             self.j4310_auto_return_pending = None
             if result["status"] == 0 and requested is not None:
-                self.j4310_auto_return_storage_ready = True
+                self.j4310_auto_return_available = True
                 self.j4310_auto_return_enabled = requested
                 state_name = "开启" if requested else "关闭"
                 self.status_var.set(f"J4310 重启归零已{state_name}")
                 self.log(
-                    f"J4310 重启归零已{state_name}并保存到 H723 Flash"
+                    f"J4310 重启归零已{state_name}；配置仅在本次 MCU 运行期间有效"
                 )
             elif result["status"] != 0:
                 self.status_var.set("J4310 重启归零设置失败")
-                self.log(
-                    "J4310 重启归零设置失败：请检查 H723 W25Q Flash"
-                )
+                self.log("J4310 重启归零设置失败：板端拒绝了运行时配置")
             self._update_j4310_auto_return_button()
             return
         if result["action"] != MOTOR_ACTION_J4310_SAVE_ZERO:

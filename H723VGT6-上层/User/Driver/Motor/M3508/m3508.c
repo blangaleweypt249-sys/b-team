@@ -566,11 +566,16 @@ static void M3508_UpdateTimeoutStats(m3508_context_t *context,
 
     command_timed_out = false;
     feedback_timed_out = false;
-    if (context->mode != M3508_MODE_STOP)
+    if ((context->mode != M3508_MODE_STOP) &&
+        (m3508_cfg.command_timeout_ms > 0U))
     {
         command_timed_out =
             (tick_ms - context->command_updated_at_ms) >
             m3508_cfg.command_timeout_ms;
+    }
+    if ((context->mode != M3508_MODE_STOP) &&
+        (m3508_cfg.feedback_timeout_ms > 0U))
+    {
         if (feedback_valid)
         {
             feedback_timed_out =
@@ -610,8 +615,6 @@ bool M3508_Init(const m3508_cfg_t *cfg)
         (cfg->current_limit_a > M3508_CURRENT_MAX_A) ||
         (cfg->position_vel_limit_rad_s <= 0.0f) ||
         (cfg->acceleration_limit_rad_s2 <= 0.0f) ||
-        (cfg->feedback_timeout_ms == 0U) ||
-        (cfg->command_timeout_ms == 0U) ||
         !M3508_IsValidPid(&cfg->speed_pid) ||
         !M3508_IsValidPid(&cfg->position_pid))
     {
@@ -938,8 +941,9 @@ bool M3508_CalcCurrentRaw(uint8_t can_bus,
     if (context->auto_tune.state.status == M3508_AUTOTUNE_RUNNING)
     {
         if (!feedback_valid ||
-            ((tick_ms - feedback.updated_at_ms) >
-             m3508_cfg.feedback_timeout_ms))
+            ((m3508_cfg.feedback_timeout_ms > 0U) &&
+             ((tick_ms - feedback.updated_at_ms) >
+              m3508_cfg.feedback_timeout_ms)))
         {
             M3508_FailAutoTune(context);
             *current_raw = 0;
@@ -1281,7 +1285,9 @@ bool M3508_StartSpeedAutoTune(uint8_t can_bus,
         (relay_current_a <= 0.0f) || (hysteresis_rad_s <= 0.0f) ||
         (safety_velocity_rad_s <= hysteresis_rad_s) ||
         !M3508_GetFeedback(can_bus, motor_id, &feedback) ||
-        ((tick_ms - feedback.updated_at_ms) > m3508_cfg.feedback_timeout_ms) ||
+        ((m3508_cfg.feedback_timeout_ms > 0U) &&
+         ((tick_ms - feedback.updated_at_ms) >
+          m3508_cfg.feedback_timeout_ms)) ||
         (relay_current_a > context->current_limit_a) ||
         (fabsf(feedback.output_vel_rad_s) >= safety_velocity_rad_s))
     {

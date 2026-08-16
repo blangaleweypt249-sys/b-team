@@ -5,6 +5,7 @@
 #include "can_id.h"
 #include "fdcan.h"
 #include "fdcan_dlc.h"
+#include "spi.h"
 #include "usart.h"
 
 #define UART_DMA_RX_BUFFER_SIZE 256U
@@ -39,7 +40,7 @@ __ALIGNED(DCACHE_LINE_SIZE) static uint8_t usart2_rx_buffer[UART_DMA_RX_BUFFER_S
 static UartDmaChannel uart_channels[UART_CHANNEL_COUNT] =
 {
   { &huart4,   uart4_rx_buffer,   COMM_EVENT_UART4_RX,   true,  0U, 0U, 0U, 0U },
-  { &huart5,   uart5_rx_buffer,   COMM_EVENT_UART5_RX,   false, 0U, 0U, 0U, 0U },
+  { &huart5,   uart5_rx_buffer,   COMM_EVENT_UART5_RX,   true,  0U, 0U, 0U, 0U },
   { &huart7,   uart7_rx_buffer,   COMM_EVENT_UART7_RX,   false, 0U, 0U, 0U, 0U },
   { &huart8,   uart8_rx_buffer,   COMM_EVENT_UART8_RX,   false, 0U, 0U, 0U, 0U },
   { &huart9,   uart9_rx_buffer,   COMM_EVENT_UART9_RX,   false, 0U, 0U, 0U, 0U },
@@ -495,6 +496,25 @@ bool CommRuntime_PcTransmitBlocking(const uint8_t *data,
   }
 
   return false;
+}
+
+/* 功能：通过 SPI3 发送一帧；用途：向接收板转发气缸与电子急停状态。 */
+bool CommRuntime_Spi3Transmit(const uint8_t *data, uint16_t size)
+{
+  if ((data == NULL) || (size == 0U))
+  {
+    return false;
+  }
+  if (HAL_SPI_GetState(&hspi3) != HAL_SPI_STATE_READY)
+  {
+    return false;
+  }
+  return HAL_SPI_Transmit(&hspi3, (uint8_t *)data, size, 2U) == HAL_OK;
+}
+
+bool CommRuntime_Spi3TxReady(void)
+{
+  return HAL_SPI_GetState(&hspi3) == HAL_SPI_STATE_READY;
 }
 
 /* 功能：设置上位机控制所用 UART；用途：选择协议收发通道；无返回值表示仅接受合法的 PC 通道枚举。 */

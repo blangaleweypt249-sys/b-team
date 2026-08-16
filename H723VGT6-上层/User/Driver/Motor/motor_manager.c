@@ -115,26 +115,33 @@ bool MotorManager_SetOverride(motor_manager_t *manager,
 bool MotorManager_ClearOverride(motor_manager_t *manager,
                                 size_t motor_index)
 {
+    motor_cmd_t stop_cmd;
+
     if ((manager == NULL) || (motor_index >= manager->motor_count))
     {
         return false;
+    }
+    if (manager->override_enabled[motor_index])
+    {
+        stop_cmd = (motor_cmd_t){ .mode = MOTOR_CMD_STOP };
+        if (manager->cfg[motor_index].protocol_ready &&
+            (manager->send != NULL))
+        {
+            if (manager->send(&manager->cfg[motor_index], &stop_cmd,
+                              manager->send_user_data))
+            {
+                manager->sent_count++;
+            }
+            else
+            {
+                manager->send_fail_count++;
+            }
+        }
     }
     manager->override_enabled[motor_index] = false;
     manager->override_cmd[motor_index] =
         (motor_cmd_t){ .mode = MOTOR_CMD_STOP };
     return true;
-}
-
-void MotorManager_ClearAllOverrides(motor_manager_t *manager)
-{
-    if (manager == NULL)
-    {
-        return;
-    }
-    (void)memset(manager->override_enabled,
-                 0,
-                 sizeof(manager->override_enabled));
-    (void)memset(manager->override_cmd, 0, sizeof(manager->override_cmd));
 }
 
 /* 功能：按周期和相位调度所有已使能电机；用途：在控制循环中发送到期命令并统计结果；无返回值表示结果记录在计数器中。 */
@@ -190,15 +197,12 @@ void MotorManager_StopAll(motor_manager_t *manager)
         return;
     }
 
-    MotorManager_ClearAllOverrides(manager);
-
     for (index = 0U; index < manager->motor_count; index++)
     {
         manager->cmd[index] =
             (motor_cmd_t){ .mode = MOTOR_CMD_GLOBAL_STOP };
 
-        if (manager->enabled[index] &&
-            manager->cfg[index].protocol_ready &&
+        if (manager->cfg[index].protocol_ready &&
             (manager->send != NULL))
         {
             if (manager->send(&manager->cfg[index], &manager->cmd[index],
@@ -213,5 +217,8 @@ void MotorManager_StopAll(motor_manager_t *manager)
         }
 
         manager->enabled[index] = false;
+        manager->override_enabled[index] = false;
+        manager->override_cmd[index] =
+            (motor_cmd_t){ .mode = MOTOR_CMD_STOP };
     }
 }

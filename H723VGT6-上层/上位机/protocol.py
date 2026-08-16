@@ -26,6 +26,7 @@ MSG_UPPER_CMD = 0x10
 MSG_UPPER_POSITION_CMD = 0x12
 MSG_MOTOR_ACTION = 0x13
 MSG_FLASH_INFO_REQUEST = 0x14
+MSG_AUX_CONTROL = 0x15
 MSG_ROBOT_STATE = 0x20
 MSG_MOTOR_ACTION_RESULT = 0x21
 MSG_DJI_TELEMETRY = 0x22
@@ -35,10 +36,22 @@ MSG_FAULT = 0x7F
 
 MOTOR_ACTION_J4310_SAVE_ZERO = 1
 MOTOR_ACTION_J4310_AUTO_RETURN = 2
+MOTOR_ACTION_J4310_ENABLE = 3
 
 # The payload is deliberately fixed so an ACK from another protocol cannot
 # accidentally turn a newly opened serial port into a ready control link.
 HANDSHAKE_MAGIC = b"H723"
+
+# PC_MSG_AUX_CONTROL payload: output state bits followed by a reserved byte.
+# The PC command enters H723 over UART4; H723 forwards the resulting state
+# frame to the F103 receiver over SPI3.
+# bit0/1/2 are the arm, push-block and gripper cylinders; bit3 is the
+# receiver-board PB8/PB9 electronic-stop output.
+AUX_CONTROL_PAYLOAD_SIZE = 2
+AUX_OUTPUT_ARM_CYLINDER = 1 << 0
+AUX_OUTPUT_PUSH_CYLINDER = 1 << 1
+AUX_OUTPUT_GRIPPER_CYLINDER = 1 << 2
+AUX_OUTPUT_ESTOP = 1 << 3
 
 ENABLE_ARM = 1 << 0
 ENABLE_CONVEYOR = 1 << 1
@@ -82,6 +95,14 @@ def build_handshake_frame(sequence: int) -> bytes:
     """Build the request used to establish a PC-to-board control session."""
 
     return encode_frame(MSG_HANDSHAKE, sequence, HANDSHAKE_MAGIC)
+
+
+def build_aux_control_payload(output_bits: int) -> bytes:
+    """Build the two-byte cylinder/electronic-stop command payload."""
+
+    if not 0 <= output_bits <= 0x0F:
+        raise ValueError("auxiliary output bits must fit in the low nibble")
+    return struct.pack("<BB", output_bits, 0)
 
 
 def build_motor_action_payload(
@@ -380,11 +401,11 @@ def decode_robot_state(payload: bytes) -> dict[str, object]:
     else:
         result["j4310_tx_diagnostic"] = None
     if len(payload) == 84:
-        storage_ready, enabled, active, stage = struct.unpack_from(
+        available, enabled, active, stage = struct.unpack_from(
             "<BBBB", payload, 80
         )
         result["j4310_auto_return"] = {
-            "storage_ready": bool(storage_ready),
+            "available": bool(available),
             "enabled": bool(enabled),
             "active": bool(active),
             "stage": stage,

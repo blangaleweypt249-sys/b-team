@@ -88,7 +88,6 @@ bool MotorManager_SetOverride(motor_manager_t *manager,
                               const motor_cmd_t *cmd);
 bool MotorManager_ClearOverride(motor_manager_t *manager,
                                 size_t motor_index);
-void MotorManager_ClearAllOverrides(motor_manager_t *manager);
 void MotorManager_Process(motor_manager_t *manager, uint32_t tick_ms);
 void MotorManager_StopAll(motor_manager_t *manager);
 

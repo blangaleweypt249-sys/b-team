@@ -143,10 +143,12 @@ static bool UpperPcLink_DecodeTarget(const pc_frame_t *frame,
     enable_mask = UpperPcLink_ReadU16(frame->payload);
     value = &frame->payload[2];
 
-    /* Gate and gripper are two independent C610 slots. A command selecting
-     * both is ambiguous and must never be allowed to drive both mechanisms. */
+    /* Extended commands carry one shared C610 PID set, so selecting both
+     * mechanisms would be ambiguous. The compact position command has an
+     * independent target for each slot and may safely command both. */
     if (((enable_mask & UPPER_ENABLE_CONVEYOR) != 0U) &&
-        ((enable_mask & UPPER_ENABLE_GRIPPER) != 0U))
+        ((enable_mask & UPPER_ENABLE_GRIPPER) != 0U) &&
+        (frame->payload_len != UPPER_PC_POSITION_TORQUE_CMD_PAYLOAD_SIZE))
     {
         return false;
     }
@@ -254,7 +256,8 @@ static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
                     UPPER_PC_HANDSHAKE_PAYLOAD_SIZE) == 0))
         {
             UpperPcLink_Accept(link, frame);
-            if (link->remote_active)
+            if ((UPPER_CONTROL_WATCHDOGS_ENABLED != 0U) &&
+                link->remote_active)
             {
                 link->remote_active = false;
                 link->remote_timeout_pending = true;
@@ -286,7 +289,6 @@ static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
             UpperPcLink_Accept(link, frame);
             link->estop_handler(link->user_data);
             link->remote_active = false;
-            link->session_active = false;
         }
         break;
 
@@ -324,7 +326,8 @@ static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
         }
         if ((link->motor_action_handler != NULL) &&
             (((frame->payload_len == UPPER_PC_MOTOR_ACTION_PAYLOAD_SIZE) &&
-              (frame->payload[0] == UPPER_PC_ACTION_J4310_SAVE_ZERO)) ||
+              ((frame->payload[0] == UPPER_PC_ACTION_J4310_SAVE_ZERO) ||
+               (frame->payload[0] == UPPER_PC_ACTION_J4310_ENABLE))) ||
              ((frame->payload_len ==
                UPPER_PC_MOTOR_CONFIG_ACTION_PAYLOAD_SIZE) &&
               (frame->payload[0] == UPPER_PC_ACTION_J4310_AUTO_RETURN) &&
@@ -338,6 +341,26 @@ static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
                                         UPPER_PC_MOTOR_CONFIG_ACTION_PAYLOAD_SIZE) ?
                                        frame->payload[3] : 0U,
                                        link->user_data);
+        }
+        else
+        {
+            link->command_error_count++;
+        }
+        break;
+
+    case PC_MSG_AUX_CONTROL:
+        if (!UpperPcLink_IsSessionActive(link,
+                                         link->current_rx_tick_ms))
+        {
+            break;
+        }
+        if ((frame->payload_len == UPPER_PC_AUX_CONTROL_PAYLOAD_SIZE) &&
+            ((frame->payload[0] & 0xF0U) == 0U) &&
+            (frame->payload[1] == 0U) &&
+            (link->aux_control_handler != NULL))
+        {
+            UpperPcLink_Accept(link, frame);
+            link->aux_control_handler(frame->payload[0], link->user_data);
         }
         else
         {
@@ -382,6 +405,16 @@ void UpperPcLink_Init(upper_pc_link_t *link,
     link->user_data = user_data;
 }
 
+/* 功能：注册气缸与电子急停控制回调；用途：把独立辅助输出命令交给 SPI3 转发层。 */
+void UpperPcLink_SetAuxControlHandler(upper_pc_link_t *link,
+                                      upper_pc_aux_control_handler_t handler)
+{
+    if (link != NULL)
+    {
+        link->aux_control_handler = handler;
+    }
+}
+
 /* 功能：向链路输入一段接收数据；用途：更新时间并驱动流式协议解析；完整消息会自动进入帧处理函数。 */
 void UpperPcLink_Push(upper_pc_link_t *link,
                       const uint8_t *data,
@@ -406,6 +439,13 @@ bool UpperPcLink_IsTimedOut(upper_pc_link_t *link, uint32_t tick_ms)
         return false;
     }
 
+    if (UPPER_CONTROL_WATCHDOGS_ENABLED == 0U)
+    {
+        link->remote_timeout_pending = false;
+        (void)tick_ms;
+        return false;
+    }
+
     if (link->remote_timeout_pending)
     {
         link->remote_timeout_pending = false;
@@ -427,6 +467,12 @@ bool UpperPcLink_IsSessionActive(upper_pc_link_t *link, uint32_t tick_ms)
     if ((link == NULL) || !link->session_active)
     {
         return false;
+    }
+
+    if (UPPER_CONTROL_WATCHDOGS_ENABLED == 0U)
+    {
+        (void)tick_ms;
+        return true;
     }
 
     if ((tick_ms - link->last_rx_tick_ms) > UPPER_PC_TIMEOUT_MS)
@@ -607,12 +653,11 @@ size_t UpperPcLink_BuildState(upper_pc_link_t *link,
     }
     if (j4310_auto_return != NULL)
     {
-        payload[80] = j4310_auto_return->storage_ready ? 1U : 0U;
+        payload[80] = j4310_auto_return->available ? 1U : 0U;
         payload[81] = j4310_auto_return->enabled ? 1U : 0U;
         payload[82] = j4310_auto_return->active ? 1U : 0U;
         payload[83] = j4310_auto_return->stage;
     }
-
     return PcProtocol_Encode(PC_MSG_ROBOT_STATE,
                              link->tx_sequence++,
                              payload,

@@ -81,6 +81,12 @@ void Error_Handler(void);
 #define FLASH_MISO_GPIO_Port GPIOA
 #define FLASH_MOSI_Pin GPIO_PIN_7
 #define FLASH_MOSI_GPIO_Port GPIOA
+#define AUX_SPI3_SCK_Pin GPIO_PIN_3
+#define AUX_SPI3_SCK_GPIO_Port GPIOB
+#define AUX_SPI3_MISO_Pin GPIO_PIN_4
+#define AUX_SPI3_MISO_GPIO_Port GPIOB
+#define AUX_SPI3_MOSI_Pin GPIO_PIN_5
+#define AUX_SPI3_MOSI_GPIO_Port GPIOB
 #define UART7_RX_Pin GPIO_PIN_7
 #define UART7_RX_GPIO_Port GPIOE
 #define UART7_TX_Pin GPIO_PIN_8

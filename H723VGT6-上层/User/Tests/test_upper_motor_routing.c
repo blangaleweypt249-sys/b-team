@@ -14,6 +14,8 @@
 
 #define TEST_TX_CAPACITY  16U
 #define TEST_DJI_ZERO_STABLE_FRAMES 5U
+#define TEST_PI 3.14159265359f
+#define TEST_TWO_PI 6.28318530718f
 
 typedef struct
 {
@@ -215,6 +217,7 @@ static void Test_CheckStartupIsReadOnly(void)
 static void Test_CheckM2006GroupSlotsAreIndependent(void)
 {
     motor_cmd_t command = {0};
+    m2006_motion_state_t motion;
 
     assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
     Test_LockDjiZero(3U, NODE_GATE_M2006, 4000U, 10U);
@@ -232,7 +235,7 @@ static void Test_CheckM2006GroupSlotsAreIndependent(void)
     assert(UpperMotorPort_Flush());
     assert(test_tx_count == 1U);
     assert(test_tx[0].can_bus == 3U);
-    assert(Test_ReadI16Be(&test_tx[0].frame.data[0]) > 0);
+    assert(Test_ReadI16Be(&test_tx[0].frame.data[0]) < 0);
     assert(Test_ReadI16Be(&test_tx[0].frame.data[2]) == 0);
 
     Test_ResetTx();
@@ -260,7 +263,7 @@ static void Test_CheckM2006GroupSlotsAreIndependent(void)
         &upper_motor_cfg[UPPER_MOTOR_CONVEYOR_M2006], &command, NULL));
     assert(UpperMotorPort_Flush());
     assert(test_tx_count == 1U);
-    assert(Test_ReadI16Be(&test_tx[0].frame.data[0]) > 0);
+    assert(Test_ReadI16Be(&test_tx[0].frame.data[0]) < 0);
     assert(Test_ReadI16Be(&test_tx[0].frame.data[2]) == 0);
 
     /* A zero-degree position target at the boot-calibrated position produces
@@ -274,12 +277,61 @@ static void Test_CheckM2006GroupSlotsAreIndependent(void)
     assert(test_tx_count == 1U);
     assert(Test_ReadI16Be(&test_tx[0].frame.data[0]) == 0);
     assert(Test_ReadI16Be(&test_tx[0].frame.data[2]) == 0);
+
+    command = (motor_cmd_t){ .mode = MOTOR_CMD_POSITION, .pos_rad = 0.5f };
+    UpperMotorPort_BeginCycle(14U);
+    assert(UpperMotorPort_Send(
+        &upper_motor_cfg[UPPER_MOTOR_CONVEYOR_M2006], &command, NULL));
+    assert(M2006_GetMotionState(CAN_BUS_AUX,
+                                NODE_GATE_M2006,
+                                &motion));
+    assert(Test_FloatClose(motion.final_position_rad,
+                           -0.5f,
+                           0.000001f));
+}
+
+static void Test_CheckGripperUsesIndependentPositionCutoff(void)
+{
+    motor_cmd_t command = {0};
+    m2006_feedback_t feedback;
+    uint16_t encoder;
+    uint32_t sample;
+
+    assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
+    encoder = 1000U;
+    Test_LockDjiZero(CAN_BUS_AUX, NODE_GATE_M2006, encoder, 10U);
+    Test_LockDjiZero(CAN_BUS_AUX, NODE_GRIPPER_M2006, encoder, 10U);
+    for (sample = 0U; sample < 80U; sample++)
+    {
+        encoder = (uint16_t)((encoder + 4000U) % 8192U);
+        Test_FeedDji(CAN_BUS_AUX, NODE_GATE_M2006, encoder, 11U + sample);
+        Test_FeedDji(CAN_BUS_AUX, NODE_GRIPPER_M2006, encoder, 11U + sample);
+    }
+    assert(M2006_GetFeedback(CAN_BUS_AUX, NODE_GATE_M2006, &feedback));
+    assert(feedback.output_pos_rad > UPPER_M2006_POSITION_CUTOFF_RAD);
+    assert(feedback.output_pos_rad <
+           UPPER_GRIPPER_M2006_POSITION_CUTOFF_RAD);
+
+    Test_ResetTx();
+    UpperMotorPort_BeginCycle(33U);
+    command.mode = MOTOR_CMD_CURRENT;
+    command.current_a = 1.0f;
+    assert(UpperMotorPort_Send(
+        &upper_motor_cfg[UPPER_MOTOR_CONVEYOR_M2006], &command, NULL));
+    assert(UpperMotorPort_Send(
+        &upper_motor_cfg[UPPER_MOTOR_GRIPPER_M2006], &command, NULL));
+    assert(UpperMotorPort_Flush());
+    assert(test_tx_count == 1U);
+    assert(test_tx[0].can_bus == CAN_BUS_AUX);
+    assert(Test_ReadI16Be(&test_tx[0].frame.data[0]) == 0);
+    assert(Test_ReadI16Be(&test_tx[0].frame.data[2]) > 0);
 }
 
 /* 功能：验证 M3508 分组帧四个电流槽相互独立；用途：防止单节点命令污染同组其他电机；断言失败会终止测试。 */
 static void Test_CheckM3508GroupSlotsAreIndependent(void)
 {
     motor_cmd_t command = {0};
+    m3508_motion_state_t motion;
 
     assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
     Test_LockDjiZero(2U, 1U, 4000U, 10U);
@@ -313,7 +365,18 @@ static void Test_CheckM3508GroupSlotsAreIndependent(void)
     assert(test_tx_count == 1U);
     assert(test_tx[0].can_bus == 2U);
     assert(Test_ReadI16Be(&test_tx[0].frame.data[0]) == 0);
-    assert(Test_ReadI16Be(&test_tx[0].frame.data[2]) < 0);
+    assert(Test_ReadI16Be(&test_tx[0].frame.data[2]) > 0);
+
+    command = (motor_cmd_t){ .mode = MOTOR_CMD_POSITION, .pos_rad = 0.5f };
+    UpperMotorPort_BeginCycle(12U);
+    assert(UpperMotorPort_Send(
+        &upper_motor_cfg[UPPER_MOTOR_ARM_M3508_1], &command, NULL));
+    assert(M3508_GetMotionState(CAN_BUS_ARM_M3508,
+                                NODE_ARM_M3508_1,
+                                &motion));
+    assert(Test_FloatClose(motion.final_position_rad,
+                           0.5f,
+                           0.000001f));
 }
 
 /* 功能：验证 DJI 反馈中断后重新稳定可恢复零点校准；用途：覆盖掉线重连路径；断言失败会终止测试。 */
@@ -370,6 +433,11 @@ static void Test_CheckDjiRestartFeedbackCalibration(void)
     assert(m3508_feedback.output_pos_rad > 0.0f);
     assert(M2006_GetFeedback(3U, 1U, &m2006_feedback));
     assert(m2006_feedback.output_pos_rad > 0.0f);
+    diagnostic_count = UpperMotorPort_GetDjiDiagnostics(
+                           2U, diagnostics, 4U);
+    assert(diagnostic_count == 4U);
+    assert(diagnostics[0].relative_output_position_rad > 0.0f);
+    assert(diagnostics[2].relative_output_position_rad < 0.0f);
     assert(test_tx_count == 0U);
 }
 
@@ -393,6 +461,93 @@ static void Test_FeedJ4310State(uint32_t tick_ms, uint8_t state)
     frame.dlc = 8U;
     frame.data[0] = (uint8_t)((state << 4U) | NODE_ARM_J4310);
     UpperMotorPort_OnFrame(1U, &frame, tick_ms);
+}
+
+static void Test_FeedJ4310Position(float mechanism_position_rad,
+                                   uint32_t tick_ms,
+                                   uint8_t state)
+{
+    can_frame_t frame = {0};
+    float protocol_position_rad;
+    float normalized;
+    uint16_t raw;
+
+    protocol_position_rad = mechanism_position_rad *
+                            UPPER_J4310_DIRECTION_SIGN;
+    normalized = (protocol_position_rad + UPPER_J4310_POSITION_MAX_RAD) /
+                 (2.0f * UPPER_J4310_POSITION_MAX_RAD);
+    raw = (uint16_t)(normalized * 65535.0f + 0.5f);
+    frame.id = CAN_J4310_MASTER_ID;
+    frame.dlc = 8U;
+    frame.data[0] = (uint8_t)((state << 4U) | NODE_ARM_J4310);
+    frame.data[1] = (uint8_t)(raw >> 8U);
+    frame.data[2] = (uint8_t)raw;
+    UpperMotorPort_OnFrame(CAN_BUS_ARM_J4310, &frame, tick_ms);
+}
+
+static void Test_CheckJ4310PowerCyclePositionUnwrap(void)
+{
+    motor_cmd_t command = {0};
+    upper_j4310_feedback_t feedback;
+
+    assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
+    Test_FeedJ4310Position(0.5f * TEST_PI, 10U, 0x01U);
+    UpperMotorPort_BeginCycle(10U);
+    assert(UpperMotorPort_GetJ4310Feedback(CAN_BUS_ARM_J4310,
+                                           NODE_ARM_J4310,
+                                           &feedback));
+    assert(Test_FloatClose(feedback.position_rad,
+                           0.5f * TEST_PI,
+                           0.001f));
+
+    /* The MCU remains powered while the motor restarts. The single-turn
+       absolute encoder reports physical 200 deg as the equivalent -160 deg. */
+    Test_FeedJ4310Position(-160.0f * TEST_PI / 180.0f,
+                           100U,
+                           0x01U);
+    UpperMotorPort_BeginCycle(100U);
+    assert(UpperMotorPort_GetJ4310Feedback(CAN_BUS_ARM_J4310,
+                                           NODE_ARM_J4310,
+                                           &feedback));
+    assert(Test_FloatClose(feedback.position_rad,
+                           200.0f * TEST_PI / 180.0f,
+                           0.001f));
+    assert(UpperMotorPort_EnableJ4310(CAN_BUS_ARM_J4310,
+                                      NODE_ARM_J4310));
+
+    command.mode = MOTOR_CMD_MIT;
+    command.kp = 5.0f;
+    command.kd = 0.5f;
+    command.pos_rad = 0.0f;
+    Test_ResetTx();
+    assert(UpperMotorPort_Send(
+        &upper_motor_cfg[UPPER_MOTOR_ARM_J4310], &command, NULL));
+    assert(test_tx_count == 1U);
+    assert(Test_FloatClose(Test_ReadJ4310MitPosition(&test_tx[0].frame),
+                           TEST_TWO_PI,
+                           0.001f));
+
+    /* Follow the commanded branch to the physical zero. The logical
+       feedback must converge from 200 deg to 0 deg without changing turns. */
+    Test_FeedJ4310Position(-200.0f * TEST_PI / 180.0f, 110U, 0x01U);
+    Test_FeedJ4310Position(-250.0f * TEST_PI / 180.0f, 120U, 0x01U);
+    Test_FeedJ4310Position(-300.0f * TEST_PI / 180.0f, 130U, 0x01U);
+    Test_FeedJ4310Position(-350.0f * TEST_PI / 180.0f, 140U, 0x01U);
+    Test_FeedJ4310Position(-TEST_TWO_PI, 150U, 0x01U);
+    UpperMotorPort_BeginCycle(150U);
+    assert(UpperMotorPort_GetJ4310Feedback(CAN_BUS_ARM_J4310,
+                                           NODE_ARM_J4310,
+                                           &feedback));
+    assert(Test_FloatClose(feedback.position_rad, 0.0f, 0.002f));
+
+    command.pos_rad = 0.5f * TEST_PI;
+    Test_ResetTx();
+    assert(UpperMotorPort_Send(
+        &upper_motor_cfg[UPPER_MOTOR_ARM_J4310], &command, NULL));
+    assert(test_tx_count == 1U);
+    assert(Test_FloatClose(Test_ReadJ4310MitPosition(&test_tx[0].frame),
+                           1.5f * TEST_PI,
+                           0.002f));
 }
 
 /* 功能：验证软件力矩限幅与协议 TMAX 完全分离；用途：防止 GUI 限幅改变 MIT 编解码比例；断言失败会终止测试。 */
@@ -521,6 +676,8 @@ static void Test_SendAll(uint32_t tick_ms)
 static void Test_CheckTopology(void)
 {
     assert(UPPER_CONTROL_FREQUENCY_HZ == 1000U);
+    assert(UPPER_M3508_1_DIRECTION_SIGN == 1.0f);
+    assert(UPPER_M3508_2_DIRECTION_SIGN == -1.0f);
     assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_1].can_bus == 2U);
     assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_1].node_id == 1U);
     assert(upper_motor_cfg[UPPER_MOTOR_ARM_M3508_2].can_bus == 2U);
@@ -548,13 +705,13 @@ static void Test_CheckFirstCycle(void)
     assert(test_tx[1].can_bus == 2U);
     assert(test_tx[1].frame.id == 0x200U);
     assert(Test_ReadI16Be(&test_tx[1].frame.data[0]) > 0);
-    assert(Test_ReadI16Be(&test_tx[1].frame.data[2]) > 0);
+    assert(Test_ReadI16Be(&test_tx[1].frame.data[2]) < 0);
     assert(Test_ReadI16Be(&test_tx[1].frame.data[4]) == 0);
     assert(Test_ReadI16Be(&test_tx[1].frame.data[6]) == 0);
 
     assert(test_tx[2].can_bus == 3U);
     assert(test_tx[2].frame.id == 0x200U);
-    assert(Test_ReadI16Be(&test_tx[2].frame.data[0]) > 0);
+    assert(Test_ReadI16Be(&test_tx[2].frame.data[0]) < 0);
     assert(Test_ReadI16Be(&test_tx[2].frame.data[2]) < 0);
     assert(Test_ReadI16Be(&test_tx[2].frame.data[4]) == 0);
     assert(Test_ReadI16Be(&test_tx[2].frame.data[6]) == 0);
@@ -618,6 +775,24 @@ static void Test_CheckJ4310EnableConfirmation(void)
         &upper_motor_cfg[UPPER_MOTOR_ARM_J4310], &command, NULL));
     assert(test_tx_count == 1U);
     assert(Test_IsJ4310Special(&test_tx[0].frame, 0xFDU));
+}
+
+static void Test_CheckJ4310EnableOnly(void)
+{
+    assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
+    Test_ResetTx();
+    UpperMotorPort_BeginCycle(50U);
+    assert(UpperMotorPort_EnableJ4310(CAN_BUS_ARM_J4310,
+                                      NODE_ARM_J4310));
+    assert(test_tx_count == 1U);
+    assert(Test_IsJ4310Special(&test_tx[0].frame, 0xFCU));
+
+    Test_FeedJ4310State(50U, 0x01U);
+    Test_ResetTx();
+    UpperMotorPort_BeginCycle(51U);
+    assert(UpperMotorPort_EnableJ4310(CAN_BUS_ARM_J4310,
+                                      NODE_ARM_J4310));
+    assert(test_tx_count == 0U);
 }
 
 /* 功能：验证 J4310 各参考控制模式的帧格式和状态切换；用途：覆盖 MIT、位置速度及速度路由；断言失败会终止测试。 */
@@ -752,6 +927,14 @@ static void Test_CheckDjiReferenceControl(void)
         assert(M2006_CalcCurrentRaw(3U, 1U, tick_ms, &current_raw));
         assert(M3508_GetMotionState(2U, 1U, &m3508_motion));
         assert(M2006_GetMotionState(3U, 1U, &m2006_motion));
+        if (tick_ms == 1250U)
+        {
+            assert(!m2006_motion.trajectory_active);
+        }
+        if (tick_ms == 1350U)
+        {
+            assert(!m3508_motion.trajectory_active);
+        }
         if (m3508_motion.reference_velocity_rad_s > max_velocity)
         {
             max_velocity = m3508_motion.reference_velocity_rad_s;
@@ -773,18 +956,20 @@ static void Test_CheckDjiReferenceControl(void)
     assert(max_acceleration <= UPPER_M3508_ACCEL_LIMIT_RAD_S2 + 0.01f);
 
     assert(M3508_CalcCurrentRaw(2U, 1U, 1701U, &current_raw));
-    assert(current_raw == 0);
+    assert(current_raw != 0);
     assert(M3508_GetMotionState(2U, 1U, &m3508_motion));
-    assert(Test_FloatClose(m3508_motion.current_command_a,
-                           0.0f,
-                           0.000001f));
+    assert(!Test_FloatClose(m3508_motion.current_command_a,
+                            0.0f,
+                            0.000001f));
     Test_FeedDjiSpeed(2U, 1U, 0x1000U, 0, 1702U);
     assert(M3508_SetTarget(2U, 1U, M3508_MODE_POSITION,
                            m3508_target, 1702U));
     assert(M3508_CalcCurrentRaw(2U, 1U, 1702U, &current_raw));
     assert(M3508_GetMotionState(2U, 1U, &m3508_motion));
-    assert(m3508_motion.trajectory_active);
-    assert(m3508_motion.trajectory_progress < 0.01f);
+    assert(!m3508_motion.trajectory_active);
+    assert(Test_FloatClose(m3508_motion.trajectory_progress,
+                           1.0f,
+                           0.000001f));
 
     assert(M3508_StartSpeedAutoTune(2U, 1U, 1.0f, 0.5f, 5.0f,
                                     1702U));
@@ -840,15 +1025,18 @@ int main(void)
     uint32_t j4310_mode_tick_ms;
 
     Test_CheckTopology();
+    Test_CheckJ4310PowerCyclePositionUnwrap();
     assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
     Test_CheckJ4310TorqueLimitMapping();
     Test_CheckJ4310RxDiagnostics();
+    Test_CheckJ4310EnableOnly();
     assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
     Test_CheckJ4310EnableConfirmation();
     assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
     Test_CheckStartupIsReadOnly();
     Test_CheckM3508GroupSlotsAreIndependent();
     Test_CheckM2006GroupSlotsAreIndependent();
+    Test_CheckGripperUsesIndependentPositionCutoff();
     assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
     Test_CheckDjiStartupFeedbackCalibration();
 
@@ -961,6 +1149,10 @@ int main(void)
     assert(Test_FloatClose(j4310_feedback.position_rad,
                             12.5f,
                             0.001f));
+    assert(Test_FloatClose(j4310_feedback.torque_nm,
+                            UPPER_J4310_TORQUE_MAP_MAX_NM,
+                            0.001f));
+    assert(j4310_feedback.updated_at_ms == 201U);
     assert(j4310_feedback.state == 0x00U);
     UpperMotorPort_BeginCycle(252U);
     assert(!UpperMotorPort_GetJ4310OutputPosition(1U,

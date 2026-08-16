@@ -24,6 +24,19 @@ static bool Conveyor_PidEqual(const upper_pid_cfg_t *left,
     return memcmp(left, right, sizeof(*left)) == 0;
 }
 
+static float Conveyor_Clamp(float value, float lower, float upper)
+{
+    if (value < lower)
+    {
+        return lower;
+    }
+    if (value > upper)
+    {
+        return upper;
+    }
+    return value;
+}
+
 /* 功能：校验传送机构目标并生成 M2006 命令；用途：把上层速度或位置需求转换为驱动输入；返回 true 表示转换成功。 */
 bool Conveyor_Calc(const conveyor_target_t *target,
                    conveyor_output_t *output)
@@ -33,11 +46,22 @@ bool Conveyor_Calc(const conveyor_target_t *target,
         return false;
     }
 
+    (void)memset(output, 0, sizeof(*output));
+    if (!target->enabled)
+    {
+        output->m2006.mode = MOTOR_CMD_STOP;
+        return true;
+    }
+
     if (target->position_mode)
     {
         if (!isfinite(target->m2006_pos_rad) ||
-            (target->m2006_pos_rad < -UPPER_M2006_POSITION_LIMIT_RAD) ||
-            (target->m2006_pos_rad > UPPER_M2006_POSITION_LIMIT_RAD))
+            (target->m2006_pos_rad <
+             -UPPER_M2006_POSITION_LIMIT_RAD -
+             UPPER_M2006_POSITION_EPSILON_RAD) ||
+            (target->m2006_pos_rad >
+             UPPER_M2006_POSITION_LIMIT_RAD +
+             UPPER_M2006_POSITION_EPSILON_RAD))
         {
             return false;
         }
@@ -64,7 +88,10 @@ bool Conveyor_Calc(const conveyor_target_t *target,
     output->m2006 = (motor_cmd_t)
     {
         .mode = target->position_mode ? MOTOR_CMD_POSITION : MOTOR_CMD_VELOCITY,
-        .pos_rad = target->position_mode ? target->m2006_pos_rad : 0.0f,
+        .pos_rad = target->position_mode ?
+                   Conveyor_Clamp(target->m2006_pos_rad,
+                                  -UPPER_M2006_POSITION_LIMIT_RAD,
+                                  UPPER_M2006_POSITION_LIMIT_RAD) : 0.0f,
         .vel_rad_s = target->m2006_vel_rad_s
     };
     return true;

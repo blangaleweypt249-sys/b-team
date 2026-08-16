@@ -5,7 +5,7 @@
 
 #define J4310_AUTO_RETURN_CONTROL_PERIOD_MS       10U
 #define J4310_AUTO_RETURN_MAX_VELOCITY_RAD_S       2.0f
-#define J4310_AUTO_RETURN_MAX_ACCEL_RAD_S2         5.0f
+#define J4310_AUTO_RETURN_MAX_ACCEL_RAD_S2        10.0f
 #define J4310_AUTO_RETURN_SETTLE_POSITION_RAD      0.03f
 #define J4310_AUTO_RETURN_SETTLE_VELOCITY_RAD_S    0.20f
 #define J4310_AUTO_RETURN_QUINTIC_VELOCITY_BOUND   1.875f
@@ -125,7 +125,6 @@ void J4310AutoReturn_Init(j4310_auto_return_t *control,
     }
     (void)memset(control, 0, sizeof(*control));
     control->enabled = enabled;
-    control->reconnect_armed = enabled;
     control->stage = enabled ? J4310_AUTO_RETURN_ARMED :
                                J4310_AUTO_RETURN_DISABLED;
 }
@@ -140,7 +139,8 @@ void J4310AutoReturn_Configure(j4310_auto_return_t *control,
     }
     control->enabled = enabled;
     control->online = feedback_fresh;
-    control->reconnect_armed = enabled && !feedback_fresh;
+    control->reconnect_armed = enabled && control->seen_online &&
+                               !feedback_fresh;
     control->owns_control = false;
     control->target_position_rad = 0.0f;
     control->target_velocity_rad_s = 0.0f;
@@ -169,42 +169,51 @@ void J4310AutoReturn_Update(j4310_auto_return_t *control,
                             float velocity_rad_s,
                             bool control_allowed)
 {
+    bool valid_feedback;
+    bool was_online;
+
     if (control == NULL)
     {
         return;
     }
-    if (!control->enabled)
-    {
-        control->online = feedback_fresh;
-        control->reconnect_armed = false;
-        control->owns_control = false;
-        control->stage = J4310_AUTO_RETURN_DISABLED;
-        return;
-    }
-    if (!control_allowed)
-    {
-        control->owns_control = false;
-        control->stage = J4310_AUTO_RETURN_ARMED;
-        return;
-    }
-    if (!feedback_fresh || !isfinite(position_rad) ||
-        !isfinite(velocity_rad_s))
+    valid_feedback = feedback_fresh && isfinite(position_rad) &&
+                     isfinite(velocity_rad_s);
+    if (!valid_feedback)
     {
         if (control->online || control->owns_control)
         {
             control->online = false;
-            control->reconnect_armed = true;
+            control->reconnect_armed = control->enabled &&
+                                       control_allowed &&
+                                       control->seen_online;
             control->owns_control = false;
-            control->stage = J4310_AUTO_RETURN_ARMED;
         }
+        control->stage = control->enabled ? J4310_AUTO_RETURN_ARMED :
+                                            J4310_AUTO_RETURN_DISABLED;
         return;
     }
 
-    if (!control->online)
+    was_online = control->online;
+    control->online = true;
+    if (!control->seen_online)
     {
-        control->online = true;
+        control->seen_online = true;
+        control->reconnect_armed = false;
+        control->owns_control = false;
+        control->stage = control->enabled ? J4310_AUTO_RETURN_ARMED :
+                                            J4310_AUTO_RETURN_DISABLED;
+        return;
     }
-    if (control->reconnect_armed && !control->owns_control)
+    if (!control->enabled || !control_allowed)
+    {
+        control->reconnect_armed = false;
+        control->owns_control = false;
+        control->stage = control->enabled ? J4310_AUTO_RETURN_ARMED :
+                                            J4310_AUTO_RETURN_DISABLED;
+        return;
+    }
+    if (!was_online && control->reconnect_armed &&
+        !control->owns_control)
     {
         J4310AutoReturn_Start(control,
                               tick_ms,
@@ -229,4 +238,9 @@ void J4310AutoReturn_Update(j4310_auto_return_t *control,
     {
         J4310AutoReturn_Sample(control, tick_ms);
     }
+}
+
+bool J4310AutoReturn_IsActive(const j4310_auto_return_t *control)
+{
+    return (control != NULL) && control->owns_control;
 }

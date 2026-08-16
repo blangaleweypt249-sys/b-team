@@ -15,6 +15,8 @@
 #define UPPER_DJI_GROUP_COUNT         2U
 #define UPPER_DJI_ENCODER_COUNTS      8192LL
 #define UPPER_DJI_TWO_PI              6.28318530718f
+#define UPPER_J4310_PI                3.14159265359f
+#define UPPER_J4310_TWO_PI            6.28318530718f
 #define UPPER_J4310_STATE_ENABLED     0x01U
 #define UPPER_J4310_ENABLE_RETRY_MS   20U
 
@@ -36,9 +38,12 @@ static bool j4310_fault_disable_sent[
 static uint32_t j4310_enable_last_sent_ms[
     UPPER_MOTOR_PORT_MAX_NODE_ID + 1U];
 static j4310_mode_t j4310_mode[UPPER_MOTOR_PORT_MAX_NODE_ID + 1U];
-static bool j4310_session_zero_valid[
+static bool j4310_position_valid[UPPER_MOTOR_PORT_MAX_NODE_ID + 1U];
+static float j4310_last_raw_position_rad[
     UPPER_MOTOR_PORT_MAX_NODE_ID + 1U];
-static float j4310_session_zero_position_rad[
+static float j4310_continuous_position_rad[
+    UPPER_MOTOR_PORT_MAX_NODE_ID + 1U];
+static float j4310_position_offset_rad[
     UPPER_MOTOR_PORT_MAX_NODE_ID + 1U];
 static bool dji_group_dirty[UPPER_CAN_BUS_COUNT][UPPER_DJI_GROUP_COUNT];
 static bool upper_motor_active[MOTOR_MANAGER_MAX_COUNT];
@@ -55,6 +60,106 @@ static bool UpperMotorPort_IsDjiModel(motor_model_t model)
 {
     return (model == MOTOR_MODEL_M3508) ||
            (model == MOTOR_MODEL_M2006);
+}
+
+static float UpperMotorPort_DirectionSign(const motor_cfg_t *cfg)
+{
+    if ((cfg != NULL) && (cfg->model == MOTOR_MODEL_M3508) &&
+        (cfg->can_bus == CAN_BUS_ARM_M3508))
+    {
+        if (cfg->node_id == NODE_ARM_M3508_1)
+        {
+            return UPPER_M3508_1_DIRECTION_SIGN;
+        }
+        if (cfg->node_id == NODE_ARM_M3508_2)
+        {
+            return UPPER_M3508_2_DIRECTION_SIGN;
+        }
+    }
+    if ((cfg != NULL) && (cfg->model == MOTOR_MODEL_M2006) &&
+        (cfg->can_bus == CAN_BUS_AUX) &&
+        (cfg->node_id == NODE_GATE_M2006))
+    {
+        return UPPER_GATE_M2006_DIRECTION_SIGN;
+    }
+    return 1.0f;
+}
+
+static float UpperMotorPort_M2006PositionCutoff(const motor_cfg_t *cfg)
+{
+    if ((cfg != NULL) && (cfg->model == MOTOR_MODEL_M2006) &&
+        (cfg->can_bus == CAN_BUS_AUX) &&
+        (cfg->node_id == NODE_GRIPPER_M2006))
+    {
+        return UPPER_GRIPPER_M2006_POSITION_CUTOFF_RAD;
+    }
+    return UPPER_M2006_POSITION_CUTOFF_RAD;
+}
+
+static float UpperMotorPort_WrapJ4310Delta(float delta_rad)
+{
+    while (delta_rad > UPPER_J4310_PI)
+    {
+        delta_rad -= UPPER_J4310_TWO_PI;
+    }
+    while (delta_rad < -UPPER_J4310_PI)
+    {
+        delta_rad += UPPER_J4310_TWO_PI;
+    }
+    return delta_rad;
+}
+
+/* Preserve the logical joint angle across single-turn encoder branch changes.
+   This is valid while motion between two received samples is below half a turn. */
+static void UpperMotorPort_UpdateJ4310Position(uint8_t can_bus,
+                                                uint32_t tick_ms)
+{
+    size_t index;
+
+    for (index = 0U; index < upper_motor_count; index++)
+    {
+        const motor_cfg_t *cfg;
+        j4310_feedback_t feedback;
+        float raw_position_rad;
+        float delta_rad;
+
+        cfg = &upper_motor_cfg_ref[index];
+        if ((cfg->model != MOTOR_MODEL_J4310) ||
+            (cfg->can_bus != can_bus) ||
+            !J4310_GetFeedback(cfg->node_id, &feedback) ||
+            (feedback.updated_at_ms != tick_ms))
+        {
+            continue;
+        }
+
+        raw_position_rad = feedback.position_rad *
+                           UPPER_J4310_DIRECTION_SIGN;
+        if (!j4310_position_valid[cfg->node_id])
+        {
+            j4310_position_valid[cfg->node_id] = true;
+            j4310_continuous_position_rad[cfg->node_id] =
+                raw_position_rad;
+        }
+        else
+        {
+            delta_rad = raw_position_rad -
+                        j4310_last_raw_position_rad[cfg->node_id];
+            j4310_continuous_position_rad[cfg->node_id] +=
+                UpperMotorPort_WrapJ4310Delta(delta_rad);
+        }
+        j4310_last_raw_position_rad[cfg->node_id] = raw_position_rad;
+        j4310_position_offset_rad[cfg->node_id] =
+            raw_position_rad -
+            j4310_continuous_position_rad[cfg->node_id];
+    }
+}
+
+static void UpperMotorPort_ResetJ4310Position(uint8_t node_id)
+{
+    j4310_position_valid[node_id] = false;
+    j4310_last_raw_position_rad[node_id] = 0.0f;
+    j4310_continuous_position_rad[node_id] = 0.0f;
+    j4310_position_offset_rad[node_id] = 0.0f;
 }
 
 /* 功能：区分 J4310 运行状态与协议故障码；用途：避免将 0x1 已使能状态误判为故障；返回 true 表示需要失能。 */
@@ -306,12 +411,14 @@ static bool UpperMotorPort_FlushDjiGroup(uint8_t can_bus,
         else if (cfg->model == MOTOR_MODEL_M2006)
         {
             m2006_feedback_t feedback;
+            float position_cutoff_rad;
 
+            position_cutoff_rad = UpperMotorPort_M2006PositionCutoff(cfg);
             if (M2006_GetFeedback(can_bus, cfg->node_id, &feedback) &&
                 ((feedback.output_pos_rad <
-                  -UPPER_M2006_POSITION_CUTOFF_RAD) ||
+                  -position_cutoff_rad) ||
                  (feedback.output_pos_rad >
-                  UPPER_M2006_POSITION_CUTOFF_RAD)))
+                  position_cutoff_rad)))
             {
                 current_raw[slot] = 0;
                 continue;
@@ -485,13 +592,12 @@ static bool UpperMotorPort_SendJ4310(const motor_cfg_t *cfg,
         return true;
     }
 
-    if ((desired_mode != J4310_MODE_VELOCITY) &&
-        !j4310_session_zero_valid[cfg->node_id])
+    position_rad = cmd->pos_rad;
+    if (j4310_position_valid[cfg->node_id])
     {
-        return false;
+        position_rad += j4310_position_offset_rad[cfg->node_id];
     }
-    position_rad = (j4310_session_zero_position_rad[cfg->node_id] +
-                    cmd->pos_rad) * UPPER_J4310_DIRECTION_SIGN;
+    position_rad *= UPPER_J4310_DIRECTION_SIGN;
     velocity_rad_s = cmd->vel_rad_s * UPPER_J4310_DIRECTION_SIGN;
     torque_nm = cmd->torque_nm * UPPER_J4310_DIRECTION_SIGN;
 
@@ -564,6 +670,8 @@ static bool UpperMotorPort_SendM3508(const motor_cfg_t *cfg,
         return false;
     }
 
+    target *= UpperMotorPort_DirectionSign(cfg);
+
     if (!M3508_SetTarget(cfg->can_bus,
                          cfg->node_id,
                          mode,
@@ -609,6 +717,8 @@ static bool UpperMotorPort_SendM2006(const motor_cfg_t *cfg,
         return false;
     }
 
+    target *= UpperMotorPort_DirectionSign(cfg);
+
     if (!M2006_SetTarget(cfg->can_bus,
                          cfg->node_id,
                          mode,
@@ -645,12 +755,18 @@ bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
                  0,
                  sizeof(j4310_enable_last_sent_ms));
     (void)memset(j4310_mode, 0, sizeof(j4310_mode));
-    (void)memset(j4310_session_zero_valid,
+    (void)memset(j4310_position_valid,
                  0,
-                 sizeof(j4310_session_zero_valid));
-    (void)memset(j4310_session_zero_position_rad,
+                 sizeof(j4310_position_valid));
+    (void)memset(j4310_last_raw_position_rad,
                  0,
-                 sizeof(j4310_session_zero_position_rad));
+                 sizeof(j4310_last_raw_position_rad));
+    (void)memset(j4310_continuous_position_rad,
+                 0,
+                 sizeof(j4310_continuous_position_rad));
+    (void)memset(j4310_position_offset_rad,
+                 0,
+                 sizeof(j4310_position_offset_rad));
     (void)memset(dji_group_dirty, 0, sizeof(dji_group_dirty));
     (void)memset(upper_motor_active, 0, sizeof(upper_motor_active));
     (void)memset(upper_motor_scheduled, 0, sizeof(upper_motor_scheduled));
@@ -691,8 +807,10 @@ bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
         .current_limit_a = UPPER_M3508_CURRENT_LIMIT_A,
         .position_vel_limit_rad_s = UPPER_M3508_POSITION_VEL_LIMIT_RAD_S,
         .acceleration_limit_rad_s2 = UPPER_M3508_ACCEL_LIMIT_RAD_S2,
-        .feedback_timeout_ms = UPPER_MOTOR_FEEDBACK_TIMEOUT_MS,
-        .command_timeout_ms = UPPER_PC_TIMEOUT_MS,
+        .feedback_timeout_ms = UPPER_CONTROL_WATCHDOGS_ENABLED ?
+                               UPPER_MOTOR_FEEDBACK_TIMEOUT_MS : 0U,
+        .command_timeout_ms = UPPER_CONTROL_WATCHDOGS_ENABLED ?
+                              UPPER_PC_TIMEOUT_MS : 0U,
         .speed_pid =
         {
             UPPER_M3508_SPEED_KP,
@@ -720,8 +838,10 @@ bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
         .current_limit_a = UPPER_M2006_CURRENT_LIMIT_A,
         .position_vel_limit_rad_s = UPPER_M2006_POSITION_VEL_LIMIT_RAD_S,
         .acceleration_limit_rad_s2 = UPPER_M2006_ACCEL_LIMIT_RAD_S2,
-        .feedback_timeout_ms = UPPER_MOTOR_FEEDBACK_TIMEOUT_MS,
-        .command_timeout_ms = UPPER_PC_TIMEOUT_MS,
+        .feedback_timeout_ms = UPPER_CONTROL_WATCHDOGS_ENABLED ?
+                               UPPER_MOTOR_FEEDBACK_TIMEOUT_MS : 0U,
+        .command_timeout_ms = UPPER_CONTROL_WATCHDOGS_ENABLED ?
+                              UPPER_PC_TIMEOUT_MS : 0U,
         .speed_pid =
         {
             UPPER_M2006_SPEED_KP,
@@ -857,19 +977,10 @@ void UpperMotorPort_OnFrame(uint8_t can_bus,
         case MOTOR_MODEL_J4310:
             if (!j4310_attempted)
             {
-                j4310_feedback_t feedback;
-
                 j4310_attempted = true;
                 if (J4310_OnFrame(frame, tick_ms))
                 {
-                    if (!j4310_session_zero_valid[cfg->node_id] &&
-                        J4310_GetFeedback(cfg->node_id, &feedback))
-                    {
-                        j4310_session_zero_position_rad[cfg->node_id] =
-                            feedback.position_rad *
-                            UPPER_J4310_DIRECTION_SIGN;
-                        j4310_session_zero_valid[cfg->node_id] = true;
-                    }
+                    UpperMotorPort_UpdateJ4310Position(can_bus, tick_ms);
                     return;
                 }
             }
@@ -896,6 +1007,54 @@ void UpperMotorPort_OnFrame(uint8_t can_bus,
             break;
         }
     }
+}
+
+/* Send only the J4310 protocol enable frame; no motion target is emitted. */
+bool UpperMotorPort_EnableJ4310(uint8_t can_bus, uint8_t node_id)
+{
+    can_frame_t frame;
+    size_t index;
+    const motor_cfg_t *cfg;
+    j4310_feedback_t feedback;
+
+    if (!upper_motor_initialized || (upper_motor_cfg_ref == NULL))
+    {
+        return false;
+    }
+    cfg = NULL;
+    for (index = 0U; index < upper_motor_count; index++)
+    {
+        if ((upper_motor_cfg_ref[index].model == MOTOR_MODEL_J4310) &&
+            (upper_motor_cfg_ref[index].can_bus == can_bus) &&
+            (upper_motor_cfg_ref[index].node_id == node_id))
+        {
+            cfg = &upper_motor_cfg_ref[index];
+            break;
+        }
+    }
+    if (cfg == NULL)
+    {
+        return false;
+    }
+    if (J4310_GetFeedback(node_id, &feedback) &&
+        UpperMotorPort_FeedbackFresh(feedback.updated_at_ms,
+                                     upper_motor_tick_ms) &&
+        (feedback.fault == UPPER_J4310_STATE_ENABLED))
+    {
+        j4310_enabled[node_id] = true;
+        j4310_enable_pending[node_id] = false;
+        return true;
+    }
+    if (!J4310_BuildEnable(node_id, &frame) ||
+        !UpperMotorPort_SendJ4310Frame(can_bus,
+                                       &frame,
+                                       UPPER_J4310_TX_ENABLE))
+    {
+        return false;
+    }
+    j4310_enable_pending[node_id] = true;
+    j4310_enable_last_sent_ms[node_id] = upper_motor_tick_ms;
+    return true;
 }
 
 /* 功能：校验反馈并执行 J4310 保存零点序列；用途：安全完成关节机械零位标定；返回 true 表示命令序列发送成功。 */
@@ -945,7 +1104,7 @@ bool UpperMotorPort_SaveJ4310Zero(uint8_t can_bus, uint8_t node_id)
     {
         return false;
     }
-    j4310_session_zero_valid[node_id] = false;
+    UpperMotorPort_ResetJ4310Position(node_id);
     return true;
 }
 
@@ -968,16 +1127,17 @@ bool UpperMotorPort_GetJ4310OutputPosition(uint8_t can_bus,
             (upper_motor_cfg_ref[index].can_bus == can_bus) &&
             (upper_motor_cfg_ref[index].node_id == node_id))
         {
-            if (!j4310_session_zero_valid[node_id] ||
-                !J4310_GetFeedback(node_id, &feedback) ||
+            if (!J4310_GetFeedback(node_id, &feedback) ||
                 !UpperMotorPort_FeedbackFresh(feedback.updated_at_ms,
                                               upper_motor_tick_ms))
             {
                 return false;
             }
-            *position_rad = feedback.position_rad *
-                            UPPER_J4310_DIRECTION_SIGN -
-                            j4310_session_zero_position_rad[node_id];
+            if (!j4310_position_valid[node_id])
+            {
+                return false;
+            }
+            *position_rad = j4310_continuous_position_rad[node_id];
             return true;
         }
     }
@@ -1005,90 +1165,27 @@ bool UpperMotorPort_GetJ4310Feedback(uint8_t can_bus,
         {
             continue;
         }
-        if (!j4310_session_zero_valid[node_id] ||
-            !J4310_GetFeedback(node_id, &driver_feedback) ||
+        if (!J4310_GetFeedback(node_id, &driver_feedback) ||
             !UpperMotorPort_FeedbackFresh(driver_feedback.updated_at_ms,
                                           upper_motor_tick_ms) ||
             UpperMotorPort_IsJ4310Fault(driver_feedback.fault))
         {
             return false;
         }
-        feedback->position_rad = driver_feedback.position_rad *
-                                 UPPER_J4310_DIRECTION_SIGN -
-                                 j4310_session_zero_position_rad[node_id];
+        if (!j4310_position_valid[node_id])
+        {
+            return false;
+        }
+        feedback->position_rad = j4310_continuous_position_rad[node_id];
         feedback->velocity_rad_s = driver_feedback.velocity_rad_s *
                                    UPPER_J4310_DIRECTION_SIGN;
+        feedback->torque_nm = driver_feedback.torque_nm *
+                              UPPER_J4310_DIRECTION_SIGN;
+        feedback->updated_at_ms = driver_feedback.updated_at_ms;
         feedback->state = driver_feedback.fault;
         return true;
     }
     return false;
-}
-
-bool UpperMotorPort_GetMotorFeedback(size_t motor_index,
-                                     upper_motor_feedback_t *feedback)
-{
-    const motor_cfg_t *cfg;
-
-    if (!upper_motor_initialized || (feedback == NULL) ||
-        (motor_index >= upper_motor_count))
-    {
-        return false;
-    }
-    cfg = &upper_motor_cfg_ref[motor_index];
-    switch (cfg->model)
-    {
-    case MOTOR_MODEL_J4310:
-    {
-        upper_j4310_feedback_t j4310_feedback;
-
-        if (!UpperMotorPort_GetJ4310Feedback(cfg->can_bus,
-                                              cfg->node_id,
-                                              &j4310_feedback))
-        {
-            return false;
-        }
-        feedback->position_rad = j4310_feedback.position_rad;
-        feedback->velocity_rad_s = j4310_feedback.velocity_rad_s;
-        return true;
-    }
-
-    case MOTOR_MODEL_M3508:
-    {
-        m3508_feedback_t driver_feedback;
-
-        if (!M3508_GetFeedback(cfg->can_bus,
-                               cfg->node_id,
-                               &driver_feedback) ||
-            !UpperMotorPort_FeedbackFresh(driver_feedback.updated_at_ms,
-                                           upper_motor_tick_ms))
-        {
-            return false;
-        }
-        feedback->position_rad = driver_feedback.output_pos_rad;
-        feedback->velocity_rad_s = driver_feedback.output_vel_rad_s;
-        return true;
-    }
-
-    case MOTOR_MODEL_M2006:
-    {
-        m2006_feedback_t driver_feedback;
-
-        if (!M2006_GetFeedback(cfg->can_bus,
-                               cfg->node_id,
-                               &driver_feedback) ||
-            !UpperMotorPort_FeedbackFresh(driver_feedback.updated_at_ms,
-                                           upper_motor_tick_ms))
-        {
-            return false;
-        }
-        feedback->position_rad = driver_feedback.output_pos_rad;
-        feedback->velocity_rad_s = driver_feedback.output_vel_rad_s;
-        return true;
-    }
-
-    default:
-        return false;
-    }
 }
 
 /* 功能：读取 J4310 协议接收诊断；用途：区分 FDCAN 有帧但格式、Master ID 或反馈 ID 不匹配；返回 true 表示目标已配置且快照有效。 */
@@ -1211,7 +1308,8 @@ size_t UpperMotorPort_GetDjiDiagnostics(uint32_t tick_ms,
                     (float)UPPER_DJI_ENCODER_COUNTS;
                 zero_counts = feedback.zero_encoder_counts;
                 diagnostic->relative_output_position_rad =
-                    feedback.output_pos_rad;
+                    feedback.output_pos_rad *
+                    UpperMotorPort_DirectionSign(cfg);
                 diagnostic->feedback_fresh =
                     UpperMotorPort_FeedbackFresh(feedback.updated_at_ms,
                                                   tick_ms);
@@ -1231,7 +1329,8 @@ size_t UpperMotorPort_GetDjiDiagnostics(uint32_t tick_ms,
                     (float)UPPER_DJI_ENCODER_COUNTS;
                 zero_counts = feedback.zero_encoder_counts;
                 diagnostic->relative_output_position_rad =
-                    feedback.output_pos_rad;
+                    feedback.output_pos_rad *
+                    UpperMotorPort_DirectionSign(cfg);
                 diagnostic->feedback_fresh =
                     UpperMotorPort_FeedbackFresh(feedback.updated_at_ms,
                                                   tick_ms);
@@ -1376,7 +1475,7 @@ bool UpperMotorPort_GetHealth(uint32_t tick_ms,
         }
         if ((!feedback_valid &&
              ((tick_ms - upper_motor_active_since_ms[index]) >
-              UPPER_MOTOR_FEEDBACK_TIMEOUT_MS)) ||
+               UPPER_MOTOR_FEEDBACK_TIMEOUT_MS)) ||
             (feedback_valid &&
              !UpperMotorPort_FeedbackFresh(updated_at_ms, tick_ms)))
         {

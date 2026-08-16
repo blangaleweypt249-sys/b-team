@@ -23,7 +23,7 @@
 | RS485-1 | PB15 RX / PB14 TX | MAX13488 U9 | USART1，115200 8N1，RX/TX DMA |
 | RS485-2 | PA3 RX / PA2 TX | MAX13488 U10 | USART2，460800 8N1，RX/TX DMA，仅保留 485 通道 |
 | USB 串口 | PA1 RX / PA0 TX | CH340N TXD/RXD | UART4，115200 8N1，RX/TX DMA，普通 UART 默认控制通道 |
-| 普通 UART | PD2 RX / PC12 TX | H3.24 / H3.19 | UART5，115200 8N1，中断收发 |
+| 遥控输入 | PD2 RX / PC12 TX | H3.24 / H3.19 | UART5，2000000 8N1，RX 循环 DMA / TX 中断 |
 | 普通 UART | PE7 RX / PE8 TX | H1.18 / H1.17 | UART7，115200 8N1，中断收发 |
 | 普通 UART | PE0 RX / PE1 TX | H2.10 / H2.7 | UART8，115200 8N1，中断收发 |
 | 普通 UART | PD14 RX / PD15 TX | H3.7 / H3.10 | UART9，115200 8N1，中断收发 |
@@ -31,6 +31,7 @@
 | 普通 UART | PC7 RX / PC6 TX | H3.12 / H3.9 | USART6，115200 8N1，中断收发 |
 | 普通 UART | PE2 RX / PE3 TX | H2.8 / H2.5 | USART10，115200 8N1，中断收发 |
 | W25Q128 | PA4 / PA5 / PA6 / PA7 | NSS/SCK/MISO/MOSI | SPI1 Mode 0，25 MHz，RX/TX DMA |
+| 辅助输出转发 | PB3 SCK / PB4 MISO / PB5 MOSI | F103 SPI1 从机 | SPI3 主机 Mode 0，8 bit，MSB first，无 NSS，约 390 kHz |
 | 状态灯 | PC13 | LED1 | 推挽输出，默认低 |
 | 蜂鸣器 | PC15 | Q3 驱动 | 推挽输出，默认低 |
 
@@ -57,8 +58,16 @@ M3508/C620（节点 1、2），FDCAN3 连接两台 M2006/C610（节点 1、2）�
 | 4 / 5 | USART2 RX / TX | RX Circular / TX Normal |
 | 6 / 7 | SPI1 RX / TX | Normal / Normal |
 
-普通 UART 使用 `HAL_UARTEx_ReceiveToIdle_IT()` 和 TX 中断，不占用 DMA1；USART1/2 的
-RS485 DMA 配置保持不变。
+| DMA2 Stream | 请求 | 模式 |
+| --- | --- | --- |
+| 0 | UART5 RX | Circular |
+
+UART5 使用 `HAL_UARTEx_ReceiveToIdle_DMA()` 接收遥控字节流。其他普通 UART 使用
+`HAL_UARTEx_ReceiveToIdle_IT()` 和 TX 中断，不占用 DMA1；USART1/2 的 RS485 DMA 配置保持不变。
+
+SPI3 辅助输出不使用 DMA。H723 收到上位机 `MSG_AUX_CONTROL (0x15)` 后，组装
+`A5 5A 01 02 01 seq output_bits crc8` 8 字节帧并通过 SPI3 发送到 F103 的 SPI1
+从机；UART5 仍只接收遥控器的 10 字节串口帧。
 
 DMA、UART、SPI 和 FDCAN 中断优先级均为 5，可以调用 FreeRTOS 的 ISR 安全接口。
 FDCAN 使用片上 Message RAM，不使用 DMA1/2。
@@ -91,6 +100,31 @@ USB 虚拟串口，H723 不启用原生 USB CDC。除此之外，H1/H2/H3 排针
 USB-TTL 转换器连接电脑。帧格式、超时策略、电机拓扑和目标任务职责见
 [上层代码框架说明.md](../上层代码框架说明.md)。
 
+## UART5 第二主控遥控输入
+
+F103 LoRa 接收板通过 USART2 原样转发遥控串口流，上层 H723 只解析目标 ID 为 `0x02` 的
+第二主控控制帧。接线如下：
+
+| F103 接收板 | H723 上层板 | 说明 |
+| --- | --- | --- |
+| PA2 / USART2_TX | PD2 / UART5_RX / H3.24 | 2000000 8N1 数据 |
+| GND | GND | 必须共地 |
+
+当前链路仅需单向接收，H723 的 UART5_TX（PC12 / H3.19）可以不接。串口流中允许 ID=1
+和 ID=2 帧连续出现，解析器按帧头、长度和 CRC8 重组拆包/粘包，只接受：
+
+```text
+A5 5A 02 01 02 sequence key_bits switch_bits crc8
+```
+
+- `key_bits` bit0..5 对应遥控器 PD13、PD12、PD11、PD8、PD9、PD10，bit6..7 被屏蔽。
+- `switch_bits` bit0、1、2、4、5 对应 PE4、PE3、PE1、PD6、PD5，其他位被屏蔽。
+- CRC8 多项式为 `0x07`、初值为 `0x00`，覆盖 `target_id` 至 payload，不包含帧头。
+- `UpperEntry_GetSecondaryRemoteControl()` 返回按键、开关、序号和在线状态；当前已关闭远控
+  超时看门狗，没有新 ID=2 帧时继续保留最后一次合法按键和开关状态。
+- `UpperEntry_GetSecondaryRemoteDiagnostics()` 可读取合法帧、忽略帧、CRC/格式错误、丢帧和
+  重复帧计数。解析层不预设按键到电机动作的映射。
+
 ## 电机启动与控制安全
 
 UART4 固定作为正式上位机命令与 ACK 链路，配置为 115200 8N1。正式固件不编译 VOFA
@@ -108,8 +142,8 @@ W25Qxx 的 C 驱动已放在工程内 `User/Driver/Flash`，其端口配置与�
 Flash 文本命令。应用代码通过 `W25Q_PortGetDevice()` 获取句柄，并调用 `W25Q_ReadData()`、
 `W25Q_WriteData()`、`W25Q_EraseSector()` 等接口访问外置 Flash。UART4 只用于普通上位机协议。
 
-UART4/USART1/USART2 接收使用 256-byte、32-byte 对齐、独占 Cache line 的循环 DMA 缓冲区；
-其余普通 UART 使用同规格的中断接收缓冲区。
+UART4/UART5/USART1/USART2 接收使用 256-byte、32-byte 对齐、独占 Cache line 的循环 DMA
+缓冲区；其余普通 UART 使用同规格的中断接收缓冲区。
 `CommRuntime_PcTransmit()` 会在启动 TX DMA 前 Clean D-Cache；调用者必须保证发送
 完成前缓冲区不被修改或释放。
 

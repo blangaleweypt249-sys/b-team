@@ -47,15 +47,30 @@ bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
     {
         return false;
     }
+    (void)memset(output, 0, sizeof(*output));
+    if (!target->enabled && !target->m3508_enabled)
+    {
+        uint32_t stop_index;
+
+        output->j4310.mode = MOTOR_CMD_STOP;
+        for (stop_index = 0U;
+             stop_index < UPPER_ARM_M3508_COUNT;
+             stop_index++)
+        {
+            output->m3508[stop_index].mode = MOTOR_CMD_STOP;
+        }
+        return true;
+    }
     position_mode = target->position_mode;
-    if (!Arm_ValueWithin(target->grip_pos_rad,
-                         UPPER_J4310_POSITION_MAX_RAD) ||
-        !Arm_ValueWithin(target->grip_vel_rad_s,
-                         UPPER_J4310_VELOCITY_MAX_RAD_S) ||
-        !isfinite(target->grip_kp) || (target->grip_kp < 0.0f) ||
-        (target->grip_kp > UPPER_J4310_KP_MAX) ||
-        !isfinite(target->grip_kd) || (target->grip_kd < 0.0f) ||
-        (target->grip_kd > UPPER_J4310_KD_MAX))
+    if (target->enabled &&
+        (!Arm_ValueWithin(target->grip_pos_rad,
+                          UPPER_J4310_POSITION_MAX_RAD) ||
+         !Arm_ValueWithin(target->grip_vel_rad_s,
+                          UPPER_J4310_VELOCITY_MAX_RAD_S) ||
+         !isfinite(target->grip_kp) || (target->grip_kp < 0.0f) ||
+         (target->grip_kp > UPPER_J4310_KP_MAX) ||
+         !isfinite(target->grip_kd) || (target->grip_kd < 0.0f) ||
+         (target->grip_kd > UPPER_J4310_KD_MAX)))
     {
         return false;
     }
@@ -70,7 +85,9 @@ bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
     {
         return false;
     }
-    for (index = 0U; index < UPPER_ARM_M3508_COUNT; index++)
+    for (index = 0U;
+         target->m3508_enabled && (index < UPPER_ARM_M3508_COUNT);
+         index++)
     {
         if (position_mode)
         {
@@ -90,7 +107,7 @@ bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
     output->m3508_enabled = target->m3508_enabled;
     output->j4310 = (motor_cmd_t)
     {
-        .mode = MOTOR_CMD_MIT,
+        .mode = target->enabled ? MOTOR_CMD_MIT : MOTOR_CMD_STOP,
         .pos_rad = target->grip_pos_rad,
         .vel_rad_s = target->grip_vel_rad_s,
         .kp = target->grip_kp,
@@ -105,7 +122,9 @@ bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
     {
         output->m3508[index] = (motor_cmd_t)
         {
-            .mode = position_mode ? MOTOR_CMD_POSITION : MOTOR_CMD_VELOCITY,
+            .mode = !target->m3508_enabled ? MOTOR_CMD_STOP :
+                    (position_mode ? MOTOR_CMD_POSITION :
+                                     MOTOR_CMD_VELOCITY),
             .pos_rad = position_mode ? target->m3508_pos_rad[index] : 0.0f,
             .vel_rad_s = target->m3508_vel_rad_s[index]
         };

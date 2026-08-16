@@ -15,6 +15,7 @@ typedef enum
 typedef struct
 {
     bool enabled;
+    bool seen_online;
     bool online;
     bool reconnect_armed;
     bool owns_control;
@@ -38,5 +39,6 @@ void J4310AutoReturn_Update(j4310_auto_return_t *control,
                             float position_rad,
                             float velocity_rad_s,
                             bool control_allowed);
+bool J4310AutoReturn_IsActive(const j4310_auto_return_t *control);
 
 #endif

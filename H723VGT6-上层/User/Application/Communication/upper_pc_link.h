@@ -17,15 +17,17 @@
 #define UPPER_PC_MOTOR_ACTION_PAYLOAD_SIZE 3U
 #define UPPER_PC_MOTOR_CONFIG_ACTION_PAYLOAD_SIZE 4U
 #define UPPER_PC_FLASH_INFO_PAYLOAD_SIZE 20U
+#define UPPER_PC_AUX_CONTROL_PAYLOAD_SIZE 2U
 #define UPPER_PC_DJI_DIAGNOSTIC_COUNT 4U
 #define UPPER_PC_FDCAN_COUNT 3U
 
 #define UPPER_PC_ACTION_J4310_SAVE_ZERO 1U
 #define UPPER_PC_ACTION_J4310_AUTO_RETURN 2U
+#define UPPER_PC_ACTION_J4310_ENABLE 3U
 
 typedef struct
 {
-    bool storage_ready;
+    bool available;
     bool enabled;
     bool active;
     uint8_t stage;
@@ -35,9 +37,11 @@ typedef void (*upper_pc_cmd_handler_t)(const upper_target_t *target,
                                        void *user_data);
 typedef void (*upper_pc_estop_handler_t)(void *user_data);
 typedef void (*upper_pc_motor_action_handler_t)(uint8_t action,
-                                                uint8_t can_bus,
-                                                uint8_t node_id,
+                                                 uint8_t can_bus,
+                                                 uint8_t node_id,
                                                 uint8_t value,
+                                                void *user_data);
+typedef void (*upper_pc_aux_control_handler_t)(uint8_t output_bits,
                                                 void *user_data);
 
 typedef struct
@@ -46,6 +50,7 @@ typedef struct
     upper_pc_cmd_handler_t cmd_handler;
     upper_pc_estop_handler_t estop_handler;
     upper_pc_motor_action_handler_t motor_action_handler;
+    upper_pc_aux_control_handler_t aux_control_handler;
     void *user_data;
     volatile uint32_t last_rx_tick_ms;
     volatile bool remote_active;
@@ -68,6 +73,8 @@ void UpperPcLink_Init(upper_pc_link_t *link,
                       upper_pc_estop_handler_t estop_handler,
                       upper_pc_motor_action_handler_t motor_action_handler,
                       void *user_data);
+void UpperPcLink_SetAuxControlHandler(upper_pc_link_t *link,
+                                      upper_pc_aux_control_handler_t handler);
 void UpperPcLink_Push(upper_pc_link_t *link,
                       const uint8_t *data,
                       size_t size,

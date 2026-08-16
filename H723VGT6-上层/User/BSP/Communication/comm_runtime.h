@@ -70,6 +70,8 @@ bool CommRuntime_PcTransmit(const uint8_t *data, uint16_t size);
 bool CommRuntime_PcTransmitBlocking(const uint8_t *data,
                                     uint16_t size,
                                     uint32_t timeout_ms);
+bool CommRuntime_Spi3Transmit(const uint8_t *data, uint16_t size);
+bool CommRuntime_Spi3TxReady(void);
 void CommRuntime_SetPcChannel(comm_uart_channel_t channel);
 comm_uart_channel_t CommRuntime_GetPcChannel(void);
 bool CommRuntime_TelemetryTxReady(void);

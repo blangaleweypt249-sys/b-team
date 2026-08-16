@@ -886,6 +886,11 @@
               <FilePath>../User/Application/Communication/upper_pc_link.c</FilePath>
             </File>
             <File>
+              <FileName>upper_remote_link.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/Application/Communication/upper_remote_link.c</FilePath>
+            </File>
+            <File>
               <FileName>upper_robot.c</FileName>
               <FileType>1</FileType>
               <FilePath>../User/Application/Robot/upper_robot.c</FilePath>
@@ -894,6 +899,11 @@
               <FileName>j4310_auto_return.c</FileName>
               <FileType>1</FileType>
               <FilePath>../User/Application/Robot/j4310_auto_return.c</FilePath>
+            </File>
+            <File>
+              <FileName>j4310_position_control.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/Application/Robot/j4310_position_control.c</FilePath>
             </File>
             <File>
               <FileName>upper_entry.c</FileName>
