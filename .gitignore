@@ -66,6 +66,8 @@ core
 src/pyorbbecsdk-2-main/
 test_coordinate_transform.py
 test_serial_communication.py
+test_orbbec_gripper_transform.py
+Log/
 build/
 install/
 log/

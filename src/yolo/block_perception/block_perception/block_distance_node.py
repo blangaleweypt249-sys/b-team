@@ -5,7 +5,8 @@
   1. YOLOv8-seg 检测图像中红蓝块, 获取分割 mask
   2. 在 mask 区域内提取深度, 取深度主峰中值作为目标距离
   3. 反投影得到相机坐标系三维坐标
-  4. 分别发布红块和蓝块的 3D 位置
+  4. 转换到夹爪 TCP 坐标系 (P_G = P_C + t_G_C)
+  5. 分别发布红块和蓝块的 3D 位置
 
 订阅话题:
   /orbbec/color/image_raw  (sensor_msgs/Image)  - RGB 图像
@@ -13,14 +14,18 @@
   /orbbec/camera_info       (sensor_msgs/CameraInfo) - 相机内参
 
 发布话题:
-  /perception/block_red_position   (geometry_msgs/PointStamped) - 红块 3D 位置 (m)
-  /perception/block_blue_position  (geometry_msgs/PointStamped) - 蓝块 3D 位置 (m)
+  /perception/block_red_position   (geometry_msgs/PointStamped) - 红块 3D 位置 (m, gripper frame)
+  /perception/block_blue_position  (geometry_msgs/PointStamped) - 蓝块 3D 位置 (m, gripper frame)
   /perception/block_overlay        (sensor_msgs/Image)          - 检测叠加图
 
-坐标系:
+坐标系 (相机 / 夹爪一致):
   X: 前方为正
-  Y: 右方为正
+  Y: 左方为正
   Z: 上方为正
+
+Orbbec -> 夹爪外参 (t_G_C, 固连常量, 尺子量出):
+  默认 = (-91, 21, 27.8) mm -> (-0.091, 0.021, 0.0278) m
+  即相机光心在 TCP 后方 91mm、左 21mm、上 27.8mm。
 """
 
 import os
@@ -78,6 +83,12 @@ class BlockDistanceNode(Node):
         self.declare_parameter('min_depth_mm', 20.0)
         self.declare_parameter('max_depth_mm', 10000.0)
         self.declare_parameter('distance_alpha', 0.7)
+        # ---- Orbbec -> 夹爪外参 (t_G_C, 单位 m) ----
+        #   默认 (-91, 21, 27.8) mm：相机在 TCP 后方 91mm、左 21mm、上 27.8mm
+        self.declare_parameter('output_to_gripper', True)
+        self.declare_parameter('t_g_c_x_m', -0.091)
+        self.declare_parameter('t_g_c_y_m', 0.021)
+        self.declare_parameter('t_g_c_z_m', 0.0278)
 
         model_path = self.get_parameter('model_path').value
         self.get_logger().info(f'加载 YOLO 模型: {model_path}')
@@ -90,6 +101,16 @@ class BlockDistanceNode(Node):
         self.min_depth_mm = self.get_parameter('min_depth_mm').value
         self.max_depth_mm = self.get_parameter('max_depth_mm').value
         self.dist_alpha = self.get_parameter('distance_alpha').value
+
+        # Orbbec -> 夹爪外参
+        self.output_to_gripper = self.get_parameter('output_to_gripper').value
+        self.t_g_c_x_m = float(self.get_parameter('t_g_c_x_m').value)
+        self.t_g_c_y_m = float(self.get_parameter('t_g_c_y_m').value)
+        self.t_g_c_z_m = float(self.get_parameter('t_g_c_z_m').value)
+        self.get_logger().info(
+            f'Orbbec->夹爪: output_to_gripper={self.output_to_gripper}, '
+            f't_G_C=({self.t_g_c_x_m*1000:.1f}, {self.t_g_c_y_m*1000:.1f}, {self.t_g_c_z_m*1000:.1f}) mm'
+        )
 
         # 平滑距离缓存
         self.smoothed_red_dist = None
@@ -178,16 +199,32 @@ class BlockDistanceNode(Node):
         return float(np.median(cluster_depths)), int(cluster_depths.size)
 
     def _deproject_to_3d(self, u, v, depth_mm):
-        """像素 + 深度 -> 相机坐标系三维坐标 (X前, Y右, Z上)"""
+        """像素 + 深度 -> 相机坐标系三维坐标 (X前, Y左, Z上)
+
+        标准针孔: x_std=(u-cx)*z/fx 向右为正; y_std=(v-cy)*z/fy 向下为正。
+        统一到机器人坐标系（+X前、+Y左、+Z上），与夹爪及 detection.py 一致。
+        """
         z_std = float(depth_mm)
         x_std = (float(u) - self.cx) * z_std / self.fx
         y_std = (float(v) - self.cy) * z_std / self.fy
 
-        # 转换为 X前, Y右, Z上
         x = z_std      # 前方
-        y = x_std      # 右方
-        z = -y_std     # 上方
+        y = -x_std     # 左方 (x_std 向右为正 -> 取反)
+        z = -y_std     # 上方 (y_std 向下为正 -> 取反)
         return x, y, z
+
+    def _to_gripper(self, x_m, y_m, z_m):
+        """相机坐标 (m) -> 夹爪 TCP 坐标 (m): P_G = P_C + t_G_C。
+
+        两者坐标系约定一致（+X前、+Y左、+Z上），无旋转，仅平移。
+        """
+        if not self.output_to_gripper:
+            return x_m, y_m, z_m
+        return (
+            x_m + self.t_g_c_x_m,
+            y_m + self.t_g_c_y_m,
+            z_m + self.t_g_c_z_m,
+        )
 
     def _prepare_mask(self, raw_mask, img_h, img_w):
         """准备分割 mask: resize + 腐蚀边缘"""
@@ -333,26 +370,36 @@ class BlockDistanceNode(Node):
         self.overlay_pub.publish(self.bridge.cv2_to_imgmsg(overlay, encoding='bgr8'))
 
     def _publish_position(self, publisher, det, depth_mm, color, overlay):
-        """发布 3D 位置并绘制叠加信息"""
+        """发布 3D 位置并绘制叠加信息（默认夹爪 TCP 坐标系）"""
         x_mm, y_mm, z_mm = det['x_mm'], det['y_mm'], det['z_mm']
 
-        # 使用平滑后的深度重新计算 XYZ
+        # 使用平滑后的深度重新计算 XYZ（已为 +X前、+Y左、+Z上）
         cx_pixel = (det['bbox'][0] + det['bbox'][2]) // 2
         cy_pixel = (det['bbox'][1] + det['bbox'][3]) // 2
         x_mm, y_mm, z_mm = self._deproject_to_3d(cx_pixel, cy_pixel, depth_mm)
 
-        # 发布 (单位转换为米)
+        # 转换为夹爪 TCP 坐标 (单位 m)
+        x_m = x_mm / 1000.0
+        y_m = y_mm / 1000.0
+        z_m = z_mm / 1000.0
+        gx_m, gy_m, gz_m = self._to_gripper(x_m, y_m, z_m)
+
+        # 发布 (单位 m)
         msg = PointStamped()
-        msg.header.frame_id = 'orbbec_link'
+        msg.header.frame_id = 'gripper' if self.output_to_gripper else 'orbbec_link'
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.point.x = x_mm / 1000.0
-        msg.point.y = y_mm / 1000.0
-        msg.point.z = z_mm / 1000.0
+        msg.point.x = gx_m
+        msg.point.y = gy_m
+        msg.point.z = gz_m
         publisher.publish(msg)
 
         # 绘制叠加信息
         x1, y1, x2, y2 = det['bbox']
-        label = f"{det['cls_name']} {det['conf']:.2f} d={depth_mm:.0f}mm"
+        frame_str = 'gripper' if self.output_to_gripper else 'cam'
+        label = (
+            f"{det['cls_name']} {det['conf']:.2f} d={depth_mm:.0f}mm  "
+            f"{frame_str}:({gx_m*1000:.0f},{gy_m*1000:.0f},{gz_m*1000:.0f})mm"
+        )
         cv2.putText(overlay, label, (x1, y1 - 5),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         cv2.putText(overlay,

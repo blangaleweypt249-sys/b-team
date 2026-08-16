@@ -147,6 +147,12 @@ def generate_launch_description():
             'red_class_name': 'red',
             'blue_class_name': 'blue',
             'distance_alpha': 0.7,
+            # Orbbec -> 夹爪外参 (单位 m)
+            # 默认 (-91, 21, 27.8) mm：相机在 TCP 后方 91mm、左 21mm、上 27.8mm
+            'output_to_gripper': True,
+            't_g_c_x_m': -0.091,
+            't_g_c_y_m': 0.021,
+            't_g_c_z_m': 0.0278,
         }],
     )
 
