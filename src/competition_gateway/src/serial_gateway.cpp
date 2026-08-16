@@ -39,6 +39,10 @@ speed_t SerialGateway_GetBaudrate(int baudrate)
       return B57600;
     case 115200:
       return B115200;
+    case 460800:
+      return B460800;
+    case 921600:
+      return B921600;
     default:
       return B115200;
   }
@@ -74,7 +78,7 @@ public:
   {
     this->declare_parameter("serial_device", "/dev/ttyUSB0");
     this->declare_parameter("baudrate", 115200);
-    this->declare_parameter("send_period_ms", 20);
+    this->declare_parameter("send_period_ms", 10);
     this->declare_parameter("data_timeout_ms", 200);
     this->declare_parameter("controller_timeout_ms", 500);
     this->declare_parameter("field_pose_topic", "/competition/field_pose");
@@ -244,18 +248,30 @@ private:
       const auto now = this->now();
       const auto timeout_ms = this->get_parameter("data_timeout_ms").as_int();
       const auto timeout = rclcpp::Duration::from_nanoseconds(timeout_ms * 1000000LL);
+      // 取最新数据时间作为帧时间戳
+      rclcpp::Time latest_time = now;
       if (perception_cache_.red_received && (now - perception_cache_.red_time) < timeout)
       {
         perception_data.flags |= PERCEPTION_RED_VALID;
+        latest_time = perception_cache_.red_time;
       }
       if (perception_cache_.blue_received && (now - perception_cache_.blue_time) < timeout)
       {
         perception_data.flags |= PERCEPTION_BLUE_VALID;
+        if (perception_cache_.blue_time > latest_time)
+        {
+          latest_time = perception_cache_.blue_time;
+        }
       }
       if (perception_cache_.ball_received && (now - perception_cache_.ball_time) < timeout)
       {
         perception_data.flags |= PERCEPTION_BALL_VALID;
+        if (perception_cache_.ball_time > latest_time)
+        {
+          latest_time = perception_cache_.ball_time;
+        }
       }
+      perception_data.timestamp_ms = static_cast<uint32_t>(latest_time.nanoseconds() / 1000000LL);
     }
 
     const auto frame = SerialProtocol_EncodePerception(perception_data, perception_sequence_++);
@@ -280,6 +296,9 @@ private:
       {
         position_data.flags |= POSITION_FIELD_VALID;
       }
+      position_data.timestamp_ms = static_cast<uint32_t>(
+        position_cache_.field_pose_received ? position_cache_.field_pose_time.nanoseconds() / 1000000LL
+                                            : now.nanoseconds() / 1000000LL);
     }
 
     const auto frame = SerialProtocol_EncodePosition(position_data, position_sequence_++);

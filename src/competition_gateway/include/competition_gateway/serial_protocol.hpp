@@ -17,9 +17,11 @@ constexpr uint8_t k_frame_tail_1 = 0x0A;
 constexpr uint8_t k_tx_perception_type = 0x10;
 constexpr uint8_t k_tx_position_type = 0x11;
 constexpr uint8_t k_rx_status_type = 0x20;
-constexpr std::size_t k_tx_frame_size = 44;
-constexpr std::size_t k_tx_position_frame_size = 24;
-constexpr std::size_t k_rx_status_frame_size = 8;
+
+// 帧大小: header(2) + type(1) + seq(1) + flags(1) + timestamp(4) + payload + crc16(2) + tail(2)
+constexpr std::size_t k_tx_frame_size = 49;          // 感知帧: 9 floats = 36 bytes payload
+constexpr std::size_t k_tx_position_frame_size = 29;  // 位置帧: 4 floats = 16 bytes payload
+constexpr std::size_t k_rx_status_frame_size = 9;     // 状态帧: state(1) + error(1) payload, 无 timestamp
 
 // 感知帧有效位
 enum perception_flag_t : uint8_t
@@ -48,6 +50,7 @@ struct perception_data_t
   float ball_y_m = 0.0F;
   float ball_z_m = 0.0F;
   uint8_t flags = 0U;
+  uint32_t timestamp_ms = 0U;  // 数据生成时间戳（毫秒）
 };
 
 // 位置帧数据: 机器人赛场坐标 + 偏航角
@@ -58,6 +61,7 @@ struct position_data_t
   float field_z_m = 0.0F;
   float field_yaw = 0.0F;
   uint8_t flags = 0U;
+  uint32_t timestamp_ms = 0U;  // 数据生成时间戳（毫秒）
 };
 
 struct controller_status_t
@@ -67,19 +71,19 @@ struct controller_status_t
 };
 
 /**
- * @brief 计算帧中指定数据段的 8 位累加校验和。
+ * @brief 计算 CRC16-CCITT (多项式 0x1021, 初始值 0xFFFF)。
  */
-uint8_t SerialProtocol_Checksum(const uint8_t * data, std::size_t size);
+uint16_t SerialProtocol_CRC16(const uint8_t * data, std::size_t size);
 
 /**
- * @brief 将红蓝块和球位置编码为感知帧 (44 字节)。
+ * @brief 将红蓝块和球位置编码为感知帧 (49 字节)。
  */
 std::array<uint8_t, k_tx_frame_size> SerialProtocol_EncodePerception(
   const perception_data_t & data,
   uint8_t sequence);
 
 /**
- * @brief 将机器人位置和旋转角度编码为位置帧 (24 字节)。
+ * @brief 将机器人位置和偏航角编码为位置帧 (29 字节)。
  */
 std::array<uint8_t, k_tx_position_frame_size> SerialProtocol_EncodePosition(
   const position_data_t & data,

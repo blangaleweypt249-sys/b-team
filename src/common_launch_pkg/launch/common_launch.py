@@ -35,7 +35,7 @@
   rviz:=true              启动 RViz 可视化（默认 false）
   xfer_format:=0          雷达点云格式 0=PointCloud2, 1=CustomMsg（默认 0）
   serial_device:=/dev/ttyUSB0  串口设备路径
-  baudrate:=115200        串口波特率
+  baudrate:=115200        串口波特率 (9600/57600/115200/460800/921600)
 
 独立模块启动命令：
   ros2 launch common_launch_pkg lidar_driver.launch.py       # 仅雷达驱动+里程计
