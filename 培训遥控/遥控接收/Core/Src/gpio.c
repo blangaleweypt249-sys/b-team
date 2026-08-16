@@ -54,10 +54,16 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, LORA_M0_Pin|LORA_M1_Pin|U4_12_PB14_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, LORA_M0_Pin|LORA_M1_Pin|U4_11_PB13_Pin|U4_12_PB14_Pin
+                          |U4_9_PB15_Pin|U1_3_PB3_Pin|U1_5_PB5_Pin|U1_7_PB7_Pin,
+                    GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, U4_10_PA8_Pin|U4_8_PA10_Pin|U4_6_PA12_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, U1_10_PB8_Pin|U1_9_PB9_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, U4_10_PA8_Pin|U4_7_PA9_Pin|U4_8_PA10_Pin
+                          |U4_5_PA11_Pin|U4_6_PA12_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : LED_STATUS_Pin */
   GPIO_InitStruct.Pin = LED_STATUS_Pin;
@@ -66,32 +72,34 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LED_STATUS_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LORA_M0_Pin LORA_M1_Pin U4_12_PB14_Pin */
-  GPIO_InitStruct.Pin = LORA_M0_Pin|LORA_M1_Pin|U4_12_PB14_Pin;
+  /*Configure GPIO pins : LORA_M0_Pin LORA_M1_Pin U4_11_PB13_Pin U4_12_PB14_Pin
+                           U4_9_PB15_Pin U1_3_PB3_Pin U1_5_PB5_Pin U1_7_PB7_Pin
+                           U1_10_PB8_Pin U1_9_PB9_Pin */
+  GPIO_InitStruct.Pin = LORA_M0_Pin|LORA_M1_Pin|U4_11_PB13_Pin|U4_12_PB14_Pin
+                          |U4_9_PB15_Pin|U1_3_PB3_Pin|U1_5_PB5_Pin|U1_7_PB7_Pin
+                          |U1_10_PB8_Pin|U1_9_PB9_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LORA_AUX_Pin U4_11_PB13_Pin U4_9_PB15_Pin
-                           U1_3_PB3_Pin U1_6_PB4_Pin U1_5_PB5_Pin U1_8_PB6_Pin
-                           U1_7_PB7_Pin U1_10_PB8_Pin U1_9_PB9_Pin */
-  GPIO_InitStruct.Pin = LORA_AUX_Pin|U4_11_PB13_Pin|U4_9_PB15_Pin
-                          |U1_3_PB3_Pin|U1_6_PB4_Pin|U1_5_PB5_Pin|U1_8_PB6_Pin
-                          |U1_7_PB7_Pin|U1_10_PB8_Pin|U1_9_PB9_Pin;
+  /*Configure GPIO pins : LORA_AUX_Pin U1_6_PB4_Pin U1_8_PB6_Pin */
+  GPIO_InitStruct.Pin = LORA_AUX_Pin|U1_6_PB4_Pin|U1_8_PB6_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : U4_10_PA8_Pin U4_8_PA10_Pin U4_6_PA12_Pin */
-  GPIO_InitStruct.Pin = U4_10_PA8_Pin|U4_8_PA10_Pin|U4_6_PA12_Pin;
+  /*Configure GPIO pins : U4_10_PA8_Pin U4_7_PA9_Pin U4_8_PA10_Pin U4_5_PA11_Pin
+                           U4_6_PA12_Pin */
+  GPIO_InitStruct.Pin = U4_10_PA8_Pin|U4_7_PA9_Pin|U4_8_PA10_Pin|U4_5_PA11_Pin
+                          |U4_6_PA12_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : U4_7_PA9_Pin U4_5_PA11_Pin U1_4_PA15_Pin */
-  GPIO_InitStruct.Pin = U4_7_PA9_Pin|U4_5_PA11_Pin|U1_4_PA15_Pin;
+  /*Configure GPIO pin : U1_4_PA15_Pin */
+  GPIO_InitStruct.Pin = U1_4_PA15_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);

@@ -104,8 +104,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    RemoteLink_Process();
-    RemoteLink_ForwardRawFrame();
+    RemoteLink_ForwardRawData();
     HAL_Delay(1U);
   }
   /* USER CODE END 3 */

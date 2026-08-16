@@ -155,7 +155,7 @@ void StartDebugTask(void *argument)
   for(;;)
   {
     MyMain_Debug();
-    osDelay(1);
+    osDelay(50);
   }
   /* USER CODE END StartDebugTask */
 }

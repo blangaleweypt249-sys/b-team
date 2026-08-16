@@ -1,388 +1,169 @@
 #include "remote_link.h"
+#include "spi.h"
 #include "usart.h"
 
-volatile remote_link_data_t remote_link_data;
-volatile uint32_t remote_link_valid_frames;
-volatile uint32_t remote_link_crc_errors;
-volatile uint32_t remote_link_lost_frames;
 volatile uint32_t remote_link_uart_errors;
 volatile uint32_t remote_link_rx_bytes;
 volatile uint32_t remote_link_rx_callbacks;
 volatile uint32_t remote_link_rx_arm_errors;
 volatile uint32_t remote_link_forward_errors;
-volatile uint32_t remote_link_lora_config_attempts;
-volatile remote_link_lora_config_status_t remote_link_lora_config_status;
-volatile uint8_t remote_link_lora_config_readback[REMOTE_LINK_LORA_CONFIG_SIZE];
+volatile uint32_t remote_link_forward_overflows;
+volatile uint32_t remote_link_forwarded_bytes;
+volatile uint32_t remote_link_control_frames;
+volatile uint32_t remote_link_switch_events;
+volatile uint32_t remote_link_aux_control_frames;
+volatile uint32_t remote_link_aux_crc_errors;
+volatile uint32_t remote_link_aux_spi_errors;
 
 static uint8_t remote_link_rx_byte;
-static uint8_t remote_link_rx_frame[REMOTE_LINK_MAX_FRAME_SIZE];
+static uint8_t remote_link_forward_buffer[128U];
+static volatile uint16_t remote_link_forward_head;
+static volatile uint16_t remote_link_forward_tail;
+static uint8_t remote_link_rx_frame[10U];
 static uint8_t remote_link_rx_index;
-static uint8_t remote_link_rx_expected_length;
-static uint8_t remote_link_have_frame;
-static uint32_t remote_link_last_rx_tick;
-static uint8_t remote_link_lora_ready;
-static volatile uint8_t remote_link_led_pulse_active;
-static volatile uint32_t remote_link_led_pulse_started_at;
-static uint8_t remote_link_uart2_frame[REMOTE_LINK_MAX_FRAME_SIZE];
-static uint8_t remote_link_uart2_frame_length;
-static volatile uint8_t remote_link_uart2_frame_pending;
+static uint8_t remote_link_previous_switches;
+static uint8_t remote_link_have_switch_state;
+static uint8_t remote_link_aux_frame[8U];
+static uint8_t remote_link_previous_aux_outputs;
 
-#define E32_CONFIG_BAUDRATE 9600U
-#define E32_NORMAL_BAUDRATE 115200U
-#define E32_AUX_TIMEOUT_MS 3000U
-#define E32_UART_TIMEOUT_MS 300U
-#define E32_CONFIG_RETRY_COUNT 3U
-#define E32_MODE_SETTLE_MS 10U
-#define E32_COMMAND_SETTLE_MS 20U
-#define REMOTE_LINK_LED_PULSE_MS 100U
+#define REMOTE_LINK_FORWARD_BUFFER_SIZE 128U
+#define REMOTE_LINK_FORWARD_CHUNK_SIZE 32U
+#define REMOTE_LINK_FRAME_SIZE 10U
 #define REMOTE_LINK_HEADER_0 0xA5U
 #define REMOTE_LINK_HEADER_1 0x5AU
-#define REMOTE_LINK_ID_LOCAL 0x01U
-#define REMOTE_LINK_ID_SECONDARY 0x02U
-#define REMOTE_LINK_TYPE_CONTROL 0x01U
-#define REMOTE_LINK_LOCAL_PAYLOAD_SIZE 6U
-#define REMOTE_LINK_SECOND_PAYLOAD_SIZE 2U
-#define REMOTE_LINK_PE0_SWITCH_INDEX 3U
-#define REMOTE_LINK_SHOULDER_ACTIVE 1000U
+#define REMOTE_LINK_SECOND_SWITCHES_INDEX 9U
+#define REMOTE_LINK_PE4_SWITCH_MASK (1U << 0U)
+#define REMOTE_LINK_PE3_SWITCH_MASK (1U << 1U)
+#define REMOTE_LINK_PE1_SWITCH_MASK (1U << 2U)
+#define REMOTE_LINK_PD5_SWITCH_MASK (1U << 5U)
+#define REMOTE_LINK_OUTPUT_SWITCH_MASK \
+    (REMOTE_LINK_PE4_SWITCH_MASK | REMOTE_LINK_PE3_SWITCH_MASK | \
+     REMOTE_LINK_PE1_SWITCH_MASK | REMOTE_LINK_PD5_SWITCH_MASK)
+#define REMOTE_LINK_AUX_FRAME_SIZE 8U
+#define REMOTE_LINK_AUX_TARGET_RECEIVER 0x01U
+#define REMOTE_LINK_AUX_TYPE_CONTROL 0x02U
+#define REMOTE_LINK_AUX_PAYLOAD_SIZE 1U
+#define REMOTE_LINK_AUX_OUTPUT_MASK 0x0FU
+#define REMOTE_LINK_AUX_ARM_MASK (1U << 0U)
+#define REMOTE_LINK_AUX_PUSH_MASK (1U << 1U)
+#define REMOTE_LINK_AUX_GRIPPER_MASK (1U << 2U)
+#define REMOTE_LINK_AUX_ESTOP_MASK (1U << 3U)
 
-/* Address 6, 115200 8N1, 9.6 kbps air rate,
- * transparent mode, channel 6. */
-static const uint8_t remote_link_lora_expected_config[REMOTE_LINK_LORA_CONFIG_SIZE] = {
-    0xC0U, 0x00U, 0x06U, 0x3CU, 0x06U, 0x44U
-};
-
-static uint8_t RemoteLink_LoRaWaitAuxHigh(uint32_t timeout_ms)
-{
-    uint32_t start = HAL_GetTick();
-
-    do
-    {
-        if (HAL_GPIO_ReadPin(LORA_AUX_GPIO_Port, LORA_AUX_Pin) == GPIO_PIN_SET)
-        {
-            HAL_Delay(2U);
-            if (HAL_GPIO_ReadPin(LORA_AUX_GPIO_Port, LORA_AUX_Pin) == GPIO_PIN_SET)
-            {
-                return 1U;
-            }
-        }
-    } while ((uint32_t)(HAL_GetTick() - start) < timeout_ms);
-
-    return 0U;
-}
-
-static HAL_StatusTypeDef RemoteLink_LoRaSetBaudrate(uint32_t baudrate)
-{
-    if (HAL_UART_DeInit(&huart3) != HAL_OK)
-    {
-        return HAL_ERROR;
-    }
-    huart3.Init.BaudRate = baudrate;
-    return HAL_UART_Init(&huart3);
-}
-
-static void RemoteLink_LoRaFlushRx(void)
-{
-    __HAL_UART_CLEAR_OREFLAG(&huart3);
-    while (__HAL_UART_GET_FLAG(&huart3, UART_FLAG_RXNE) != RESET)
-    {
-        (void)huart3.Instance->DR;
-    }
-}
-
-static void RemoteLink_LoRaSaveReadback(const uint8_t *config)
-{
-    uint8_t i;
-
-    for (i = 0U; i < REMOTE_LINK_LORA_CONFIG_SIZE; i++)
-    {
-        remote_link_lora_config_readback[i] = config[i];
-    }
-}
-
-static uint8_t RemoteLink_LoRaConfigMatches(const uint8_t *config)
-{
-    uint8_t i;
-
-    for (i = 0U; i < REMOTE_LINK_LORA_CONFIG_SIZE; i++)
-    {
-        if (config[i] != remote_link_lora_expected_config[i])
-        {
-            return 0U;
-        }
-    }
-    return 1U;
-}
-
-static uint8_t RemoteLink_LoRaReadConfig(uint8_t *config)
-{
-    uint8_t command[3] = {0xC1U, 0xC1U, 0xC1U};
-
-    RemoteLink_LoRaFlushRx();
-    if (HAL_UART_Transmit(&huart3, command, sizeof(command), E32_UART_TIMEOUT_MS) != HAL_OK)
-    {
-        return 0U;
-    }
-    if (HAL_UART_Receive(&huart3, config, REMOTE_LINK_LORA_CONFIG_SIZE,
-                         E32_UART_TIMEOUT_MS) != HAL_OK)
-    {
-        return 0U;
-    }
-    RemoteLink_LoRaSaveReadback(config);
-    return 1U;
-}
-
-static uint8_t RemoteLink_LoRaWriteConfig(void)
-{
-    uint8_t command[REMOTE_LINK_LORA_CONFIG_SIZE];
-    uint8_t i;
-
-    for (i = 0U; i < REMOTE_LINK_LORA_CONFIG_SIZE; i++)
-    {
-        command[i] = remote_link_lora_expected_config[i];
-    }
-    RemoteLink_LoRaFlushRx();
-    if (HAL_UART_Transmit(&huart3, command, sizeof(command), E32_UART_TIMEOUT_MS) != HAL_OK)
-    {
-        return 0U;
-    }
-    HAL_Delay(E32_COMMAND_SETTLE_MS);
-    return RemoteLink_LoRaWaitAuxHigh(E32_AUX_TIMEOUT_MS);
-}
-
-static uint8_t RemoteLink_LoRaEnterNormalMode(void)
-{
-    HAL_GPIO_WritePin(LORA_M0_GPIO_Port, LORA_M0_Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(LORA_M1_GPIO_Port, LORA_M1_Pin, GPIO_PIN_RESET);
-    HAL_Delay(E32_MODE_SETTLE_MS);
-
-    if (RemoteLink_LoRaWaitAuxHigh(E32_AUX_TIMEOUT_MS) == 0U)
-    {
-        return 0U;
-    }
-    return (RemoteLink_LoRaSetBaudrate(E32_NORMAL_BAUDRATE) == HAL_OK) ? 1U : 0U;
-}
-
-static void RemoteLink_LoRaConfigure(void)
-{
-    uint8_t config[REMOTE_LINK_LORA_CONFIG_SIZE];
-    uint8_t attempt;
-    uint8_t configured = 0U;
-
-    remote_link_lora_ready = 0U;
-    remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIGURING;
-    HAL_GPIO_WritePin(LORA_M0_GPIO_Port, LORA_M0_Pin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(LORA_M1_GPIO_Port, LORA_M1_Pin, GPIO_PIN_SET);
-
-    if (RemoteLink_LoRaSetBaudrate(E32_CONFIG_BAUDRATE) != HAL_OK)
-    {
-        remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIG_UART_ERROR;
-        (void)RemoteLink_LoRaEnterNormalMode();
-        return;
-    }
-    HAL_Delay(E32_MODE_SETTLE_MS);
-    if (RemoteLink_LoRaWaitAuxHigh(E32_AUX_TIMEOUT_MS) == 0U)
-    {
-        remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIG_AUX_TIMEOUT;
-        (void)RemoteLink_LoRaEnterNormalMode();
-        return;
-    }
-
-    for (attempt = 0U; attempt < E32_CONFIG_RETRY_COUNT; attempt++)
-    {
-        remote_link_lora_config_attempts++;
-        if (RemoteLink_LoRaReadConfig(config) == 0U)
-        {
-            remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIG_READ_ERROR;
-            HAL_Delay(50U);
-            continue;
-        }
-        if (RemoteLink_LoRaConfigMatches(config) != 0U)
-        {
-            configured = 1U;
-            break;
-        }
-        if (RemoteLink_LoRaWriteConfig() == 0U)
-        {
-            remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIG_WRITE_ERROR;
-            HAL_Delay(50U);
-            continue;
-        }
-        if ((RemoteLink_LoRaReadConfig(config) != 0U) &&
-            (RemoteLink_LoRaConfigMatches(config) != 0U))
-        {
-            configured = 1U;
-            break;
-        }
-        remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIG_VERIFY_ERROR;
-        HAL_Delay(50U);
-    }
-
-    if (configured == 0U)
-    {
-        (void)RemoteLink_LoRaEnterNormalMode();
-        return;
-    }
-    if (RemoteLink_LoRaEnterNormalMode() == 0U)
-    {
-        remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIG_NORMAL_MODE_TIMEOUT;
-        return;
-    }
-
-    remote_link_lora_ready = 1U;
-    remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIG_READY;
-}
-
-static uint8_t RemoteLink_Crc8(const uint8_t *data, uint32_t length)
+static uint8_t RemoteLink_Crc8(const uint8_t *data, uint8_t length)
 {
     uint8_t crc = 0U;
-    uint32_t i;
+    uint8_t index;
     uint8_t bit;
 
-    for (i = 0U; i < length; i++)
+    for (index = 0U; index < length; index++)
     {
-        crc ^= data[i];
+        crc ^= data[index];
         for (bit = 0U; bit < 8U; bit++)
         {
             crc = ((crc & 0x80U) != 0U) ?
-                  (uint8_t)((crc << 1U) ^ 0x07U) : (uint8_t)(crc << 1U);
+                  (uint8_t)((crc << 1U) ^ 0x07U) :
+                  (uint8_t)(crc << 1U);
         }
     }
     return crc;
 }
 
-static void RemoteLink_QueueRawFrame(const uint8_t *frame, uint8_t length)
+static void RemoteLink_ToggleSwitchOutputs(uint8_t changed_switches)
 {
-    uint8_t i;
-
-    if (length > REMOTE_LINK_MAX_FRAME_SIZE)
+    if ((changed_switches & REMOTE_LINK_PE4_SWITCH_MASK) != 0U)
     {
-        return;
+        HAL_GPIO_TogglePin(U1_3_PB3_GPIO_Port, U1_3_PB3_Pin);
+        remote_link_switch_events++;
     }
-    for (i = 0U; i < length; i++)
+    if ((changed_switches & REMOTE_LINK_PE3_SWITCH_MASK) != 0U)
     {
-        remote_link_uart2_frame[i] = frame[i];
+        HAL_GPIO_TogglePin(U1_5_PB5_GPIO_Port, U1_5_PB5_Pin);
+        remote_link_switch_events++;
     }
-    remote_link_uart2_frame_length = length;
-    remote_link_uart2_frame_pending = 1U;
-}
-
-static uint8_t RemoteLink_HasLocalEvent(uint8_t local_buttons,
-                                        uint8_t pe0_switch)
-{
-    uint8_t i;
-
-    if (remote_link_have_frame == 0U)
+    if ((changed_switches & REMOTE_LINK_PE1_SWITCH_MASK) != 0U)
     {
-        return 0U;
+        HAL_GPIO_TogglePin(U1_7_PB7_GPIO_Port, U1_7_PB7_Pin);
+        remote_link_switch_events++;
     }
-    for (i = 0U; i < 6U; i++)
+    if ((changed_switches & REMOTE_LINK_PD5_SWITCH_MASK) != 0U)
     {
-        if ((((local_buttons >> i) & 1U) != 0U) &&
-            (remote_link_data.key_state[i] == 0U))
-        {
-            return 1U;
-        }
-    }
-    if ((((local_buttons >> 6U) & 1U) != 0U) &&
-        (remote_link_data.left_shoulder == 0U))
-    {
-        return 1U;
-    }
-    if ((((local_buttons >> 7U) & 1U) != 0U) &&
-        (remote_link_data.right_shoulder == 0U))
-    {
-        return 1U;
-    }
-    if (pe0_switch !=
-        remote_link_data.switch_state[REMOTE_LINK_PE0_SWITCH_INDEX])
-    {
-        return 1U;
-    }
-    return 0U;
-}
-
-static void RemoteLink_CommitLocalFrame(const uint8_t *frame)
-{
-    uint8_t local_buttons = frame[10];
-    uint8_t pe0_switch = frame[11] & 1U;
-    uint8_t sequence = frame[5];
-    uint8_t local_event =
-        RemoteLink_HasLocalEvent(local_buttons, pe0_switch);
-    uint8_t i;
-
-    if (remote_link_have_frame != 0U)
-    {
-        uint8_t gap = (uint8_t)(sequence - remote_link_data.sequence);
-        if (gap > 1U)
-        {
-            remote_link_lost_frames += (uint32_t)(gap - 1U);
-        }
-    }
-
-    remote_link_data.left_x = frame[6];
-    remote_link_data.left_y = frame[7];
-    remote_link_data.right_x = frame[8];
-    remote_link_data.right_y = frame[9];
-    remote_link_data.left_shoulder =
-        ((local_buttons & 0x40U) != 0U) ? REMOTE_LINK_SHOULDER_ACTIVE : 0U;
-    remote_link_data.right_shoulder =
-        ((local_buttons & 0x80U) != 0U) ? REMOTE_LINK_SHOULDER_ACTIVE : 0U;
-    for (i = 0U; i < REMOTE_LINK_SWITCH_COUNT; i++)
-    {
-        remote_link_data.switch_state[i] = 0U;
-    }
-    remote_link_data.switch_state[REMOTE_LINK_PE0_SWITCH_INDEX] = pe0_switch;
-    for (i = 0U; i < REMOTE_LINK_KEY_COUNT; i++)
-    {
-        remote_link_data.key_state[i] =
-            (i < 6U) ? (uint8_t)((local_buttons >> i) & 1U) : 0U;
-    }
-    remote_link_data.adc_error = 0U;
-    remote_link_data.sequence = sequence;
-    remote_link_last_rx_tick = HAL_GetTick();
-    remote_link_have_frame = 1U;
-    remote_link_valid_frames++;
-    if (local_event != 0U)
-    {
-        remote_link_led_pulse_started_at = remote_link_last_rx_tick;
-        remote_link_led_pulse_active = 1U;
-        HAL_GPIO_WritePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin, GPIO_PIN_SET);
+        HAL_GPIO_TogglePin(GPIOB, U1_10_PB8_Pin | U1_9_PB9_Pin);
+        remote_link_switch_events++;
     }
 }
 
-static void RemoteLink_HandleFrame(const uint8_t *frame, uint8_t length)
+static void RemoteLink_ToggleAuxOutputs(uint8_t changed_outputs)
 {
-    uint8_t payload_size = frame[4];
-
-    if ((length != (uint8_t)(REMOTE_LINK_FRAME_OVERHEAD + payload_size)) ||
-        (frame[3] != REMOTE_LINK_TYPE_CONTROL) ||
-        (RemoteLink_Crc8(&frame[2], (uint32_t)(length - 3U)) !=
-         frame[length - 1U]))
+    if ((changed_outputs & REMOTE_LINK_AUX_ARM_MASK) != 0U)
     {
-        remote_link_crc_errors++;
+        HAL_GPIO_TogglePin(U1_3_PB3_GPIO_Port, U1_3_PB3_Pin);
+        remote_link_switch_events++;
+    }
+    if ((changed_outputs & REMOTE_LINK_AUX_PUSH_MASK) != 0U)
+    {
+        HAL_GPIO_TogglePin(U1_5_PB5_GPIO_Port, U1_5_PB5_Pin);
+        remote_link_switch_events++;
+    }
+    if ((changed_outputs & REMOTE_LINK_AUX_GRIPPER_MASK) != 0U)
+    {
+        HAL_GPIO_TogglePin(U1_7_PB7_GPIO_Port, U1_7_PB7_Pin);
+        remote_link_switch_events++;
+    }
+    if ((changed_outputs & REMOTE_LINK_AUX_ESTOP_MASK) != 0U)
+    {
+        HAL_GPIO_TogglePin(GPIOB, U1_10_PB8_Pin | U1_9_PB9_Pin);
+        remote_link_switch_events++;
+    }
+}
+
+static void RemoteLink_HandleAuxFrame(const uint8_t *frame)
+{
+    uint8_t output_bits;
+    uint8_t changed_outputs;
+
+    if ((frame[0] != REMOTE_LINK_HEADER_0) ||
+        (frame[1] != REMOTE_LINK_HEADER_1) ||
+        (frame[2] != REMOTE_LINK_AUX_TARGET_RECEIVER) ||
+        (frame[3] != REMOTE_LINK_AUX_TYPE_CONTROL) ||
+        (frame[4] != REMOTE_LINK_AUX_PAYLOAD_SIZE) ||
+        ((frame[6] & (uint8_t)~REMOTE_LINK_AUX_OUTPUT_MASK) != 0U) ||
+        (RemoteLink_Crc8(&frame[2], REMOTE_LINK_AUX_FRAME_SIZE - 3U) !=
+         frame[REMOTE_LINK_AUX_FRAME_SIZE - 1U]))
+    {
+        remote_link_aux_crc_errors++;
         return;
     }
 
-    if ((frame[2] == REMOTE_LINK_ID_LOCAL) &&
-        (payload_size == REMOTE_LINK_LOCAL_PAYLOAD_SIZE))
+    output_bits = frame[6] & REMOTE_LINK_AUX_OUTPUT_MASK;
+    changed_outputs = output_bits ^ remote_link_previous_aux_outputs;
+    remote_link_previous_aux_outputs = output_bits;
+    RemoteLink_ToggleAuxOutputs(changed_outputs);
+    remote_link_aux_control_frames++;
+}
+
+static void RemoteLink_HandleFrame(const uint8_t *frame)
+{
+    uint8_t switch_bits;
+    uint8_t changed_switches;
+
+    remote_link_control_frames++;
+    switch_bits = (uint8_t)(frame[REMOTE_LINK_SECOND_SWITCHES_INDEX] &
+                            REMOTE_LINK_OUTPUT_SWITCH_MASK);
+    if (remote_link_have_switch_state == 0U)
     {
-        RemoteLink_CommitLocalFrame(frame);
+        /* The first frame records switch positions; it is not a user toggle. */
+        remote_link_previous_switches = switch_bits;
+        remote_link_have_switch_state = 1U;
+        return;
     }
-    else if ((frame[2] == REMOTE_LINK_ID_SECONDARY) &&
-             (payload_size == REMOTE_LINK_SECOND_PAYLOAD_SIZE))
-    {
-        RemoteLink_QueueRawFrame(frame, length);
-    }
-    else
-    {
-        remote_link_crc_errors++;
-    }
+
+    changed_switches = (uint8_t)(switch_bits ^ remote_link_previous_switches);
+    remote_link_previous_switches = switch_bits;
+    RemoteLink_ToggleSwitchOutputs(changed_switches);
 }
 
 static void RemoteLink_ParseByte(uint8_t byte)
 {
-    uint8_t frame_length;
-
     if (remote_link_rx_index == 0U)
     {
         if (byte == REMOTE_LINK_HEADER_0)
@@ -408,28 +189,32 @@ static void RemoteLink_ParseByte(uint8_t byte)
     }
 
     remote_link_rx_frame[remote_link_rx_index++] = byte;
-    if (remote_link_rx_index == 5U)
-    {
-        remote_link_rx_expected_length =
-            (uint8_t)(REMOTE_LINK_FRAME_OVERHEAD + remote_link_rx_frame[4]);
-        if (remote_link_rx_expected_length > REMOTE_LINK_MAX_FRAME_SIZE)
-        {
-            remote_link_crc_errors++;
-            remote_link_rx_index = 0U;
-            remote_link_rx_expected_length = 0U;
-            return;
-        }
-    }
-    if ((remote_link_rx_expected_length == 0U) ||
-        (remote_link_rx_index < remote_link_rx_expected_length))
+    if (remote_link_rx_index < REMOTE_LINK_FRAME_SIZE)
     {
         return;
     }
 
-    frame_length = remote_link_rx_expected_length;
     remote_link_rx_index = 0U;
-    remote_link_rx_expected_length = 0U;
-    RemoteLink_HandleFrame(remote_link_rx_frame, frame_length);
+    RemoteLink_HandleFrame(remote_link_rx_frame);
+}
+
+static void RemoteLink_QueueByte(uint8_t byte)
+{
+    uint16_t head = remote_link_forward_head;
+    uint16_t next = head + 1U;
+
+    if (next >= REMOTE_LINK_FORWARD_BUFFER_SIZE)
+    {
+        next = 0U;
+    }
+    if (next == remote_link_forward_tail)
+    {
+        remote_link_forward_overflows++;
+        return;
+    }
+
+    remote_link_forward_buffer[head] = byte;
+    remote_link_forward_head = next;
 }
 
 static void RemoteLink_ArmReceive(void)
@@ -444,108 +229,76 @@ static void RemoteLink_ArmReceive(void)
     }
 }
 
+static void RemoteLink_ArmAuxReceive(void)
+{
+    if (HAL_SPI_GetState(&hspi1) == HAL_SPI_STATE_BUSY_RX)
+    {
+        return;
+    }
+    if (HAL_SPI_Receive_IT(&hspi1,
+                          remote_link_aux_frame,
+                          REMOTE_LINK_AUX_FRAME_SIZE) != HAL_OK)
+    {
+        remote_link_aux_spi_errors++;
+    }
+}
+
 void RemoteLink_Init(void)
 {
-    remote_link_rx_index = 0U;
-    remote_link_rx_expected_length = 0U;
-    remote_link_have_frame = 0U;
-    remote_link_valid_frames = 0U;
-    remote_link_crc_errors = 0U;
-    remote_link_lost_frames = 0U;
     remote_link_uart_errors = 0U;
     remote_link_rx_bytes = 0U;
     remote_link_rx_callbacks = 0U;
     remote_link_rx_arm_errors = 0U;
     remote_link_forward_errors = 0U;
-    remote_link_lora_config_attempts = 0U;
-    remote_link_lora_config_status = REMOTE_LINK_LORA_CONFIG_NOT_STARTED;
-    remote_link_led_pulse_active = 0U;
-    remote_link_uart2_frame_length = 0U;
-    remote_link_uart2_frame_pending = 0U;
+    remote_link_forward_overflows = 0U;
+    remote_link_forwarded_bytes = 0U;
+    remote_link_control_frames = 0U;
+    remote_link_switch_events = 0U;
+    remote_link_aux_control_frames = 0U;
+    remote_link_aux_crc_errors = 0U;
+    remote_link_aux_spi_errors = 0U;
+    remote_link_forward_head = 0U;
+    remote_link_forward_tail = 0U;
+    remote_link_rx_index = 0U;
+    remote_link_previous_switches = 0U;
+    remote_link_have_switch_state = 0U;
+    remote_link_previous_aux_outputs = 0U;
     HAL_GPIO_WritePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin, GPIO_PIN_RESET);
-    RemoteLink_LoRaConfigure();
-    if (RemoteLink_LoRaReady() != 0U)
-    {
-        RemoteLink_ArmReceive();
-    }
+    HAL_GPIO_WritePin(LORA_M0_GPIO_Port, LORA_M0_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LORA_M1_GPIO_Port, LORA_M1_Pin, GPIO_PIN_RESET);
+    RemoteLink_ArmReceive();
+    RemoteLink_ArmAuxReceive();
 }
 
-uint8_t RemoteLink_LoRaReady(void)
+void RemoteLink_ForwardRawData(void)
 {
-    return remote_link_lora_ready;
-}
-
-uint8_t RemoteLink_IsConnected(void)
-{
-    return ((RemoteLink_LoRaReady() != 0U) &&
-            (remote_link_have_frame != 0U) &&
-            ((HAL_GetTick() - remote_link_last_rx_tick) <= REMOTE_LINK_TIMEOUT_MS)) ?
-           1U : 0U;
-}
-
-uint8_t RemoteLink_GetSnapshot(remote_link_data_t *snapshot)
-{
-    uint32_t primask;
-    uint8_t connected;
-
-    if (snapshot == NULL)
-    {
-        return 0U;
-    }
-
-    primask = __get_PRIMASK();
-    __disable_irq();
-    *snapshot = remote_link_data;
-    connected = RemoteLink_IsConnected();
-    if (primask == 0U)
-    {
-        __enable_irq();
-    }
-    return connected;
-}
-
-void RemoteLink_Process(void)
-{
-    if ((remote_link_led_pulse_active != 0U) &&
-        ((uint32_t)(HAL_GetTick() - remote_link_led_pulse_started_at) >=
-         REMOTE_LINK_LED_PULSE_MS))
-    {
-        HAL_GPIO_WritePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin, GPIO_PIN_RESET);
-        remote_link_led_pulse_active = 0U;
-    }
-}
-
-void RemoteLink_ForwardRawFrame(void)
-{
-    uint8_t frame[REMOTE_LINK_MAX_FRAME_SIZE];
+    uint8_t data[REMOTE_LINK_FORWARD_CHUNK_SIZE];
     uint8_t length = 0U;
-    uint8_t pending;
-    uint8_t i;
-    uint32_t primask;
+    uint16_t head = remote_link_forward_head;
+    uint16_t tail = remote_link_forward_tail;
 
-    primask = __get_PRIMASK();
-    __disable_irq();
-    pending = remote_link_uart2_frame_pending;
-    if (pending != 0U)
+    while ((tail != head) && (length < REMOTE_LINK_FORWARD_CHUNK_SIZE))
     {
-        length = remote_link_uart2_frame_length;
-        for (i = 0U; i < length; i++)
+        data[length++] = remote_link_forward_buffer[tail];
+        tail++;
+        if (tail >= REMOTE_LINK_FORWARD_BUFFER_SIZE)
         {
-            frame[i] = remote_link_uart2_frame[i];
+            tail = 0U;
         }
-        remote_link_uart2_frame_pending = 0U;
     }
-    if (primask == 0U)
+    if (length == 0U)
     {
-        __enable_irq();
+        return;
     }
 
-    if (pending != 0U)
+    if (HAL_UART_Transmit(&huart2, data, length, 10U) == HAL_OK)
     {
-        if (HAL_UART_Transmit(&huart2, frame, length, 10U) != HAL_OK)
-        {
-            remote_link_forward_errors++;
-        }
+        remote_link_forward_tail = tail;
+        remote_link_forwarded_bytes += length;
+    }
+    else
+    {
+        remote_link_forward_errors++;
     }
 }
 
@@ -554,11 +307,9 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     if (huart->Instance == USART3)
     {
         remote_link_rx_callbacks++;
-        if (RemoteLink_LoRaReady() != 0U)
-        {
-            remote_link_rx_bytes++;
-            RemoteLink_ParseByte(remote_link_rx_byte);
-        }
+        remote_link_rx_bytes++;
+        RemoteLink_ParseByte(remote_link_rx_byte);
+        RemoteLink_QueueByte(remote_link_rx_byte);
         RemoteLink_ArmReceive();
     }
 }
@@ -569,10 +320,24 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
     {
         remote_link_uart_errors++;
         remote_link_rx_index = 0U;
-        remote_link_rx_expected_length = 0U;
-        if (RemoteLink_LoRaReady() != 0U)
-        {
-            RemoteLink_ArmReceive();
-        }
+        RemoteLink_ArmReceive();
+    }
+}
+
+void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if (hspi->Instance == SPI1)
+    {
+        RemoteLink_HandleAuxFrame(remote_link_aux_frame);
+        RemoteLink_ArmAuxReceive();
+    }
+}
+
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
+{
+    if (hspi->Instance == SPI1)
+    {
+        remote_link_aux_spi_errors++;
+        RemoteLink_ArmAuxReceive();
     }
 }

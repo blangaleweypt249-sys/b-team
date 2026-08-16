@@ -7,20 +7,6 @@
 #define REMOTE_KEY_COUNT 12U
 #define REMOTE_SHOULDER_MAX 1000U
 #define REMOTE_SHOULDER_TRIGGER_THRESHOLD 600U
-#define REMOTE_LORA_CONFIG_SIZE 6U
-
-typedef enum
-{
-    REMOTE_LORA_CONFIG_NOT_STARTED = 0U,
-    REMOTE_LORA_CONFIGURING,
-    REMOTE_LORA_CONFIG_READY,
-    REMOTE_LORA_CONFIG_AUX_TIMEOUT,
-    REMOTE_LORA_CONFIG_UART_ERROR,
-    REMOTE_LORA_CONFIG_READ_ERROR,
-    REMOTE_LORA_CONFIG_WRITE_ERROR,
-    REMOTE_LORA_CONFIG_VERIFY_ERROR,
-    REMOTE_LORA_CONFIG_NORMAL_MODE_TIMEOUT
-} remote_lora_config_status_t;
 
 typedef struct
 {
@@ -38,16 +24,11 @@ extern volatile remote_data_t remote_data;
 extern volatile uint32_t remote_tx_error_count;
 extern volatile uint32_t remote_tx_frame_count;
 extern volatile uint32_t remote_tx_busy_skip_count;
-extern volatile uint32_t remote_tx_config_skip_count;
-extern volatile uint32_t remote_lora_config_attempts;
-extern volatile remote_lora_config_status_t remote_lora_config_status;
-extern volatile uint8_t remote_lora_config_readback[REMOTE_LORA_CONFIG_SIZE];
 
-void Remote_LoRaInit(void);
-uint8_t Remote_LoRaReady(void);
+void Remote_TransmitInit(void);
 
 /**
- * @brief 按固定周期发送本机和第二主控的遥控数据帧
+ * @brief 按固定周期发送包含两组数据的固定 10 字节帧
  * @retval None
  */
 void Remote_Send(void);

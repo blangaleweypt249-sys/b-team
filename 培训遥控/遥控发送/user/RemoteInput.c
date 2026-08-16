@@ -28,10 +28,10 @@ static uint16_t remote_shoulder[REMOTE_SHOULDER_NUM];
 static uint8_t remote_shoulder_ready;
 static const remote_axis_cal_t remote_axis_cal[REMOTE_AXIS_NUM] =
 {
-    {10U, 2103U, 4080U}, /* 右 X */
-    {10U, 1960U, 4080U}, /* 右 Y */
-    {10U, 2142U, 4080U}, /* 左 X */
-    {10U, 1964U, 4080U}  /* 左 Y */
+    {10U, 2103U, 4080U}, /* 左 Y，PC2 / ADC2_IN12 */
+    {10U, 1960U, 4080U}, /* 左 X，PC3 / ADC2_IN13 */
+    {10U, 2142U, 4080U}, /* 右 X，PB0 / ADC2_IN8 */
+    {10U, 1964U, 4080U}  /* 右 Y，PB1 / ADC2_IN9 */
 };
 
 static GPIO_TypeDef *const remote_sw_ports[REMOTE_SWITCH_COUNT] =
@@ -353,10 +353,10 @@ void Remote_Update(void)
 
         remote_data.left_shoulder = Remote_ConvertShoulder(remote_shoulder[0]);
         remote_data.right_shoulder = Remote_ConvertShoulder(remote_shoulder[1]);
-        remote_data.right_x = Remote_ConvertAxis(0U, remote_axis_adc[0]);
-        remote_data.right_y = Remote_ConvertAxis(1U, remote_axis_adc[1]);
-        remote_data.left_x = Remote_ConvertAxis(2U, remote_axis_adc[2]);
-        remote_data.left_y = Remote_ConvertAxis(3U, remote_axis_adc[3]);
+        remote_data.left_x = Remote_ConvertAxis(1U, remote_axis_adc[1]);
+        remote_data.left_y = Remote_ConvertAxis(0U, remote_axis_adc[0]);
+        remote_data.right_x = Remote_ConvertAxis(2U, remote_axis_adc[2]);
+        remote_data.right_y = Remote_ConvertAxis(3U, remote_axis_adc[3]);
     }
 
     for (i = 0U; i < REMOTE_SWITCH_COUNT; i++)

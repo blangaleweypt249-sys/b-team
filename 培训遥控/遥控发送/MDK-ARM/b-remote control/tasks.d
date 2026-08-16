@@ -1,10 +1,6 @@
 b-remote\ control/tasks.o: \
   ..\Middlewares\Third_Party\FreeRTOS\Source\tasks.c \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdlib.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\string.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\FreeRTOS.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stddef.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdint.h \
   ..\Core\Inc\FreeRTOSConfig.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\projdefs.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\portable.h \
