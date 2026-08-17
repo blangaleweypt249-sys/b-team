@@ -7,16 +7,8 @@ b-up/action_api.o: ..\user\Action_api\action_api.c \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h7xx.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h723xx.h \
   ..\Drivers\CMSIS\Include\core_cm7.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdint.h \
-  ..\Drivers\CMSIS\Include\cmsis_version.h \
-  ..\Drivers\CMSIS\Include\cmsis_compiler.h \
-  ..\Drivers\CMSIS\Include\cmsis_armclang.h \
-  ..\Drivers\CMSIS\Include\mpu_armv7.h \
-  ..\Drivers\CMSIS\Include\cachel1_armv7.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\system_stm32h7xx.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\Legacy\stm32_hal_legacy.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stddef.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\math.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_gpio.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_gpio_ex.h \
@@ -38,7 +30,6 @@ b-up/action_api.o: ..\user\Action_api\action_api.c \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
   ..\user\up\up_main.h ..\user\2006\c610_2006.h ..\user\up\dm_2006_bus.h \
-  ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
-  ..\user\up\dm_app.h ..\user\up\dm_motor.h ..\user\up\rs_app.h \
-  ..\user\up\rs00.h ..\user\up\rs_bus.h
+  ..\Core\Inc\fdcan.h ..\Core\Inc\main.h ..\user\up\dm_app.h \
+  ..\user\up\dm_motor.h ..\user\up\rs_app.h ..\user\up\rs00.h \
+  ..\user\up\rs_bus.h

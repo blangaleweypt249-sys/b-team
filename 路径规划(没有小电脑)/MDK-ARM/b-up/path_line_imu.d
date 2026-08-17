@@ -1,5 +1,7 @@
-b-up/vesc_can.o: ..\user\chassis_vesc\vesc_can.c \
-  ..\user\chassis_vesc\vesc_can.h ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
+b-up/path_line_imu.o: ..\user\path\imu\path_line_imu.c \
+  ..\user\path\imu\path_line_imu.h ..\user\chassis_vesc\chassis_main.h \
+  ..\user\chassis_vesc\vesc_motor.h ..\user\chassis_vesc\vesc_can.h \
+  ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
   ..\Core\Inc\stm32h7xx_hal_conf.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc.h \
@@ -28,4 +30,5 @@ b-up/vesc_can.o: ..\user\chassis_vesc\vesc_can.c \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
-  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
+  ..\user\imu\imu_main.h

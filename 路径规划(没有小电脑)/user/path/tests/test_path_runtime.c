@@ -70,7 +70,6 @@ static void submit_and_run(int16_t raw_vx, int16_t raw_vy,
                            uint32_t now_ms)
 {
     Path_SubmitRemoteCommand(&raw_vx, &raw_vy, &raw_z, buttons, now_ms);
-    assert(raw_z == 0);
     Path_Run1ms(now_ms);
 }
 
@@ -191,27 +190,35 @@ static void test_manual_axis_and_auto_cancel(void)
     assert(!diagnostics.single_axis_enabled);
     assert(diagnostics.raw_vy == 60);
 
-    /* 再次打开首个 Y 段并越过 1.65 m，自动取消、停车并等待回中。 */
+    /*
+     * 再次打开首个 Y 段：距段终点 1.60 m 不足 0.10 m 时自动解除
+     * 单轴（不停车、不要求回中），命令立即恢复全向。
+     */
     submit_and_run(0, 0, 0, 0U, 60U);
     submit_and_run(50, 20, 0, PATH_REMOTE_MODE_BUTTON_BIT, 70U);
     assert(Path_GetDiagnostics(&diagnostics));
+    assert(diagnostics.single_axis_enabled);
     mock_odometry.fused_position_y_m =
-        1.650f - diagnostics.initial_map_y_m;
+        1.520f - diagnostics.initial_map_y_m;
     submit_and_run(50, 20, 0, PATH_REMOTE_MODE_BUTTON_BIT, 80U);
-    assert(mock_chassis_vx == 0);
-    assert(mock_chassis_vy == 0);
-    assert(mock_stop_count >= 1U);
     assert(Path_GetDiagnostics(&diagnostics));
     assert(!diagnostics.single_axis_enabled);
-    assert(diagnostics.neutral_rearm_required);
-    assert(diagnostics.segment_index == 1U);
-    assert(diagnostics.automatic_cancel_count == 1U);
-
-    submit_and_run(30, 0, 0, 0U, 90U);
-    assert(mock_chassis_vx == 0);
-    submit_and_run(0, 0, 0, 0U, 100U);
-    assert(Path_GetDiagnostics(&diagnostics));
     assert(!diagnostics.neutral_rearm_required);
+    assert(diagnostics.segment_index == 0U);
+    assert(diagnostics.automatic_cancel_count == 1U);
+    assert(mock_chassis_vx == 50);
+    assert(mock_chassis_vy == 20);
+
+    /* 越过段终点：段号推进，同样不停车、不要求回中。 */
+    mock_odometry.fused_position_y_m =
+        1.601f - diagnostics.initial_map_y_m;
+    submit_and_run(50, 20, 0, PATH_REMOTE_MODE_BUTTON_BIT, 90U);
+    assert(Path_GetDiagnostics(&diagnostics));
+    assert(diagnostics.segment_index == 1U);
+    assert(!diagnostics.neutral_rearm_required);
+    assert(diagnostics.automatic_cancel_count == 1U);
+    assert(mock_chassis_vy == 20);
+    submit_and_run(0, 0, 0, 0U, 100U);
 
     /* 为后续独立激光安全测试移到墙 B 右侧，不影响初始锚点。 */
     mock_odometry.fused_position_x_m =
@@ -392,24 +399,41 @@ static void test_return_trip(void)
     assert(fabsf(diagnostics.map_x_m - 0.500f) < 0.0002f);
     assert(fabsf(diagnostics.map_y_m - 3.700f) < 0.0002f);
 
-    /* 回程键按下沿：进入回程，yaw 目标切到 180°，要求停车回中。 */
+    /*
+     * 回程键按下沿（车头此时朝 +Y）：自动选择倒车回程，锁 0°、
+     * 无需掉头、立即对齐；仍要求入口停车。
+     */
     submit_and_run(0, 0, 0, 0U, 711U);
     submit_and_run(0, 0, 0, PATH_REMOTE_RETURN_BUTTON_BIT, 712U);
     assert(Path_GetDiagnostics(&diagnostics));
     assert(diagnostics.return_mode);
-    assert(!diagnostics.return_yaw_aligned);
-    assert(mock_imu.target_yaw_deg == 180.0f);
+    assert(diagnostics.return_reverse);
+    assert(diagnostics.return_yaw_aligned);
+    assert(mock_imu.target_yaw_deg == 0.0f);
     assert(mock_stop_count >= 1U);
 
-    /* 旋转未对齐期间平移命令被忽略；地图坐标实时跟随里程计
-       （原地旋转不产生平移位移，坐标自然不变，无需冻结）。 */
-    submit_and_run(50, 50, 0, 0U, 713U);
+    /*
+     * 驾驶员用肩键把车头调向 -Y（回程模式肩键直通）：z 命令原样
+     * 下发底盘；yaw 越过 100° 后自动切换为车头朝 -Y 前进模式。
+     */
+    submit_and_run(0, 0, 10, 0U, 713U);
+    assert(mock_chassis_z == 10);
+    mock_imu.yaw_deg = 170.0f;
+    Path_Run1ms(713U);
+    assert(Path_GetDiagnostics(&diagnostics));
+    assert(!diagnostics.return_reverse);
+    assert(!diagnostics.return_yaw_aligned);
+    assert(mock_imu.target_yaw_deg == 180.0f);
+
+    /* 转向未对齐期间平移命令被忽略；地图坐标实时跟随里程计。 */
+    submit_and_run(50, 50, 0, 0U, 714U);
     assert(mock_chassis_vx == 0);
     assert(mock_chassis_vy == 0);
+    assert(Path_GetDiagnostics(&diagnostics));
     assert(fabsf(diagnostics.map_x_m - 0.500f) < 0.0002f);
     assert(fabsf(diagnostics.map_y_m - 3.700f) < 0.0002f);
 
-    /* IMU 掉头完成：对齐后开始回程段 0。 */
+    /* 掉头完成：对齐后开始回程段 0。 */
     mock_imu.yaw_deg = 180.0f;
     Path_Run1ms(714U);
     assert(Path_GetDiagnostics(&diagnostics));
@@ -605,18 +629,22 @@ static void test_return_after_task(void)
     assert(!diagnostics.return_mode);
     assert(fabsf(diagnostics.map_y_m - 4.500f) < 0.0002f);
 
-    /* 任务完成，按回程键：进入回程，yaw 目标 180°，掉头。 */
+    /*
+     * 任务完成，按回程键：车头仍朝 +Y → 自动选择倒车回程
+     * （锁 0°，不掉头，立即对齐），直接从任务点倒着往回走。
+     */
     submit_and_run(0, 0, 0, 0U, 912U);
     submit_and_run(0, 0, 0, PATH_REMOTE_RETURN_BUTTON_BIT, 913U);
     assert(Path_GetDiagnostics(&diagnostics));
     assert(diagnostics.return_mode);
-    assert(mock_imu.target_yaw_deg == 180.0f);
+    assert(diagnostics.return_reverse);
+    assert(diagnostics.return_yaw_aligned);
+    assert(mock_imu.target_yaw_deg == 0.0f);
     /* 地图坐标仍实时跟随任务点位置，不做任何冻结。 */
     assert(fabsf(diagnostics.map_x_m - 0.500f) < 0.0002f);
     assert(fabsf(diagnostics.map_y_m - 4.500f) < 0.0002f);
 
-    /* 掉头完成，从任务点开始回程段 0（X- 到 0.36，在 y=4.5 层走）。 */
-    mock_imu.yaw_deg = 180.0f;
+    /* 无需掉头，直接开始回程段 0（X- 到 0.36，在 y=4.5 层走）。 */
     Path_Run1ms(914U);
     assert(Path_GetDiagnostics(&diagnostics));
     assert(diagnostics.return_yaw_aligned);
@@ -647,13 +675,21 @@ static void test_return_after_task(void)
     assert(Path_GetDiagnostics(&diagnostics));
     assert(diagnostics.segment_index == 5U);
 
-    /* 回程段 5：前光 11 cm 校正 Y（贴靠面基准），10 cm 贴面归零。 */
+    /*
+     * 回程段 5（倒车）：车头朝 +Y，前光面向空旷方向，激光校正与
+     * 贴面兜底都不参与（即使收到 11 cm 读数也只能来自动态障碍，
+     * 不能当贴靠面用），末段完全依赖里程计。
+     */
     set_front_laser(11U, 920U);
     mock_odometry.fused_position_y_m = 0.05f;
     Path_Run1ms(920U);
     assert(Path_GetDiagnostics(&diagnostics));
-    assert(fabsf(diagnostics.map_y_m - 0.335f) < 0.0002f);
-    set_front_laser(10U, 921U);
+    assert(fabsf(diagnostics.map_y_m - 0.3585f) < 0.0002f);
+    assert(!diagnostics.return_complete);
+
+    /* 倒车靠里程计越过段终点 0.3085：判定回到起点并强制归零。 */
+    set_front_laser(20U, 921U);
+    mock_odometry.fused_position_y_m = 0.308f - 0.3085f;
     Path_Run1ms(921U);
     assert(Path_GetDiagnostics(&diagnostics));
     assert(diagnostics.return_complete);

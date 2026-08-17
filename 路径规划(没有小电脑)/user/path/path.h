@@ -12,9 +12,11 @@ extern "C" {
 
 /*
  * 遥控器六键（LoRa 本机控制帧 payload[4] 低 6 位；bit6/7 是肩键旋转，
- * 本层强制 z=0 不响应）。各键语义：
- *   按键 1：切换当前地图段的单轴模式（按下沿触发）
- *   按键 2：去程走完后进入回程（掉头 180° 返回起点）；回程走完后再按退出
+ * 去程强制 z=0 不响应，回程模式放开肩键供人工微调航向）。各键语义：
+ *   按键 1：切换当前地图段的单轴模式（按下沿触发；靠近段终点
+ *           0.10 m 内自动解除，不停车、不要求回中）
+ *   按键 2：去程走完后进入回程（按车头朝向自动选择倒车回程或
+ *           车头朝 -Y 前进）；回程走完后再按退出
  *   按键 3~6：预留
  */
 #define PATH_REMOTE_BUTTON_1_BIT   (1U << 0U)
@@ -49,6 +51,8 @@ typedef struct
     bool return_mode;
     bool return_yaw_aligned;
     bool return_complete;
+    /* 回程朝向：true=车头靠近 +Y、倒车回程；false=车头朝 -Y 前进。 */
+    bool return_reverse;
     path_map_axis_t active_axis;
     uint8_t segment_index;
     uint8_t segment_count;
@@ -91,7 +95,8 @@ void Path_Init(void);
 /**
  * 由 LoRa 本机控制帧提交人工指令和六键状态。
  * 函数保存原始摇杆指令，并把参数替换成最近一次 1 ms 安全计算结果；
- * z 始终返回 0，因此两个肩键不能改变 yaw。
+ * 去程 z 恒为 0（肩键锁定），回程模式返回最近一次安全输出的 z
+ * （肩键微调直通）。
  */
 void Path_SubmitRemoteCommand(int16_t *vx, int16_t *vy, int16_t *z,
                               uint8_t six_buttons, uint32_t now_ms);

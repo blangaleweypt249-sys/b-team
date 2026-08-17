@@ -85,7 +85,10 @@ def plot(csv_path, mirrored, title, out_path):
 if __name__ == "__main__":
     out = Path(sys.argv[1] if len(sys.argv) > 1 else "user/path/sim/out")
     plot(out / "normal_full.csv", False,
-         "Normal side / full-speed driver (post-fix: full loop)", out / "traj_normal_full.png")
+         "Normal side / full-speed (reverse return)", out / "traj_normal_full.png")
+    plot(out / "normal_turnfirst.csv", False,
+         "Normal side / shoulder-turn, forward return",
+         out / "traj_normal_turnfirst.png")
     plot(out / "normal_careful.csv", False,
          "Normal side / careful driver", out / "traj_normal_careful.png")
     plot(out / "mirrored_full.csv", True,

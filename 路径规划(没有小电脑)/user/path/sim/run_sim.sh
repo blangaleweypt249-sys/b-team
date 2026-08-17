@@ -26,6 +26,9 @@ echo
 echo "================ 常规侧 · 谨慎驾驶 ================"
 "$binary" --careful --csv="$out_dir/normal_careful.csv" | tee "$out_dir/normal_careful.txt"
 echo
+echo "================ 常规侧 · 全速 · 肩键调头正向回程 ================"
+"$binary" --turn-first --csv="$out_dir/normal_turnfirst.csv" | tee "$out_dir/normal_turnfirst.txt"
+echo
 echo "================ 镜像侧 · 全速驾驶 ================"
 "$binary" --mirrored --csv="$out_dir/mirrored_full.csv" | tee "$out_dir/mirrored_full.txt"
 echo

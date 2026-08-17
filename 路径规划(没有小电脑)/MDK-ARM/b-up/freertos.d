@@ -1,7 +1,5 @@
 b-up/freertos.o: ..\Core\Src\freertos.c \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\FreeRTOS.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stddef.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdint.h \
   ..\Core\Inc\FreeRTOSConfig.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\projdefs.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\portable.h \
@@ -17,14 +15,8 @@ b-up/freertos.o: ..\Core\Src\freertos.c \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h7xx.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h723xx.h \
   ..\Drivers\CMSIS\Include\core_cm7.h \
-  ..\Drivers\CMSIS\Include\cmsis_version.h \
-  ..\Drivers\CMSIS\Include\cmsis_compiler.h \
-  ..\Drivers\CMSIS\Include\cmsis_armclang.h \
-  ..\Drivers\CMSIS\Include\mpu_armv7.h \
-  ..\Drivers\CMSIS\Include\cachel1_armv7.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\system_stm32h7xx.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\Legacy\stm32_hal_legacy.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\math.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_gpio.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_gpio_ex.h \
@@ -48,10 +40,10 @@ b-up/freertos.o: ..\Core\Src\freertos.c \
   ..\Drivers\CMSIS\RTOS2\Include\cmsis_os2.h \
   ..\user\Action_api\action_api.h ..\user\chassis_vesc\chassis_main.h \
   ..\user\chassis_vesc\vesc_motor.h ..\user\chassis_vesc\vesc_can.h \
-  ..\Core\Inc\fdcan.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
-  ..\user\com_link\computer_link.h ..\user\com_link\dt35_pnp_link.h \
-  ..\user\imu\imu_main.h ..\user\com_link\lora_link.h \
+  ..\Core\Inc\fdcan.h ..\user\com_link\computer_link.h \
+  ..\user\com_link\dt35_pnp_link.h ..\user\imu\imu_main.h \
+  ..\user\path\imu\path_line_imu.h ..\user\path\path.h \
+  ..\user\path\path_map.h ..\user\com_link\lora_link.h \
   ..\user\com_link\mcu_link.h ..\user\up\up_main.h \
   ..\user\2006\c610_2006.h ..\user\up\dm_2006_bus.h ..\user\up\dm_app.h \
   ..\user\up\dm_motor.h ..\user\up\rs_app.h ..\user\up\rs00.h \

@@ -37,11 +37,14 @@ extern "C" {
 #define PATH_MAP_START_FACE_Y_M         0.0000f
 /*
  * 回程末段允许贴靠回起点：南向净空线从常规的 0.3285 m 收窄到
- * 起点中心 Y 减 5 mm，否则边界安全线（半车长 + 2 cm）会把回程
- * 挡在起点前 3 cm 处，回到起点在数值上永远无法成立。
+ * 起点中心 Y 减 15 mm。地图限速在净空 ≤10 mm 处硬停，因此硬停线
+ * 位于 0.3035 m，低于段终点 0.3085 m——倒车回程没有尾部激光，
+ * 末段只能靠里程计蠕行越过段终点，硬停线必须让出这段距离；
+ * 正向回程另有前光 10 cm 贴面兜底。若边距不足（例如 -5 mm），
+ * 硬停线会卡在段终点上方 3 mm，倒车回程永远无法判定回到起点。
  */
 #define PATH_MAP_FINAL_APPROACH_MARGIN_Y_M \
-    (PATH_MAP_INITIAL_CENTER_Y_M - 0.0050f)
+    (PATH_MAP_INITIAL_CENTER_Y_M - 0.0150f)
 #define PATH_MAP_WALL_B_X_MIN_M         0.0000f
 #define PATH_MAP_WALL_B_X_MAX_M         2.0000f
 #define PATH_MAP_WALL_B_SOUTH_Y_M       2.0750f

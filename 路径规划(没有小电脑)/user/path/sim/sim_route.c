@@ -252,6 +252,16 @@ static int16_t sim_calc_omega(int16_t vx, int16_t vy, int16_t omega,
         plant.omega_output = omega;
         return omega;
     }
+    /* imu_main.c 677 行：手动旋转（肩键 |z|>yaw_cmd_threshold=3）
+     * 优先直通，旋转期间目标角跟随当前航向，松手后原地保持。 */
+    if ((omega > 3) || (omega < -3))
+    {
+        plant.imu_target_yaw = plant.yaw_deg;
+        plant.imu_target_valid = true;
+        plant.yaw_mode = 3;
+        plant.omega_output = omega;
+        return omega;
+    }
     /* z 恒为 0（path.c 锁死），手动旋转分支不会触发。 */
     stopped = (abs(vx) <= SIM_YAW_LINEAR_THRESHOLD) &&
               (abs(vy) <= SIM_YAW_LINEAR_THRESHOLD);
@@ -666,6 +676,8 @@ typedef enum
 typedef struct
 {
     driver_profile_t profile;
+    bool turn_first;   /* 进回程后先用肩键把车头转到 -Y 再走 */
+    bool turn_done;
     bool prev_btn1;
     bool prev_btn2;
     uint32_t route_done_ms;
@@ -693,6 +705,13 @@ static void driver_body_from_map(double mx, double my,
     double by = -s * mx + c * my;
     *vx = (int16_t)lround(bx);
     *vy = (int16_t)lround(by);
+}
+
+static double sim_norm_deg(double a)
+{
+    while (a > 180.0) a -= 360.0;
+    while (a < -180.0) a += 360.0;
+    return a;
 }
 
 static void driver_frame(uint32_t now_ms, const path_diagnostics_t *diag)
@@ -726,9 +745,23 @@ static void driver_frame(uint32_t now_ms, const path_diagnostics_t *diag)
             driver.phase = 4;
             break;
         }
+        /* 肩键调头场景：进回程后按住肩键把车头转到 -Y（回程模式
+         * 肩键直通，lora_link 输出 ±10），path 检测到朝向越过 100°
+         * 后自动从倒车切换为正向回程。 */
+        if (driver.phase == 3 && driver.turn_first && !driver.turn_done)
+        {
+            if (fabs(sim_norm_deg(plant.yaw_deg - 180.0)) > 3.0)
+            {
+                z = -10; /* lora_link.c REMOTE_ROTATION_MRAD_S */
+                break;
+            }
+            driver.turn_done = true;
+            printf("[%.3f s] 驾驶员肩键调头完成 (yaw=%.1f°)\n",
+                   now_ms / 1000.0, plant.yaw_deg);
+        }
         if (driver.phase == 3 && !diag->return_yaw_aligned)
         {
-            break; /* 掉头中，松杆 */
+            break; /* 转向中，松杆 */
         }
         if (diag->neutral_rearm_required)
         {
@@ -757,54 +790,6 @@ static void driver_frame(uint32_t now_ms, const path_diagnostics_t *diag)
                                  &vx, &vy);
             break;
         }
-        if (!diag->single_axis_enabled)
-        {
-            /* 按下沿切换单轴（path.h 按键 1） */
-            press1 = !driver.prev_btn1;
-            driver.stall_since_ms = now_ms;
-            break;
-        }
-        /* 卡死检测：推杆但机器人 2 s 没有位移 */
-        {
-            double moved = hypot(diag->map_x_m - driver.stall_x,
-                                 diag->map_y_m - driver.stall_y);
-            if (moved > 0.01)
-            {
-                driver.stall_x = diag->map_x_m;
-                driver.stall_y = diag->map_y_m;
-                driver.stall_since_ms = now_ms;
-            }
-            else if ((now_ms - driver.stall_since_ms) > 2000)
-            {
-                /* 选净空最大的地图方向后退 */
-                static const double dirs[4][2] =
-                    { {1,0}, {-1,0}, {0,1}, {0,-1} };
-                double best = -1.0;
-                int k, best_k = 0;
-                for (k = 0; k < 4; k++)
-                {
-                    double clr = PathMap_RayClearance(
-                        diag->map_x_m, diag->map_y_m,
-                        (float)dirs[k][0], (float)dirs[k][1]);
-                    if (clr > best)
-                    {
-                        best = clr;
-                        best_k = k;
-                    }
-                }
-                driver.recovering = true;
-                driver.recover_dir_x = dirs[best_k][0];
-                driver.recover_dir_y = dirs[best_k][1];
-                driver.recover_from_x = diag->map_x_m;
-                driver.recover_from_y = diag->map_y_m;
-                driver.recover_count++;
-                printf("[%.3f s] 驾驶员脱困 #%d: 位置(%.3f,%.3f) 朝(%g,%g)"
-                       "退 8 cm\n", now_ms / 1000.0, driver.recover_count,
-                       diag->map_x_m, diag->map_y_m,
-                       driver.recover_dir_x, driver.recover_dir_y);
-                break;
-            }
-        }
         {
             uint8_t count;
             const path_map_route_segment_t *route =
@@ -818,6 +803,56 @@ static void driver_frame(uint32_t now_ms, const path_diagnostics_t *diag)
                                diag->map_x_m : diag->map_y_m;
                 double remaining = fabs(seg->target_m - coord);
                 int speed = SIM_REMOTE_FAST;
+
+                /* 距段终点 >0.15 m 且未开单轴时才按键 1（固件在
+                 * 0.10 m 内会自动解除，避免按键/解除来回抖动）。 */
+                if (!diag->single_axis_enabled && remaining > 0.15)
+                {
+                    press1 = !driver.prev_btn1;
+                    driver.stall_since_ms = now_ms;
+                    break;
+                }
+                /* 卡死检测：推杆但机器人 2 s 没有位移 */
+                {
+                    double moved = hypot(diag->map_x_m - driver.stall_x,
+                                         diag->map_y_m - driver.stall_y);
+                    if (moved > 0.01)
+                    {
+                        driver.stall_x = diag->map_x_m;
+                        driver.stall_y = diag->map_y_m;
+                        driver.stall_since_ms = now_ms;
+                    }
+                    else if ((now_ms - driver.stall_since_ms) > 2000)
+                    {
+                        static const double dirs[4][2] =
+                            { {1,0}, {-1,0}, {0,1}, {0,-1} };
+                        double best = -1.0;
+                        int k, best_k = 0;
+                        for (k = 0; k < 4; k++)
+                        {
+                            double clr = PathMap_RayClearance(
+                                diag->map_x_m, diag->map_y_m,
+                                (float)dirs[k][0], (float)dirs[k][1]);
+                            if (clr > best)
+                            {
+                                best = clr;
+                                best_k = k;
+                            }
+                        }
+                        driver.recovering = true;
+                        driver.recover_dir_x = dirs[best_k][0];
+                        driver.recover_dir_y = dirs[best_k][1];
+                        driver.recover_from_x = diag->map_x_m;
+                        driver.recover_from_y = diag->map_y_m;
+                        driver.recover_count++;
+                        printf("[%.3f s] 驾驶员脱困 #%d: 位置(%.3f,%.3f) "
+                               "朝(%g,%g)退 8 cm\n", now_ms / 1000.0,
+                               driver.recover_count,
+                               diag->map_x_m, diag->map_y_m,
+                               driver.recover_dir_x, driver.recover_dir_y);
+                        break;
+                    }
+                }
                 if (driver.profile == DRIVER_CAREFUL && remaining < 0.5)
                 {
                     speed = SIM_REMOTE_FINE;
@@ -867,6 +902,7 @@ static void driver_frame(uint32_t now_ms, const path_diagnostics_t *diag)
 int main(int argc, char **argv)
 {
     bool mirrored = false;
+    bool turn_first = false;
     driver_profile_t profile = DRIVER_FULL;
     const char *csv_path = "sim_log.csv";
     FILE *csv;
@@ -885,6 +921,7 @@ int main(int argc, char **argv)
     {
         if (strcmp(argv[i], "--mirrored") == 0) mirrored = true;
         else if (strcmp(argv[i], "--careful") == 0) profile = DRIVER_CAREFUL;
+        else if (strcmp(argv[i], "--turn-first") == 0) turn_first = true;
         else if (strncmp(argv[i], "--csv=", 6) == 0) csv_path = argv[i] + 6;
     }
 
@@ -892,6 +929,7 @@ int main(int argc, char **argv)
     memset(&driver, 0, sizeof(driver));
     memset((void *)dt35_link, 0, sizeof(dt35_link));
     driver.profile = profile;
+    driver.turn_first = turn_first;
     sim_build_field(mirrored);
 
     /*
@@ -1075,13 +1113,29 @@ int main(int argc, char **argv)
     {
         printf("注意: 检测到掉头未自主启动（疑似急停闩锁死锁回归）\n");
     }
-    printf("结论: %s\n",
-           (route_done_ms && return_done_ms && !plant.contact_events &&
-            !hand_turn_used) ?
-           "整条路线闭环完成" :
-           (route_done_ms && !return_done_ms) ?
-           "去程完成，回程未能完成" :
-           (route_done_ms && return_done_ms) ?
-           "去程完成；回程仅在人工干预/接触后完成" : "路线未完成");
+    if (route_done_ms && return_done_ms && !hand_turn_used)
+    {
+        if (!plant.contact_events)
+        {
+            printf("结论: 整条路线闭环完成（无接触）\n");
+        }
+        else if (plant.max_contact_speed <= 0.5)
+        {
+            printf("结论: 整条路线闭环完成（%d 次轻微刮擦/贴靠, "
+                   "最大法向 %.2f m/s）\n",
+                   plant.contact_events, plant.max_contact_speed);
+        }
+        else
+        {
+            printf("结论: 路线完成但存在明显碰撞（最大 %.2f m/s）\n",
+                   plant.max_contact_speed);
+        }
+    }
+    else
+    {
+        printf("结论: %s\n",
+               (route_done_ms && !return_done_ms) ?
+               "去程完成，回程未能完成" : "路线未完成");
+    }
     return 0;
 }

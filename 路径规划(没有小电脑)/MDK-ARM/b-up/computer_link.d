@@ -7,16 +7,8 @@ b-up/computer_link.o: ..\user\com_link\computer_link.c \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h7xx.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h723xx.h \
   ..\Drivers\CMSIS\Include\core_cm7.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdint.h \
-  ..\Drivers\CMSIS\Include\cmsis_version.h \
-  ..\Drivers\CMSIS\Include\cmsis_compiler.h \
-  ..\Drivers\CMSIS\Include\cmsis_armclang.h \
-  ..\Drivers\CMSIS\Include\mpu_armv7.h \
-  ..\Drivers\CMSIS\Include\cachel1_armv7.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\system_stm32h7xx.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\Legacy\stm32_hal_legacy.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stddef.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\math.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_gpio.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_gpio_ex.h \
@@ -40,6 +32,5 @@ b-up/computer_link.o: ..\user\com_link\computer_link.c \
   ..\user\Action_api\action_api.h ..\user\chassis_vesc\chassis_main.h \
   ..\user\chassis_vesc\vesc_motor.h ..\user\chassis_vesc\vesc_can.h \
   ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
   ..\user\com_link\dt35_pnp_link.h ..\user\imu\imu_main.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\string.h
+  ..\user\path\path.h ..\user\path\path_map.h
