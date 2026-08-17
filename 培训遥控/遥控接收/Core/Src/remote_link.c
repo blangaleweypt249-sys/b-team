@@ -44,6 +44,7 @@ static uint8_t remote_link_previous_aux_outputs;
 #define REMOTE_LINK_AUX_TYPE_CONTROL 0x02U
 #define REMOTE_LINK_AUX_PAYLOAD_SIZE 1U
 #define REMOTE_LINK_AUX_OUTPUT_MASK 0x0FU
+#define REMOTE_LINK_AUX_STREAM_BUFFER_SIZE 32U
 #define REMOTE_LINK_AUX_ARM_MASK (1U << 0U)
 #define REMOTE_LINK_AUX_PUSH_MASK (1U << 1U)
 #define REMOTE_LINK_AUX_GRIPPER_MASK (1U << 2U)
@@ -116,29 +117,140 @@ static void RemoteLink_ToggleAuxOutputs(uint8_t changed_outputs)
     }
 }
 
-static void RemoteLink_HandleAuxFrame(const uint8_t *frame)
-{
-    uint8_t output_bits;
-    uint8_t changed_outputs;
+static uint8_t remote_link_aux_stream[REMOTE_LINK_AUX_STREAM_BUFFER_SIZE];
+static uint8_t remote_link_aux_stream_size;
 
+static uint8_t RemoteLink_AuxFrameIsValid(const uint8_t *frame)
+{
     if ((frame[0] != REMOTE_LINK_HEADER_0) ||
         (frame[1] != REMOTE_LINK_HEADER_1) ||
         (frame[2] != REMOTE_LINK_AUX_TARGET_RECEIVER) ||
         (frame[3] != REMOTE_LINK_AUX_TYPE_CONTROL) ||
         (frame[4] != REMOTE_LINK_AUX_PAYLOAD_SIZE) ||
         ((frame[6] & (uint8_t)~REMOTE_LINK_AUX_OUTPUT_MASK) != 0U) ||
-        (RemoteLink_Crc8(&frame[2], REMOTE_LINK_AUX_FRAME_SIZE - 3U) !=
-         frame[REMOTE_LINK_AUX_FRAME_SIZE - 1U]))
+         (RemoteLink_Crc8(&frame[2], REMOTE_LINK_AUX_FRAME_SIZE - 3U) !=
+          frame[REMOTE_LINK_AUX_FRAME_SIZE - 1U]))
     {
-        remote_link_aux_crc_errors++;
-        return;
+        return 0U;
     }
+    return 1U;
+}
+
+static void RemoteLink_HandleAuxFrame(const uint8_t *frame)
+{
+    uint8_t output_bits;
+    uint8_t changed_outputs;
 
     output_bits = frame[6] & REMOTE_LINK_AUX_OUTPUT_MASK;
     changed_outputs = output_bits ^ remote_link_previous_aux_outputs;
     remote_link_previous_aux_outputs = output_bits;
     RemoteLink_ToggleAuxOutputs(changed_outputs);
     remote_link_aux_control_frames++;
+}
+
+static void RemoteLink_AuxStreamDiscard(uint8_t count)
+{
+    uint8_t index;
+
+    if (count >= remote_link_aux_stream_size)
+    {
+        remote_link_aux_stream_size = 0U;
+        return;
+    }
+
+    remote_link_aux_stream_size =
+        (uint8_t)(remote_link_aux_stream_size - count);
+    for (index = 0U; index < remote_link_aux_stream_size; index++)
+    {
+        remote_link_aux_stream[index] = remote_link_aux_stream[index + count];
+    }
+}
+
+/*
+ * SPI has no CS on this connection, so a reset can start in the middle of an
+ * 8-byte transfer. Keep the received blocks as a byte stream and recover at
+ * the next valid header/CRC instead of permanently preserving the offset.
+ */
+static void RemoteLink_ProcessAuxStream(void)
+{
+    uint8_t header_index;
+
+    for (;;)
+    {
+        if (remote_link_aux_stream_size < 2U)
+        {
+            return;
+        }
+
+        header_index = 0U;
+        while (((uint16_t)header_index + 1U) < remote_link_aux_stream_size)
+        {
+            if ((remote_link_aux_stream[header_index] == REMOTE_LINK_HEADER_0) &&
+                (remote_link_aux_stream[header_index + 1U] ==
+                 REMOTE_LINK_HEADER_1))
+            {
+                break;
+            }
+            header_index++;
+        }
+
+        if (((uint16_t)header_index + 1U) >= remote_link_aux_stream_size)
+        {
+            if (remote_link_aux_stream[remote_link_aux_stream_size - 1U] ==
+                REMOTE_LINK_HEADER_0)
+            {
+                remote_link_aux_stream[0] = REMOTE_LINK_HEADER_0;
+                remote_link_aux_stream_size = 1U;
+            }
+            else
+            {
+                remote_link_aux_stream_size = 0U;
+            }
+            return;
+        }
+
+        if (header_index > 0U)
+        {
+            RemoteLink_AuxStreamDiscard(header_index);
+        }
+        if (remote_link_aux_stream_size < REMOTE_LINK_AUX_FRAME_SIZE)
+        {
+            return;
+        }
+
+        if (RemoteLink_AuxFrameIsValid(remote_link_aux_stream) != 0U)
+        {
+            RemoteLink_HandleAuxFrame(remote_link_aux_stream);
+            RemoteLink_AuxStreamDiscard(REMOTE_LINK_AUX_FRAME_SIZE);
+        }
+        else
+        {
+            remote_link_aux_crc_errors++;
+            /* Search again one byte later; the next frame may be intact. */
+            RemoteLink_AuxStreamDiscard(1U);
+        }
+    }
+}
+
+static void RemoteLink_QueueAuxBlock(void)
+{
+    uint8_t index;
+
+    if (remote_link_aux_stream_size >
+        (REMOTE_LINK_AUX_STREAM_BUFFER_SIZE - REMOTE_LINK_AUX_FRAME_SIZE))
+    {
+        RemoteLink_AuxStreamDiscard(
+            (uint8_t)(remote_link_aux_stream_size -
+                      (REMOTE_LINK_AUX_STREAM_BUFFER_SIZE -
+                       REMOTE_LINK_AUX_FRAME_SIZE)));
+    }
+
+    for (index = 0U; index < REMOTE_LINK_AUX_FRAME_SIZE; index++)
+    {
+        remote_link_aux_stream[remote_link_aux_stream_size++] =
+            remote_link_aux_frame[index];
+    }
+    RemoteLink_ProcessAuxStream();
 }
 
 static void RemoteLink_HandleFrame(const uint8_t *frame)
@@ -263,6 +375,7 @@ void RemoteLink_Init(void)
     remote_link_previous_switches = 0U;
     remote_link_have_switch_state = 0U;
     remote_link_previous_aux_outputs = 0U;
+    remote_link_aux_stream_size = 0U;
     HAL_GPIO_WritePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(LORA_M0_GPIO_Port, LORA_M0_Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(LORA_M1_GPIO_Port, LORA_M1_Pin, GPIO_PIN_RESET);
@@ -328,7 +441,7 @@ void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi)
 {
     if (hspi->Instance == SPI1)
     {
-        RemoteLink_HandleAuxFrame(remote_link_aux_frame);
+        RemoteLink_QueueAuxBlock();
         RemoteLink_ArmAuxReceive();
     }
 }
