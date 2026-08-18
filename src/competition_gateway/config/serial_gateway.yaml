@@ -12,9 +12,8 @@ serial_gateway:
     field_pose_topic: /competition/field_pose
     # 金球位置话题 (由 ball_perception 包发布)
     ball_position_topic: /perception/ball_position
-    # 红蓝块位置话题 (由 block_perception 包发布)
-    block_red_position_topic: /perception/block_red_position
-    block_blue_position_topic: /perception/block_blue_position
+    # 块位置话题(由 block_perception 发布,不区分颜色,只跟踪一个块)
+    block_position_topic: /perception/block_position
     controller_connected_topic: /competition/serial/controller_connected
     controller_state_topic: /competition/serial/controller_state
     controller_error_topic: /competition/serial/controller_error

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""红蓝块 YOLO 检测 + RGB-D 深度融合测距节点。
+"""块 YOLO 检测 + RGB-D 深度融合测距节点(不区分颜色,单块跟踪)。
 
 核心思路:
-  1. YOLOv8-seg 检测图像中红蓝块, 获取分割 mask
+  1. YOLOv8-seg 检测图像中的块, 获取分割 mask
   2. 在 mask 区域内提取深度, 取深度主峰中值作为目标距离
   3. 反投影得到相机坐标系三维坐标
   4. 转换到夹爪 TCP 坐标系 (P_G = P_C + t_G_C)
-  5. 分别发布红块和蓝块的 3D 位置
+  5. 用 IOU 跟踪给每个检测框分配临时 ID, 记录距离历史
+     只有"距离持续减小"的 ID 才确认为真正输出目标(机器人正在接近)
+     目标消失后(连续失配)自动重新跟踪新的块
+  6. 发布单一块 3D 位置(不区分红蓝)
 
 订阅话题:
   /orbbec/color/image_raw  (sensor_msgs/Image)  - RGB 图像
@@ -14,9 +17,8 @@
   /orbbec/camera_info       (sensor_msgs/CameraInfo) - 相机内参
 
 发布话题:
-  /perception/block_red_position   (geometry_msgs/PointStamped) - 红块 3D 位置 (m, gripper frame)
-  /perception/block_blue_position  (geometry_msgs/PointStamped) - 蓝块 3D 位置 (m, gripper frame)
-  /perception/block_overlay        (sensor_msgs/Image)          - 检测叠加图
+  /perception/block_position  (geometry_msgs/PointStamped) - 当前跟踪块 3D 位置 (m, gripper frame)
+  /perception/block_overlay   (sensor_msgs/Image)          - 检测叠加图
 
 坐标系 (相机 / 夹爪一致):
   X: 前方为正
@@ -29,6 +31,8 @@ Orbbec -> 夹爪外参 (t_G_C, 固连常量, 尺子量出):
 """
 
 import os
+from dataclasses import dataclass, field
+from typing import List, Tuple
 
 import numpy as np
 import rclpy
@@ -69,6 +73,36 @@ DEPTH_HIST_BIN_MM = 50.0
 DEPTH_CLUSTER_WINDOW_MM = 120.0
 SEG_MASK_ERODE_KERNEL = 3
 
+# ---- IOU 跟踪参数 ----
+# 思路:远处 YOLO 检出一堆候选,机器人向其中一个前进;
+# 只把"距离持续减小"的 ID 确认为真正输出目标,其余丢弃。
+IOU_THRESHOLD = 0.3              # IOU 匹配阈值,低于此值不视为同一目标
+MAX_MISSED_FRAMES = 5            # 连续未匹配帧数上限,超过则删除 track
+MIN_HISTORY_TO_CONFIRM = 3       # 确认目标所需的最小距离历史长度
+MAX_HISTORY_LEN = 10             # 距离历史最大保留长度
+MIN_APPROACH_DELTA_M = 0.10      # 整体接近量(米):首末差需 >= 此值才视为正在接近
+MAX_REBOUND_M = 0.05             # 相邻帧距离允许的反弹量(米),超过则视为未在接近
+
+
+@dataclass
+class Track:
+    """IOU 跟踪的临时目标,记录历史距离序列用于判定机器人是否正在接近。"""
+
+    track_id: int
+    bbox: Tuple[int, int, int, int]
+    cls_name: str
+    conf: float
+    depth_mm: float
+    x_mm: float
+    y_mm: float
+    z_mm: float
+    # 距离历史序列(米),用于判断是否持续接近
+    distance_history: List[float] = field(default_factory=list)
+    # 连续未匹配帧数
+    missed: int = 0
+    # 是否已确认(距离持续减小)
+    confirmed: bool = False
+
 
 class BlockDistanceNode(Node):
     def __init__(self):
@@ -96,8 +130,6 @@ class BlockDistanceNode(Node):
         self.conf_threshold = self.get_parameter('conf_threshold').value
         self.iou_threshold = self.get_parameter('iou_threshold').value
 
-        self.red_name = self.get_parameter('red_class_name').value.lower()
-        self.blue_name = self.get_parameter('blue_class_name').value.lower()
         self.min_depth_mm = self.get_parameter('min_depth_mm').value
         self.max_depth_mm = self.get_parameter('max_depth_mm').value
         self.dist_alpha = self.get_parameter('distance_alpha').value
@@ -112,9 +144,9 @@ class BlockDistanceNode(Node):
             f't_G_C=({self.t_g_c_x_m*1000:.1f}, {self.t_g_c_y_m*1000:.1f}, {self.t_g_c_z_m*1000:.1f}) mm'
         )
 
-        # 平滑距离缓存
-        self.smoothed_red_dist = None
-        self.smoothed_blue_dist = None
+        # IOU 跟踪状态
+        self.tracks: List[Track] = []
+        self._next_id = 0
 
         # 相机内参 (从 camera_info 话题动态获取)
         self.fx = None
@@ -135,17 +167,15 @@ class BlockDistanceNode(Node):
         self.info_sub = self.create_subscription(
             CameraInfo, '/orbbec/camera_info', self.info_callback, 10)
 
-        # 发布
-        self.red_pub = self.create_publisher(
-            PointStamped, '/perception/block_red_position', 10)
-        self.blue_pub = self.create_publisher(
-            PointStamped, '/perception/block_blue_position', 10)
+        # 发布:单一块位置(不区分颜色,只跟踪一个块)
+        self.block_pub = self.create_publisher(
+            PointStamped, '/perception/block_position', 10)
         self.overlay_pub = self.create_publisher(
             Image, '/perception/block_overlay', 10)
 
         # 融合定时器 (20Hz)
         self.timer = self.create_timer(0.05, self.fusion_callback)
-        self.get_logger().info('红蓝块检测节点已启动')
+        self.get_logger().info('块检测节点已启动(不区分颜色,单块跟踪)')
 
     def color_callback(self, msg):
         self.latest_color = msg
@@ -248,16 +278,84 @@ class BlockDistanceNode(Node):
 
         return mask.astype(bool)
 
-    def _smooth_distance(self, current_dist, smoothed_var):
-        """EMA 平滑"""
-        if smoothed_var[0] is None:
-            smoothed_var[0] = current_dist
-        else:
-            smoothed_var[0] = (
-                self.dist_alpha * smoothed_var[0]
-                + (1.0 - self.dist_alpha) * current_dist
-            )
-        return smoothed_var[0]
+    # ==================== IOU 跟踪 ====================
+    @staticmethod
+    def _iou(b1: Tuple[int, int, int, int], b2: Tuple[int, int, int, int]) -> float:
+        """计算两个 bbox (x1,y1,x2,y2) 的交并比。"""
+        xi1 = max(b1[0], b2[0])
+        yi1 = max(b1[1], b2[1])
+        xi2 = min(b1[2], b2[2])
+        yi2 = min(b1[3], b2[3])
+        if xi2 <= xi1 or yi2 <= yi1:
+            return 0.0
+        inter = (xi2 - xi1) * (yi2 - yi1)
+        a1 = (b1[2] - b1[0]) * (b1[3] - b1[1])
+        a2 = (b2[2] - b2[0]) * (b2[3] - b2[1])
+        return inter / (a1 + a2 - inter + 1e-6)
+
+    def _match_tracks(
+        self,
+        tracks: List[Track],
+        detections: List[dict],
+    ):
+        """贪心 IOU 匹配:返回 (matched, unmatched_tracks, unmatched_detections)。
+
+        matched 为 (track_idx, det_idx) 列表。
+        """
+        n_t = len(tracks)
+        n_d = len(detections)
+        if n_t == 0:
+            return [], [], list(range(n_d))
+        if n_d == 0:
+            return [], list(range(n_t)), []
+
+        # IOU 矩阵
+        iou_mat = np.zeros((n_t, n_d), dtype=np.float32)
+        for ti in range(n_t):
+            for di in range(n_d):
+                iou_mat[ti, di] = self._iou(tracks[ti].bbox, detections[di]['bbox'])
+
+        matched: List[Tuple[int, int]] = []
+        used_t = set()
+        used_d = set()
+        # 贪心:每次取全局最大 IOU,达阈值则配对
+        while len(used_t) < n_t and len(used_d) < n_d:
+            idx = int(np.argmax(iou_mat))
+            ti, di = divmod(idx, n_d)
+            val = float(iou_mat[ti, di])
+            if val < IOU_THRESHOLD:
+                break
+            matched.append((ti, di))
+            used_t.add(ti)
+            used_d.add(di)
+            # 置零避免重复选取
+            iou_mat[ti, :] = 0.0
+            iou_mat[:, di] = 0.0
+
+        unmatched_t = [i for i in range(n_t) if i not in used_t]
+        unmatched_d = [i for i in range(n_d) if i not in used_d]
+        return matched, unmatched_t, unmatched_d
+
+    @staticmethod
+    def _is_approaching(history: List[float]) -> bool:
+        """判断距离序列是否表明机器人正在持续接近该目标。
+
+        判定条件(需同时满足):
+          1. 历史长度 >= MIN_HISTORY_TO_CONFIRM
+          2. 末值 < 首值 - MIN_APPROACH_DELTA_M(整体在接近)
+          3. 相邻帧距离增大不超过 MAX_REBOUND_M(无明显反弹)
+        """
+        if len(history) < MIN_HISTORY_TO_CONFIRM:
+            return False
+        seq = history[-MIN_HISTORY_TO_CONFIRM:]
+        # 整体趋势:末值需比首值小至少 MIN_APPROACH_DELTA_M
+        if seq[-1] > seq[0] - MIN_APPROACH_DELTA_M:
+            return False
+        # 过程中不允许大幅反弹
+        for i in range(len(seq) - 1):
+            if seq[i + 1] > seq[i] + MAX_REBOUND_M:
+                return False
+        return True
 
     def fusion_callback(self):
         if self.latest_color is None or self.latest_depth is None:
@@ -278,104 +376,143 @@ class BlockDistanceNode(Node):
         result = results[0]
         overlay = result.plot()
 
-        if result.boxes is None or len(result.boxes) == 0:
-            cv2.putText(overlay, 'No block detected', (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            self.overlay_pub.publish(self.bridge.cv2_to_imgmsg(overlay, encoding='bgr8'))
-            return
+        # 解析所有检测框,收集为 detections 列表(红+蓝)
+        detections: List[dict] = []
+        if result.boxes is not None and len(result.boxes) > 0:
+            boxes = result.boxes
+            xyxy = boxes.xyxy.detach().cpu().numpy().astype(int)
+            confs = boxes.conf.detach().cpu().numpy()
+            cls_ids = boxes.cls.detach().cpu().numpy().astype(int)
 
-        # 解析检测结果
-        boxes = result.boxes
-        xyxy = boxes.xyxy.detach().cpu().numpy().astype(int)
-        confs = boxes.conf.detach().cpu().numpy()
-        cls_ids = boxes.cls.detach().cpu().numpy().astype(int)
+            masks = None
+            if result.masks is not None:
+                masks = result.masks.data.detach().cpu().numpy()
 
-        masks = None
-        if result.masks is not None:
-            masks = result.masks.data.detach().cpu().numpy()
+            for i in range(len(xyxy)):
+                x1, y1, x2, y2 = xyxy[i]
+                x1 = max(0, min(x1, img_w - 1))
+                y1 = max(0, min(y1, img_h - 1))
+                x2 = max(x1 + 1, min(x2, img_w))
+                y2 = max(y1 + 1, min(y2, img_h))
 
-        # 分别找红块和蓝块中置信度最高的
-        red_best = None
-        blue_best = None
+                cls_name = str(result.names.get(cls_ids[i], str(cls_ids[i]))).lower()
+                conf = float(confs[i])
 
-        for i in range(len(xyxy)):
-            x1, y1, x2, y2 = xyxy[i]
-            x1 = max(0, min(x1, img_w - 1))
-            y1 = max(0, min(y1, img_h - 1))
-            x2 = max(x1 + 1, min(x2, img_w))
-            y2 = max(y1 + 1, min(y2, img_h))
+                # 模型只检测块,所有检测框都视为候选块(不区分颜色)
 
-            cls_name = str(result.names.get(cls_ids[i], str(cls_ids[i]))).lower()
-            conf = float(confs[i])
+                # 准备 mask
+                if masks is not None and i < len(masks):
+                    seg_mask = self._prepare_mask(masks[i], img_h, img_w)
+                else:
+                    seg_mask = np.zeros((img_h, img_w), dtype=bool)
+                    seg_mask[y1:y2, x1:x2] = True
 
-            # 准备 mask
-            seg_mask = None
-            if masks is not None and i < len(masks):
-                seg_mask = self._prepare_mask(masks[i], img_h, img_w)
-            else:
-                seg_mask = np.zeros((img_h, img_w), dtype=bool)
-                seg_mask[y1:y2, x1:x2] = True
+                # 估计深度
+                depth_mm, n_points = self._estimate_depth_from_mask(depth_map, seg_mask)
+                if depth_mm is None:
+                    continue
 
-            # 估计深度
-            depth_mm, n_points = self._estimate_depth_from_mask(depth_map, seg_mask)
+                # 反投影
+                cx_pixel = (x1 + x2) // 2
+                cy_pixel = (y1 + y2) // 2
+                x_mm, y_mm, z_mm = self._deproject_to_3d(cx_pixel, cy_pixel, depth_mm)
 
-            if depth_mm is None:
-                continue
+                detections.append({
+                    'cls_name': cls_name,
+                    'conf': conf,
+                    'x_mm': x_mm,
+                    'y_mm': y_mm,
+                    'z_mm': z_mm,
+                    'depth_mm': depth_mm,
+                    'n_points': n_points,
+                    'bbox': (x1, y1, x2, y2),
+                })
 
-            # 反投影
-            cx_pixel = (x1 + x2) // 2
-            cy_pixel = (y1 + y2) // 2
-            x_mm, y_mm, z_mm = self._deproject_to_3d(cx_pixel, cy_pixel, depth_mm)
+        # ---- IOU 跟踪更新 ----
+        matched, unmatched_t, unmatched_d = self._match_tracks(self.tracks, detections)
 
-            detection = {
-                'cls_name': cls_name,
-                'conf': conf,
-                'x_mm': x_mm,
-                'y_mm': y_mm,
-                'z_mm': z_mm,
-                'depth_mm': depth_mm,
-                'n_points': n_points,
-                'bbox': (x1, y1, x2, y2),
-            }
+        # 1) 已匹配:更新 track 状态并判定是否确认
+        for ti, di in matched:
+            t = self.tracks[ti]
+            d = detections[di]
+            t.bbox = d['bbox']
+            t.cls_name = d['cls_name']
+            t.conf = d['conf']
+            t.depth_mm = d['depth_mm']
+            t.x_mm = d['x_mm']
+            t.y_mm = d['y_mm']
+            t.z_mm = d['z_mm']
+            t.distance_history.append(d['depth_mm'] / 1000.0)
+            if len(t.distance_history) > MAX_HISTORY_LEN:
+                t.distance_history.pop(0)
+            t.missed = 0
+            t.confirmed = self._is_approaching(t.distance_history)
 
-            if self.red_name in cls_name:
-                if red_best is None or conf > red_best['conf']:
-                    red_best = detection
-            elif self.blue_name in cls_name:
-                if blue_best is None or conf > blue_best['conf']:
-                    blue_best = detection
+        # 2) 未匹配的 track:missed +1(若曾确认则撤销)
+        for ti in unmatched_t:
+            self.tracks[ti].missed += 1
+            self.tracks[ti].confirmed = False
 
-        # 发布红块位置
-        if red_best is not None:
-            smoothed = self._smooth_distance(red_best['depth_mm'] / 1000.0, [self.smoothed_red_dist])
-            self.smoothed_red_dist = smoothed
-            self._publish_position(
-                self.red_pub, red_best,
-                smoothed * 1000.0,
-                (0, 0, 255),  # 红色
-                overlay,
-            )
+        # 3) 未匹配的检测框:新建 track
+        for di in unmatched_d:
+            d = detections[di]
+            self._next_id += 1
+            self.tracks.append(Track(
+                track_id=self._next_id,
+                bbox=d['bbox'],
+                cls_name=d['cls_name'],
+                conf=d['conf'],
+                depth_mm=d['depth_mm'],
+                x_mm=d['x_mm'],
+                y_mm=d['y_mm'],
+                z_mm=d['z_mm'],
+                distance_history=[d['depth_mm'] / 1000.0],
+            ))
 
-        # 发布蓝块位置
-        if blue_best is not None:
-            smoothed = self._smooth_distance(blue_best['depth_mm'] / 1000.0, [self.smoothed_blue_dist])
-            self.smoothed_blue_dist = smoothed
-            self._publish_position(
-                self.blue_pub, blue_best,
-                smoothed * 1000.0,
-                (255, 0, 0),  # 蓝色
-                overlay,
-            )
+        # 4) 删除超时 track(连续 MAX_MISSED_FRAMES 未匹配)
+        self.tracks = [t for t in self.tracks if t.missed <= MAX_MISSED_FRAMES]
+
+        # ---- 绘制所有 track(未确认灰色,已确认绿色) ----
+        for t in self.tracks:
+            color = (0, 255, 0) if t.confirmed else (128, 128, 128)
+            thickness = 3 if t.confirmed else 1
+            cv2.rectangle(overlay, (t.bbox[0], t.bbox[1]), (t.bbox[2], t.bbox[3]),
+                          color, thickness)
+            label = f"ID{t.track_id} {t.cls_name} d={t.depth_mm:.0f}mm"
+            if t.confirmed:
+                label += " [确认]"
+            cv2.putText(overlay, label, (t.bbox[0], t.bbox[1] - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+        # ---- 发布:已确认 track 中选距离最近的一个(不区分颜色) ----
+        confirmed_tracks = [t for t in self.tracks if t.confirmed]
+
+        if confirmed_tracks:
+            best = min(confirmed_tracks, key=lambda t: t.depth_mm)
+            out_depth_mm = self._median_recent_depth(best)
+            self._publish_position(self.block_pub, best, out_depth_mm, (0, 255, 0), overlay)
+
+        # 状态提示
+        n_confirmed = len(confirmed_tracks)
+        cv2.putText(overlay, f'tracks={len(self.tracks)} confirmed={n_confirmed}',
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
         self.overlay_pub.publish(self.bridge.cv2_to_imgmsg(overlay, encoding='bgr8'))
 
-    def _publish_position(self, publisher, det, depth_mm, color, overlay):
-        """发布 3D 位置并绘制叠加信息（默认夹爪 TCP 坐标系）"""
-        x_mm, y_mm, z_mm = det['x_mm'], det['y_mm'], det['z_mm']
+    @staticmethod
+    def _median_recent_depth(track: Track) -> float:
+        """取 track 最近 3 个距离的中值作为输出深度(mm),抗深度噪声。"""
+        recent = track.distance_history[-3:]
+        return float(np.median(recent)) * 1000.0
 
-        # 使用平滑后的深度重新计算 XYZ（已为 +X前、+Y左、+Z上）
-        cx_pixel = (det['bbox'][0] + det['bbox'][2]) // 2
-        cy_pixel = (det['bbox'][1] + det['bbox'][3]) // 2
+    def _publish_position(self, publisher, track: Track, depth_mm, color, overlay):
+        """发布 3D 位置并绘制叠加信息(默认夹爪 TCP 坐标系)。
+
+        参数 track: 已确认的 Track 对象;depth_mm: 经中值滤波后的输出深度(mm)。
+        """
+        # 使用输出深度反投影 XYZ(已为 +X前、+Y左、+Z上)
+        cx_pixel = (track.bbox[0] + track.bbox[2]) // 2
+        cy_pixel = (track.bbox[1] + track.bbox[3]) // 2
         x_mm, y_mm, z_mm = self._deproject_to_3d(cx_pixel, cy_pixel, depth_mm)
 
         # 转换为夹爪 TCP 坐标 (单位 m)
@@ -394,10 +531,10 @@ class BlockDistanceNode(Node):
         publisher.publish(msg)
 
         # 绘制叠加信息
-        x1, y1, x2, y2 = det['bbox']
+        x1, y1, x2, y2 = track.bbox
         frame_str = 'gripper' if self.output_to_gripper else 'cam'
         label = (
-            f"{det['cls_name']} {det['conf']:.2f} d={depth_mm:.0f}mm  "
+            f"{track.cls_name} {track.conf:.2f} d={depth_mm:.0f}mm  "
             f"{frame_str}:({gx_m*1000:.0f},{gy_m*1000:.0f},{gz_m*1000:.0f})mm"
         )
         cv2.putText(overlay, label, (x1, y1 - 5),

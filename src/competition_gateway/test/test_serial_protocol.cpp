@@ -1,5 +1,7 @@
 #include "competition_gateway/serial_protocol.hpp"
 
+#include <cstring>
+
 #include <gtest/gtest.h>
 
 namespace competition_gateway
@@ -27,16 +29,13 @@ TEST(SerialProtocolTest, CRC16DetectsByteSwap)
 TEST(SerialProtocolTest, EncodePerceptionCreatesValidFrame)
 {
   perception_data_t data{};
-  data.red_x_m = 1.5F;
-  data.red_y_m = 2.0F;
-  data.red_z_m = 0.3F;
-  data.blue_x_m = -1.0F;
-  data.blue_y_m = 0.5F;
-  data.blue_z_m = 0.2F;
+  data.block_x_m = 1.5F;
+  data.block_y_m = 2.0F;
+  data.block_z_m = 0.3F;
   data.ball_x_m = 3.0F;
   data.ball_y_m = -2.0F;
   data.ball_z_m = 0.1F;
-  data.flags = PERCEPTION_RED_VALID | PERCEPTION_BLUE_VALID | PERCEPTION_BALL_VALID;
+  data.flags = PERCEPTION_BLOCK_VALID | PERCEPTION_BALL_VALID;
   data.timestamp_ms = 123456U;
 
   const auto frame = SerialProtocol_EncodePerception(data, 7U);
@@ -50,10 +49,10 @@ TEST(SerialProtocolTest, EncodePerceptionCreatesValidFrame)
   EXPECT_EQ(frame[k_tx_frame_size - 2], k_frame_tail_0);
   EXPECT_EQ(frame[k_tx_frame_size - 1], k_frame_tail_1);
 
-  // CRC16 校验
-  uint16_t expected_crc = SerialProtocol_CRC16(frame.data() + 2, 43);
+  // CRC16 校验 (覆盖 type 到最后一个数据字节, 共 31 字节)
+  uint16_t expected_crc = SerialProtocol_CRC16(frame.data() + 2, 31);
   uint16_t actual_crc = 0U;
-  std::memcpy(&actual_crc, frame.data() + 45, sizeof(actual_crc));
+  std::memcpy(&actual_crc, frame.data() + 33, sizeof(actual_crc));
   EXPECT_EQ(expected_crc, actual_crc);
 }
 

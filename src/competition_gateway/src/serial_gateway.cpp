@@ -50,15 +50,13 @@ speed_t SerialGateway_GetBaudrate(int baudrate)
 
 }  // namespace
 
-// 感知帧缓存: 红蓝块 + 球位置
+// 感知帧缓存: 当前跟踪块 + 球位置
 struct perception_cache_t
 {
   perception_data_t data;
-  rclcpp::Time red_time;
-  rclcpp::Time blue_time;
+  rclcpp::Time block_time;
   rclcpp::Time ball_time;
-  bool red_received = false;
-  bool blue_received = false;
+  bool block_received = false;
   bool ball_received = false;
 };
 
@@ -70,30 +68,20 @@ struct position_cache_t
   bool field_pose_received = false;
 };
 
-enum class locked_block_t : uint8_t
-{
-  None = 0,
-  Red = 1,
-  Blue = 2,
-};
-
 class serial_gateway_t : public rclcpp::Node
 {
 public:
   serial_gateway_t()
-  : Node("serial_gateway"), serial_fd_(-1), perception_sequence_(0U), position_sequence_(0U),
-    locked_block_(locked_block_t::None)
+  : Node("serial_gateway"), serial_fd_(-1), perception_sequence_(0U), position_sequence_(0U)
   {
     this->declare_parameter("serial_device", "/dev/ttyUSB0");
     this->declare_parameter("baudrate", 921600);
     this->declare_parameter("send_period_ms", 10);
     this->declare_parameter("data_timeout_ms", 200);
-    this->declare_parameter("block_lost_timeout_ms", 300);
     this->declare_parameter("controller_timeout_ms", 500);
     this->declare_parameter("field_pose_topic", "/competition/field_pose");
     this->declare_parameter("ball_position_topic", "/perception/ball_position");
-    this->declare_parameter("block_red_position_topic", "/perception/block_red_position");
-    this->declare_parameter("block_blue_position_topic", "/perception/block_blue_position");
+    this->declare_parameter("block_position_topic", "/perception/block_position");
     this->declare_parameter("controller_connected_topic", "/competition/serial/controller_connected");
     this->declare_parameter("controller_state_topic", "/competition/serial/controller_state");
     this->declare_parameter("controller_error_topic", "/competition/serial/controller_error");
@@ -104,12 +92,9 @@ public:
     ball_position_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
       this->get_parameter("ball_position_topic").as_string(), 10,
       std::bind(&serial_gateway_t::SerialGateway_BallPositionCallback, this, std::placeholders::_1));
-    block_red_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
-      this->get_parameter("block_red_position_topic").as_string(), 10,
-      std::bind(&serial_gateway_t::SerialGateway_BlockRedCallback, this, std::placeholders::_1));
-    block_blue_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
-      this->get_parameter("block_blue_position_topic").as_string(), 10,
-      std::bind(&serial_gateway_t::SerialGateway_BlockBlueCallback, this, std::placeholders::_1));
+    block_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
+      this->get_parameter("block_position_topic").as_string(), 10,
+      std::bind(&serial_gateway_t::SerialGateway_BlockCallback, this, std::placeholders::_1));
 
     controller_connected_pub_ = this->create_publisher<std_msgs::msg::Bool>(
       this->get_parameter("controller_connected_topic").as_string(), 10);
@@ -213,24 +198,14 @@ private:
     perception_cache_.ball_received = true;
   }
 
-  void SerialGateway_BlockRedCallback(const geometry_msgs::msg::PointStamped::SharedPtr message)
+  void SerialGateway_BlockCallback(const geometry_msgs::msg::PointStamped::SharedPtr message)
   {
     std::lock_guard<std::mutex> lock(perception_mutex_);
-    perception_cache_.data.red_x_m = static_cast<float>(message->point.x);
-    perception_cache_.data.red_y_m = static_cast<float>(message->point.y);
-    perception_cache_.data.red_z_m = static_cast<float>(message->point.z);
-    perception_cache_.red_time = this->now();
-    perception_cache_.red_received = true;
-  }
-
-  void SerialGateway_BlockBlueCallback(const geometry_msgs::msg::PointStamped::SharedPtr message)
-  {
-    std::lock_guard<std::mutex> lock(perception_mutex_);
-    perception_cache_.data.blue_x_m = static_cast<float>(message->point.x);
-    perception_cache_.data.blue_y_m = static_cast<float>(message->point.y);
-    perception_cache_.data.blue_z_m = static_cast<float>(message->point.z);
-    perception_cache_.blue_time = this->now();
-    perception_cache_.blue_received = true;
+    perception_cache_.data.block_x_m = static_cast<float>(message->point.x);
+    perception_cache_.data.block_y_m = static_cast<float>(message->point.y);
+    perception_cache_.data.block_z_m = static_cast<float>(message->point.z);
+    perception_cache_.block_time = this->now();
+    perception_cache_.block_received = true;
   }
 
   void SerialGateway_Update()
@@ -248,14 +223,6 @@ private:
     SerialGateway_PublishConnectionTimeout();
   }
 
-  static float BlockDistanceSq(const perception_data_t & d, bool red)
-  {
-    const float x = red ? d.red_x_m : d.blue_x_m;
-    const float y = red ? d.red_y_m : d.blue_y_m;
-    const float z = red ? d.red_z_m : d.blue_z_m;
-    return x * x + y * y + z * z;
-  }
-
   void SerialGateway_SendPerception()
   {
     perception_data_t perception_data{};
@@ -265,104 +232,23 @@ private:
       const auto now = this->now();
       const auto data_timeout_ms = this->get_parameter("data_timeout_ms").as_int();
       const auto data_timeout = rclcpp::Duration::from_nanoseconds(data_timeout_ms * 1000000LL);
-      const auto lost_timeout_ms = this->get_parameter("block_lost_timeout_ms").as_int();
-      const auto lost_timeout = rclcpp::Duration::from_nanoseconds(lost_timeout_ms * 1000000LL);
 
-      // 1) 判断红蓝块是否在数据有效期内
-      const bool red_fresh =
-        perception_cache_.red_received && (now - perception_cache_.red_time) < data_timeout;
-      const bool blue_fresh =
-        perception_cache_.blue_received && (now - perception_cache_.blue_time) < data_timeout;
+      // 块的跟踪与确认在感知端完成,本节点只判断数据是否在有效期内
+      const bool block_fresh =
+        perception_cache_.block_received && (now - perception_cache_.block_time) < data_timeout;
 
-      // 2) 检查锁定目标是否已丢失（超过 block_lost_timeout_ms 没收到更新）
-      if (locked_block_ == locked_block_t::Red &&
-        (!perception_cache_.red_received || (now - perception_cache_.red_time) >= lost_timeout))
-      {
-        locked_block_ = locked_block_t::None;
-        RCLCPP_INFO(this->get_logger(), "锁定的红块已消失，重新选择最近块");
-      }
-      else if (locked_block_ == locked_block_t::Blue &&
-        (!perception_cache_.blue_received || (now - perception_cache_.blue_time) >= lost_timeout))
-      {
-        locked_block_ = locked_block_t::None;
-        RCLCPP_INFO(this->get_logger(), "锁定的蓝块已消失，重新选择最近块");
-      }
-
-      // 3) 若未锁定，则从当前有效的红蓝块中选择距离最近的锁定
-      if (locked_block_ == locked_block_t::None)
-      {
-        bool red_choose = false;
-        bool blue_choose = false;
-        if (red_fresh && blue_fresh)
-        {
-          const float d2_red = BlockDistanceSq(perception_data, true);
-          const float d2_blue = BlockDistanceSq(perception_data, false);
-          if (d2_red <= d2_blue)
-          {
-            red_choose = true;
-          }
-          else
-          {
-            blue_choose = true;
-          }
-        }
-        else if (red_fresh)
-        {
-          red_choose = true;
-        }
-        else if (blue_fresh)
-        {
-          blue_choose = true;
-        }
-
-        if (red_choose)
-        {
-          locked_block_ = locked_block_t::Red;
-          locked_last_time_ = now;
-          RCLCPP_INFO(
-            this->get_logger(), "锁定最近块: 红块, 距离≈%.1fmm",
-            std::sqrt(BlockDistanceSq(perception_data, true)) * 1000.0F);
-        }
-        else if (blue_choose)
-        {
-          locked_block_ = locked_block_t::Blue;
-          locked_last_time_ = now;
-          RCLCPP_INFO(
-            this->get_logger(), "锁定最近块: 蓝块, 距离≈%.1fmm",
-            std::sqrt(BlockDistanceSq(perception_data, false)) * 1000.0F);
-        }
-      }
-
-      // 4) 按锁定状态决定哪些块标记为 VALID（只发送锁定的那一个，球保持原样）
       rclcpp::Time latest_time = now;
-      if (locked_block_ == locked_block_t::Red && red_fresh)
+      if (block_fresh)
       {
-        perception_data.flags |= PERCEPTION_RED_VALID;
-        // 锁定状态下，未被锁定的块全部置零并清除 valid
-        perception_data.blue_x_m = 0.0F;
-        perception_data.blue_y_m = 0.0F;
-        perception_data.blue_z_m = 0.0F;
-        latest_time = perception_cache_.red_time;
-        locked_last_time_ = perception_cache_.red_time;
-      }
-      else if (locked_block_ == locked_block_t::Blue && blue_fresh)
-      {
-        perception_data.flags |= PERCEPTION_BLUE_VALID;
-        perception_data.red_x_m = 0.0F;
-        perception_data.red_y_m = 0.0F;
-        perception_data.red_z_m = 0.0F;
-        latest_time = perception_cache_.blue_time;
-        locked_last_time_ = perception_cache_.blue_time;
+        perception_data.flags |= PERCEPTION_BLOCK_VALID;
+        latest_time = perception_cache_.block_time;
       }
       else
       {
-        // 没有锁定或锁定块已失效：全部清除（避免发送旧的已锁定块数据）
-        perception_data.red_x_m = 0.0F;
-        perception_data.red_y_m = 0.0F;
-        perception_data.red_z_m = 0.0F;
-        perception_data.blue_x_m = 0.0F;
-        perception_data.blue_y_m = 0.0F;
-        perception_data.blue_z_m = 0.0F;
+        // 块数据超时:置零,避免发送旧数据
+        perception_data.block_x_m = 0.0F;
+        perception_data.block_y_m = 0.0F;
+        perception_data.block_z_m = 0.0F;
       }
 
       if (perception_cache_.ball_received && (now - perception_cache_.ball_time) < data_timeout)
@@ -471,13 +357,9 @@ private:
   std::mutex position_mutex_;
   std::vector<uint8_t> receive_buffer_;
   rclcpp::Time last_controller_time_;
-  // 最近块锁定跟踪状态
-  locked_block_t locked_block_;
-  rclcpp::Time locked_last_time_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr field_pose_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr ball_position_sub_;
-  rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr block_red_sub_;
-  rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr block_blue_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr block_sub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr controller_connected_pub_;
   rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr controller_state_pub_;
   rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr controller_error_pub_;

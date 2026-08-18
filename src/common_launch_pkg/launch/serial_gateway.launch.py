@@ -9,8 +9,7 @@
 订阅话题：
   /competition/field_pose           (geometry_msgs/PoseStamped)   — 机器人位姿
   /perception/ball_position         (geometry_msgs/PointStamped)  — 金球 3D 位置
-  /perception/block_red_position    (geometry_msgs/PointStamped)  — 红块 3D 位置
-  /perception/block_blue_position   (geometry_msgs/PointStamped)  — 蓝块 3D 位置
+  /perception/block_position        (geometry_msgs/PointStamped)  — 当前跟踪块 3D 位置
 
 发布话题：
   /competition/serial/controller_connected  (std_msgs/Bool)   — STM32 连接状态

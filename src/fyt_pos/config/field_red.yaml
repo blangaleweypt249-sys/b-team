@@ -20,16 +20,17 @@ field_localizer:
     allowed_max_y: 6.0
     # 红方区域坐标已镜像翻转（X → 11-X），区域名称含义不变。
     zones:
-      names: [start, storage_l1, storage_l2, public, gem_pick, red_goal, blue_goal, special1, special2, pub1, pub2] 
+      names: [start, block, public, gem_pick, red_goal, blue_goal, special1, special2, pub1, pub2] 
       start: [0.0, 0.7, 0.0, 0.7]
-      storage_l1: [1.20, 2.60, 5.6, 6.0]
-      storage_l2: [0.0, 1.2, 5.394, 6.0]
+      #storage_l1: [1.20, 2.60, 5.6, 6.0]
+      #storage_l2: [0.0, 1.2, 5.394, 6.0]
+      block: [0.0, 3.0, 2.7, 6.0]
       public: [3.05, 7.95, 0.0, 6.0]
       gem_pick: [4.8, 5.2, 1.6, 2.3]
       red_goal: [3.05, 3.55, 4.359, 4.859]
       blue_goal: [7.45, 7.95, 4.359, 4.859]
       special1: [5.25, 5.75, 0.0, 5.0]
-      special2: [5.25, 5.75, 5.5, 6]
+      special2: [5.25, 5.75, 5.5, 6.0]
       pub1: [3.05, 3.55, 1.605, 2.105]
       pub2: [7.45, 7.95, 1.605, 2.105]
 field_visualizer:
