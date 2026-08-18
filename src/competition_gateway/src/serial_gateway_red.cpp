@@ -29,7 +29,7 @@ namespace
 constexpr int k_serial_read_buffer_size = 128;
 constexpr int k_serial_data_bits = CS8;
 
-speed_t SerialGateway_GetBaudrate(int baudrate)
+speed_t SerialGatewayRed_GetBaudrate(int baudrate)
 {
   switch (baudrate)
   {
@@ -50,9 +50,8 @@ speed_t SerialGateway_GetBaudrate(int baudrate)
 
 }  // namespace
 
-// ======= 蓝方串口网关: X 原样发送,内部坐标系不变 =======
 // 感知帧缓存: 当前跟踪块 + 球位置
-struct perception_cache_t
+struct perception_cache_red_t
 {
   perception_data_t data;
   rclcpp::Time block_time;
@@ -62,18 +61,21 @@ struct perception_cache_t
 };
 
 // 位置帧缓存: 机器人位置 + 旋转
-struct position_cache_t
+struct position_cache_red_t
 {
   position_data_t data;
   rclcpp::Time field_pose_time;
   bool field_pose_received = false;
 };
 
-class serial_gateway_t : public rclcpp::Node
+// ======= 红方串口网关: 写死 X 取反 =======
+// 车体内部坐标系(field_pose话题、区域判定、感知块/球坐标系)完全不变,
+// 只在串口发送位置帧前对 field_x_m 取反再打包。
+class serial_gateway_red_t : public rclcpp::Node
 {
 public:
-  serial_gateway_t()
-  : Node("serial_gateway"), serial_fd_(-1), perception_sequence_(0U), position_sequence_(0U)
+  serial_gateway_red_t()
+  : Node("serial_gateway_red"), serial_fd_(-1), perception_sequence_(0U), position_sequence_(0U)
   {
     this->declare_parameter("serial_device", "/dev/ttyUSB0");
     this->declare_parameter("baudrate", 921600);
@@ -87,17 +89,17 @@ public:
     this->declare_parameter("controller_state_topic", "/competition/serial/controller_state");
     this->declare_parameter("controller_error_topic", "/competition/serial/controller_error");
 
-    RCLCPP_INFO(this->get_logger(), "【蓝方】串口网关启动:位置帧field_x_m 原样发送给STM32,内部坐标系不变");
+    RCLCPP_INFO(this->get_logger(), "【红方】串口网关启动:位置帧field_x_m 取反后发送给STM32,内部坐标系不变");
 
     field_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
       this->get_parameter("field_pose_topic").as_string(), 10,
-      std::bind(&serial_gateway_t::SerialGateway_FieldPoseCallback, this, std::placeholders::_1));
+      std::bind(&serial_gateway_red_t::FieldPoseCallback, this, std::placeholders::_1));
     ball_position_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
       this->get_parameter("ball_position_topic").as_string(), 10,
-      std::bind(&serial_gateway_t::SerialGateway_BallPositionCallback, this, std::placeholders::_1));
+      std::bind(&serial_gateway_red_t::BallPositionCallback, this, std::placeholders::_1));
     block_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
       this->get_parameter("block_position_topic").as_string(), 10,
-      std::bind(&serial_gateway_t::SerialGateway_BlockCallback, this, std::placeholders::_1));
+      std::bind(&serial_gateway_red_t::BlockCallback, this, std::placeholders::_1));
 
     controller_connected_pub_ = this->create_publisher<std_msgs::msg::Bool>(
       this->get_parameter("controller_connected_topic").as_string(), 10);
@@ -106,27 +108,20 @@ public:
     controller_error_pub_ = this->create_publisher<std_msgs::msg::UInt8>(
       this->get_parameter("controller_error_topic").as_string(), 10);
 
-    SerialGateway_Open();
+    Open();
     last_controller_time_ = this->now();
     const auto send_period_ms = this->get_parameter("send_period_ms").as_int();
     serial_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(send_period_ms),
-      std::bind(&serial_gateway_t::SerialGateway_Update, this));
+      std::bind(&serial_gateway_red_t::Update, this));
   }
 
-  ~serial_gateway_t() override
-  {
-    SerialGateway_Close();
-  }
+  ~serial_gateway_red_t() override { Close(); }
 
 private:
-  void SerialGateway_Open()
+  void Open()
   {
-    if (serial_fd_ >= 0)
-    {
-      return;
-    }
-
+    if (serial_fd_ >= 0) return;
     const auto serial_device = this->get_parameter("serial_device").as_string();
     serial_fd_ = open(serial_device.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (serial_fd_ < 0)
@@ -134,18 +129,16 @@ private:
       RCLCPP_WARN(this->get_logger(), "无法打开串口 %s：%s", serial_device.c_str(), std::strerror(errno));
       return;
     }
-
     termios serial_cfg{};
     if (tcgetattr(serial_fd_, &serial_cfg) != 0)
     {
       RCLCPP_ERROR(this->get_logger(), "无法读取串口配置：%s", std::strerror(errno));
-      SerialGateway_Close();
+      Close();
       return;
     }
-
     cfmakeraw(&serial_cfg);
     const auto baudrate = this->get_parameter("baudrate").as_int();
-    const auto baudrate_cfg = SerialGateway_GetBaudrate(baudrate);
+    const auto baudrate_cfg = SerialGatewayRed_GetBaudrate(baudrate);
     cfsetispeed(&serial_cfg, baudrate_cfg);
     cfsetospeed(&serial_cfg, baudrate_cfg);
     serial_cfg.c_cflag |= static_cast<tcflag_t>(CLOCAL | CREAD | k_serial_data_bits);
@@ -155,18 +148,17 @@ private:
     serial_cfg.c_cflag |= k_serial_data_bits;
     serial_cfg.c_cc[VMIN] = 0;
     serial_cfg.c_cc[VTIME] = 0;
-
     if (tcsetattr(serial_fd_, TCSANOW, &serial_cfg) != 0)
     {
       RCLCPP_ERROR(this->get_logger(), "无法设置串口配置：%s", std::strerror(errno));
-      SerialGateway_Close();
+      Close();
       return;
     }
     tcflush(serial_fd_, TCIOFLUSH);
-    RCLCPP_INFO(this->get_logger(), "串口网关已打开 %s，波特率 %ld。", serial_device.c_str(), baudrate);
+    RCLCPP_INFO(this->get_logger(), "【红方】串口已打开 %s,波特率 %ld,X取反发送。", serial_device.c_str(), baudrate);
   }
 
-  void SerialGateway_Close()
+  void Close()
   {
     if (serial_fd_ >= 0)
     {
@@ -175,13 +167,12 @@ private:
     }
   }
 
-  void SerialGateway_FieldPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr message)
+  void FieldPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr message)
   {
     std::lock_guard<std::mutex> lock(position_mutex_);
     position_cache_.data.field_x_m = static_cast<float>(message->pose.position.x);
     position_cache_.data.field_y_m = static_cast<float>(message->pose.position.y);
     position_cache_.data.field_z_m = static_cast<float>(message->pose.position.z);
-    // 从四元数提取绕 Z 轴的偏航角（弧度），场地坐标系下的机器人朝向。
     const float w = static_cast<float>(message->pose.orientation.w);
     const float x = static_cast<float>(message->pose.orientation.x);
     const float y = static_cast<float>(message->pose.orientation.y);
@@ -191,7 +182,7 @@ private:
     position_cache_.field_pose_received = true;
   }
 
-  void SerialGateway_BallPositionCallback(const geometry_msgs::msg::PointStamped::SharedPtr message)
+  void BallPositionCallback(const geometry_msgs::msg::PointStamped::SharedPtr message)
   {
     std::lock_guard<std::mutex> lock(perception_mutex_);
     perception_cache_.data.ball_x_m = static_cast<float>(message->point.x);
@@ -201,7 +192,7 @@ private:
     perception_cache_.ball_received = true;
   }
 
-  void SerialGateway_BlockCallback(const geometry_msgs::msg::PointStamped::SharedPtr message)
+  void BlockCallback(const geometry_msgs::msg::PointStamped::SharedPtr message)
   {
     std::lock_guard<std::mutex> lock(perception_mutex_);
     perception_cache_.data.block_x_m = static_cast<float>(message->point.x);
@@ -211,22 +202,21 @@ private:
     perception_cache_.block_received = true;
   }
 
-  void SerialGateway_Update()
+  void Update()
   {
     if (serial_fd_ < 0)
     {
-      SerialGateway_Open();
-      SerialGateway_PublishControllerConnected(false);
+      Open();
+      PublishControllerConnected(false);
       return;
     }
-
-    SerialGateway_Read();
-    SerialGateway_SendPosition();
-    SerialGateway_SendPerception();
-    SerialGateway_PublishConnectionTimeout();
+    Read();
+    SendPosition();
+    SendPerception();
+    PublishConnectionTimeout();
   }
 
-  void SerialGateway_SendPerception()
+  void SendPerception()
   {
     perception_data_t perception_data{};
     {
@@ -236,10 +226,8 @@ private:
       const auto data_timeout_ms = this->get_parameter("data_timeout_ms").as_int();
       const auto data_timeout = rclcpp::Duration::from_nanoseconds(data_timeout_ms * 1000000LL);
 
-      // 块的跟踪与确认在感知端完成,本节点只判断数据是否在有效期内
       const bool block_fresh =
         perception_cache_.block_received && (now - perception_cache_.block_time) < data_timeout;
-
       rclcpp::Time latest_time = now;
       if (block_fresh)
       {
@@ -248,33 +236,28 @@ private:
       }
       else
       {
-        // 块数据超时:置零,避免发送旧数据
         perception_data.block_x_m = 0.0F;
         perception_data.block_y_m = 0.0F;
         perception_data.block_z_m = 0.0F;
       }
-
       if (perception_cache_.ball_received && (now - perception_cache_.ball_time) < data_timeout)
       {
         perception_data.flags |= PERCEPTION_BALL_VALID;
-        if (perception_cache_.ball_time > latest_time)
-        {
-          latest_time = perception_cache_.ball_time;
-        }
+        if (perception_cache_.ball_time > latest_time) latest_time = perception_cache_.ball_time;
       }
       perception_data.timestamp_ms = static_cast<uint32_t>(latest_time.nanoseconds() / 1000000LL);
     }
-
     const auto frame = SerialProtocol_EncodePerception(perception_data, perception_sequence_++);
     const auto write_size = write(serial_fd_, frame.data(), frame.size());
     if (write_size != static_cast<ssize_t>(frame.size()))
     {
       RCLCPP_ERROR(this->get_logger(), "感知帧串口发送失败：%s", std::strerror(errno));
-      SerialGateway_Close();
+      Close();
     }
   }
 
-  void SerialGateway_SendPosition()
+  // ===== 红方:写死 field_x_m 取反 =====
+  void SendPosition()
   {
     position_data_t position_data{};
     {
@@ -292,24 +275,23 @@ private:
                                             : now.nanoseconds() / 1000000LL);
     }
 
-    // 蓝方:X 原样发送 (内部坐标系不变)
+    // --- 红方:写死 X 取反 (内部坐标系不变,只影响串口给 STM32 的数据) ---
+    position_data.field_x_m = -position_data.field_x_m;
+
     const auto frame = SerialProtocol_EncodePosition(position_data, position_sequence_++);
     const auto write_size = write(serial_fd_, frame.data(), frame.size());
     if (write_size != static_cast<ssize_t>(frame.size()))
     {
       RCLCPP_ERROR(this->get_logger(), "位置帧串口发送失败：%s", std::strerror(errno));
-      SerialGateway_Close();
+      Close();
     }
   }
 
-  void SerialGateway_Read()
+  void Read()
   {
     std::array<uint8_t, k_serial_read_buffer_size> read_buffer{};
     const auto read_size = read(serial_fd_, read_buffer.data(), read_buffer.size());
-    if (read_size <= 0)
-    {
-      return;
-    }
+    if (read_size <= 0) return;
     receive_buffer_.insert(receive_buffer_.end(), read_buffer.begin(), read_buffer.begin() + read_size);
 
     while (receive_buffer_.size() >= k_rx_status_frame_size)
@@ -319,7 +301,6 @@ private:
         receive_buffer_.erase(receive_buffer_.begin());
         continue;
       }
-
       std::array<uint8_t, k_rx_status_frame_size> frame{};
       std::copy_n(receive_buffer_.begin(), k_rx_status_frame_size, frame.begin());
       controller_status_t status{};
@@ -328,26 +309,25 @@ private:
         receive_buffer_.erase(receive_buffer_.begin());
         continue;
       }
-
       receive_buffer_.erase(receive_buffer_.begin(), receive_buffer_.begin() + k_rx_status_frame_size);
       last_controller_time_ = this->now();
       controller_state_pub_->publish(std_msgs::msg::UInt8().set__data(status.state));
       controller_error_pub_->publish(std_msgs::msg::UInt8().set__data(status.error));
-      SerialGateway_PublishControllerConnected(true);
+      PublishControllerConnected(true);
     }
   }
 
-  void SerialGateway_PublishConnectionTimeout()
+  void PublishConnectionTimeout()
   {
     const auto timeout_ms = this->get_parameter("controller_timeout_ms").as_int();
     const auto timeout = rclcpp::Duration::from_nanoseconds(timeout_ms * 1000000LL);
     if ((this->now() - last_controller_time_) >= timeout)
     {
-      SerialGateway_PublishControllerConnected(false);
+      PublishControllerConnected(false);
     }
   }
 
-  void SerialGateway_PublishControllerConnected(bool connected)
+  void PublishControllerConnected(bool connected)
   {
     controller_connected_pub_->publish(std_msgs::msg::Bool().set__data(connected));
   }
@@ -355,9 +335,9 @@ private:
   int serial_fd_;
   uint8_t perception_sequence_;
   uint8_t position_sequence_;
-  perception_cache_t perception_cache_;
+  perception_cache_red_t perception_cache_;
   std::mutex perception_mutex_;
-  position_cache_t position_cache_;
+  position_cache_red_t position_cache_;
   std::mutex position_mutex_;
   std::vector<uint8_t> receive_buffer_;
   rclcpp::Time last_controller_time_;
@@ -375,7 +355,7 @@ private:
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<competition_gateway::serial_gateway_t>());
+  rclcpp::spin(std::make_shared<competition_gateway::serial_gateway_red_t>());
   rclcpp::shutdown();
   return 0;
 }

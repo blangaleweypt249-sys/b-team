@@ -1,7 +1,7 @@
 serial_gateway:
   ros__parameters:
-    # 蓝方:原样发送X。红方请使用 serial_gateway_red.yaml。
-    negate_x: false
+    # 红方:串口发送的field_x_m取反,内部坐标系不变
+    negate_x: true
     # 该进程必须是此设备文件的唯一打开者。
     serial_device: /dev/ttyUSB0
     baudrate: 921600

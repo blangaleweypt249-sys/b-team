@@ -1,10 +1,14 @@
-"""蓝方串口网关启动文件(negate_x=false,X原样发送)。
+"""红方串口网关启动文件(negate_x=true,发送前field_x_m取反)。
+
+内部坐标系(field_pose话题、区域判定、感知块/球坐标系)完全不变,
+仍使用全局赛场坐标,只在串口发送时对位置帧field_x_m取反。
 
 启动内容：
   competition_gateway / serial_gateway
     — 独占 /dev/ttyUSB0 串口
     — 订阅感知话题，封装为固定帧格式发送给 STM32（50Hz）
     — 接收 STM32 状态帧并发布连接状态
+    — negate_x=true: 位置帧 field_x_m 取反后再打包发送给 STM32
 
 订阅话题：
   /competition/field_pose           (geometry_msgs/PoseStamped)   — 机器人位姿
@@ -16,11 +20,10 @@
   /competition/serial/controller_state      (std_msgs/UInt8)  — STM32 状态机状态
   /competition/serial/controller_error      (std_msgs/UInt8)  — STM32 错误码
 
-蓝方：使用 serial_gateway.yaml（negate_x=false），field_x_m 原样发送。
-红方：请使用 serial_gateway_red.launch.py（negate_x=true，field_x_m 取反发送）。
+蓝方：请使用 serial_gateway.launch.py（negate_x=false，X原样发送）。
 
 独立启动命令：
-  ros2 launch common_launch_pkg serial_gateway.launch.py
+  ros2 launch common_launch_pkg serial_gateway_red.launch.py
 
 可选参数：
   serial_device:=/dev/ttyUSB0  指定串口设备路径
@@ -50,14 +53,14 @@ def generate_launch_description():
     )
 
     gateway_config = PathJoinSubstitution([
-        FindPackageShare('competition_gateway'), 'config', 'serial_gateway.yaml',
+        FindPackageShare('competition_gateway'), 'config', 'serial_gateway_red.yaml',
     ])
 
-    # 蓝方:用 serial_gateway 可执行文件(X 原样发送,cpp 内写死)
+    # 红方:用 serial_gateway_red 可执行文件(cpp 内写死 field_x_m 取反,内部坐标系不变)
     serial_gateway_node = Node(
         package='competition_gateway',
-        executable='serial_gateway',
-        name='serial_gateway',
+        executable='serial_gateway_red',
+        name='serial_gateway_red',
         output='screen',
         parameters=[
             gateway_config,
@@ -72,7 +75,7 @@ def generate_launch_description():
         event_handler=OnProcessExit(
             target_action=serial_gateway_node,
             on_exit=[
-                LogInfo(msg='[错误] 蓝方串口网关已退出，STM32 通信中断，正在关闭系统...'),
+                LogInfo(msg='[错误] 红方串口网关已退出，STM32 通信中断，正在关闭系统...'),
                 EmitEvent(event=Shutdown(reason='serial_gateway_exited')),
             ],
         )
@@ -81,12 +84,12 @@ def generate_launch_description():
     ld = LaunchDescription()
     ld.add_action(declare_serial_cmd)
     ld.add_action(declare_baudrate_cmd)
-    ld.add_action(LogInfo(msg='[信息发布-蓝方] 正在启动串口网关 (negate_x=否,X原样发送)...'))
+    ld.add_action(LogInfo(msg='[信息发布-红方] 正在启动串口网关 (negate_x=是,field_x_m取反发送)...'))
     ld.add_action(LogInfo(msg=[
-        '[信息发布-蓝方] 串口设备: ', serial_device, '  波特率: ', baudrate,
+        '[信息发布-红方] 串口设备: ', serial_device, '  波特率: ', baudrate,
     ]))
     ld.add_action(serial_gateway_node)
     ld.add_action(gateway_exit_handler)
-    ld.add_action(LogInfo(msg='[信息发布-蓝方] 串口网关已启动，等待感知数据...'))
+    ld.add_action(LogInfo(msg='[信息发布-红方] 串口网关已启动，等待感知数据...'))
 
     return ld
