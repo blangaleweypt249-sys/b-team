@@ -15,6 +15,7 @@
   /orbbec/color/image_raw  (sensor_msgs/Image)  - RGB 图像
   /orbbec/depth/image_raw  (sensor_msgs/Image)  - 深度图像 (float32, 单位 mm)
   /orbbec/camera_info       (sensor_msgs/CameraInfo) - 相机内参
+  /competition/current_zone (std_msgs/String)    - 当前所在赛场区域(由 field_localizer 发布)
 
 发布话题:
   /perception/block_position  (geometry_msgs/PointStamped) - 当前跟踪块 3D 位置 (m, gripper frame)
@@ -38,7 +39,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, String
 from geometry_msgs.msg import PointStamped
 from cv_bridge import CvBridge
 import cv2
@@ -124,6 +125,10 @@ class BlockDistanceNode(Node):
         self.declare_parameter('t_g_c_y_m', -0.0525)
         self.declare_parameter('t_g_c_z_m', 0.028)
 
+        # ---- 区域校验:只在指定区域内检测块(默认 block 夹块区 + special1/special2 特殊点)----
+        self.declare_parameter('zone_topic', '/competition/current_zone')
+        self.declare_parameter('active_zones', ['block', 'special1', 'special2'])
+
         model_path = self.get_parameter('model_path').value
         self.get_logger().info(f'加载 YOLO 模型: {model_path}')
         self.model = YOLO(model_path)
@@ -148,6 +153,11 @@ class BlockDistanceNode(Node):
         self.tracks: List[Track] = []
         self._next_id = 0
 
+        # 区域校验状态
+        self.current_zone = ''
+        self.active_zones = set(self.get_parameter('active_zones').value)
+        self.get_logger().info(f'块检测有效区域: {self.active_zones}')
+
         # 相机内参 (从 camera_info 话题动态获取)
         self.fx = None
         self.fy = None
@@ -166,6 +176,9 @@ class BlockDistanceNode(Node):
             Image, '/orbbec/depth/image_raw', self.depth_callback, 10)
         self.info_sub = self.create_subscription(
             CameraInfo, '/orbbec/camera_info', self.info_callback, 10)
+        self.zone_sub = self.create_subscription(
+            String, str(self.get_parameter('zone_topic').value),
+            self.zone_callback, 10)
 
         # 发布:单一块位置(不区分颜色,只跟踪一个块)
         self.block_pub = self.create_publisher(
@@ -193,6 +206,20 @@ class BlockDistanceNode(Node):
                 f'内参已获取: fx={self.fx:.2f}, fy={self.fy:.2f}, '
                 f'cx={self.cx:.2f}, cy={self.cy:.2f}'
             )
+
+    def zone_callback(self, msg):
+        new_zone = msg.data
+        if new_zone != self.current_zone:
+            was_active = self.current_zone in self.active_zones
+            is_active = new_zone in self.active_zones
+            self.current_zone = new_zone
+            if was_active and not is_active:
+                # 离开有效区域:清空跟踪,停止发布
+                self.tracks.clear()
+                self.get_logger().info(
+                    f'离开块检测区(当前={new_zone}),清空跟踪,停止发布')
+            elif not was_active and is_active:
+                self.get_logger().info(f'进入块检测区({new_zone}),开始检测')
 
     def _estimate_depth_from_mask(self, depth_map, mask):
         """从 mask 区域内估计深度 (mm), 返回深度中值"""
@@ -361,6 +388,17 @@ class BlockDistanceNode(Node):
         if self.latest_color is None or self.latest_depth is None:
             return
         if self.fx is None:
+            return
+
+        # 区域校验:只在指定区域(默认 block 夹块区)内检测块
+        if self.current_zone not in self.active_zones:
+            # 不在有效区域:不跑 YOLO、不发布块位置,只发提示 overlay 便于调试
+            frame = self.bridge.imgmsg_to_cv2(self.latest_color, desired_encoding='bgr8')
+            overlay = frame.copy()
+            cv2.putText(overlay,
+                        f'zone={self.current_zone or "unknown"} (block detection OFF)',
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            self.overlay_pub.publish(self.bridge.cv2_to_imgmsg(overlay, encoding='bgr8'))
             return
 
         # 获取图像
