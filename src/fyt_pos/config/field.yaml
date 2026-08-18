@@ -12,7 +12,7 @@ field_localizer:
     start_corner: bottom_left
     # 这三项必须随雷达安装位置和朝向重新标定，单位为米和度。
     lidar_to_base_enabled: true
-    base_to_lidar_x_m: -0.145
+    base_to_lidar_x_m: -0.205
     base_to_lidar_y_m: 0.16
     base_to_lidar_yaw_deg: 90.0
     allowed_min_x: 0.0

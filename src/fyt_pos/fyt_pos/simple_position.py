@@ -24,7 +24,7 @@ class SimplePosition(Node):
         self.declare_parameter('print_period_s', 0.5)
         # 雷达→车体外参（与 field_localizer 保持一致）
         self.declare_parameter('lidar_to_base_enabled', True)
-        self.declare_parameter('base_to_lidar_x_m', -0.145)
+        self.declare_parameter('base_to_lidar_x_m', -0.205)
         self.declare_parameter('base_to_lidar_y_m', 0.16)
         self.declare_parameter('base_to_lidar_yaw_deg', 90.0)
 
