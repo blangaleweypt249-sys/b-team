@@ -38,49 +38,72 @@
 #define W25Q64_CAPACITY_KB             8192UL
 #define W25Q128_CAPACITY_KB            16384UL
 
+/* 功能：声明拉低 Flash 片选信号的内部接口。 */
 static void W25Q_CsSelect(void);
+/* 功能：声明拉高 Flash 片选信号的内部接口。 */
 static void W25Q_CsDeselect(void);
+/* 功能：声明 SPI 单字节同步收发接口；返回 true 表示收发成功。 */
 static bool W25Q_SpiRwByte(uint8_t tx_data, uint8_t *rx_data);
+/* 功能：声明 SPI 批量同步传输接口；返回 true 表示传输成功。 */
 static bool W25Q_SpiTransfer(const uint8_t *tx_data,
                              uint8_t *rx_data,
                              uint16_t data_len_byte);
+/* 功能：声明毫秒延时接口。 */
 static void W25Q_DelayMs(uint32_t delay_ms);
+/* 功能：声明设备句柄有效性检查接口；返回 true 表示句柄及底层回调可用。 */
 static bool W25Q_IsHandleValid(const w25q_handle_t *dev);
+/* 功能：声明设备状态检查接口；返回值表示设备是否已完成初始化。 */
 static w25q_status_t W25Q_CheckDevice(const w25q_handle_t *dev);
+/* 功能：声明访问地址范围检查接口；返回值表示目标区间是否合法。 */
 static w25q_status_t W25Q_CheckRange(const w25q_handle_t *dev,
                                      uint32_t start_addr,
                                      uint32_t data_len_byte);
+/* 功能：声明设备总线加锁接口；返回值表示加锁结果。 */
 static w25q_status_t W25Q_Lock(w25q_handle_t *dev);
+/* 功能：声明设备总线解锁接口。 */
 static void W25Q_Unlock(w25q_handle_t *dev);
+/* 功能：声明经设备端口收发单字节的接口；返回值表示传输结果。 */
 static w25q_status_t W25Q_TransferByte(w25q_handle_t *dev,
                                        uint8_t tx_data,
                                        uint8_t *rx_data);
+/* 功能：声明向 Flash 发送 24 位地址的接口；返回值表示发送结果。 */
 static w25q_status_t W25Q_SendAddress(w25q_handle_t *dev,
                                       uint32_t address);
+/* 功能：声明读取 Flash 状态寄存器的接口；返回值表示读取结果。 */
 static w25q_status_t W25Q_ReadStatus(w25q_handle_t *dev,
                                      uint8_t *status_reg);
+/* 功能：声明读取 JEDEC 标识的接口；返回值表示读取结果。 */
 static w25q_status_t W25Q_ReadJedecId(w25q_handle_t *dev,
                                       uint32_t *jedec_id);
+/* 功能：声明在总线已加锁时读取器件标识的接口；返回值表示读取结果。 */
 static w25q_status_t W25Q_ReadDeviceIdLocked(w25q_handle_t *dev,
                                               uint16_t *device_id);
+/* 功能：声明等待 Flash 结束忙状态的接口；返回值表示等待结果。 */
 static w25q_status_t W25Q_WaitReady(w25q_handle_t *dev);
+/* 功能：声明发送写使能命令的接口；返回值表示写使能结果。 */
 static w25q_status_t W25Q_WriteEnable(w25q_handle_t *dev);
+/* 功能：声明连续读取 Flash 数据的内部接口；返回值表示读取结果。 */
 static w25q_status_t W25Q_ReadBytes(w25q_handle_t *dev,
                                     uint32_t read_addr,
                                     uint8_t *data,
                                     uint32_t data_len_byte);
+/* 功能：声明单页编程接口；返回值表示页写入结果。 */
 static w25q_status_t W25Q_WritePage(w25q_handle_t *dev,
                                     uint32_t write_addr,
                                     const uint8_t *data,
                                     uint32_t data_len_byte);
+/* 功能：声明发送扇区擦除命令的接口；返回值表示命令执行结果。 */
 static w25q_status_t W25Q_EraseCommand(w25q_handle_t *dev,
                                        uint32_t sector_addr);
+/* 功能：声明在总线已加锁时擦除扇区的接口；返回值表示擦除结果。 */
 static w25q_status_t W25Q_EraseSectorLocked(w25q_handle_t *dev,
                                              uint32_t sector_addr);
+/* 功能：声明在总线已加锁时连续写入数据的接口；返回值表示写入结果。 */
 static w25q_status_t W25Q_ProgramDataLocked(w25q_handle_t *dev,
                                              uint32_t write_addr,
                                              const uint8_t *data,
                                              uint32_t data_len_byte);
+/* 功能：声明在总线已加锁时更新扇区部分数据的接口；返回值表示更新结果。 */
 static w25q_status_t W25Q_UpdateSectorLocked(w25q_handle_t *dev,
                                               uint32_t sector_addr,
                                               uint32_t sector_offset,

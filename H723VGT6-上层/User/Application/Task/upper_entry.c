@@ -155,6 +155,7 @@ volatile uint32_t upper_aux_spi3_sent_count;
 volatile uint32_t upper_aux_spi3_fail_count;
 __ALIGNED(32) static uint8_t upper_tx_buffer[UPPER_TX_BUFFER_SIZE];
 
+/* 功能：把 PC 协议中的 PID 配置转换为上层应用格式；参数 source 为源配置；返回转换后的 PID 配置。 */
 static upper_pid_cfg_t UpperEntry_ConvertPcPid(
     const upper_pc_pid_cfg_t *source)
 {
@@ -168,6 +169,7 @@ static upper_pid_cfg_t UpperEntry_ConvertPcPid(
     };
 }
 
+/* 功能：把 PC 下发的整机目标转换为机器人控制目标；参数 source 为 PC 目标，target 用于接收转换结果。 */
 static void UpperEntry_ConvertPcTarget(const upper_pc_target_t *source,
                                        upper_target_t *target)
 {

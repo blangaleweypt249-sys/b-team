@@ -12,6 +12,7 @@
 #include "m2006.h"
 #include "upper_motor_port.h"
 
+/* 功能：校验闸门电机 PID 参数是否合法；参数 cfg 为待检查配置；返回 true 表示参数完整且位于有效范围。 */
 static bool Gate_PidValid(const upper_pid_cfg_t *cfg)
 {
     return (cfg != NULL) && isfinite(cfg->kp) && isfinite(cfg->ki) &&
@@ -21,12 +22,14 @@ static bool Gate_PidValid(const upper_pid_cfg_t *cfg)
            (cfg->integral_limit >= 0.0f) && (cfg->output_limit > 0.0f);
 }
 
+/* 功能：比较两组闸门电机 PID 配置是否一致；参数 left、right 为待比较配置；返回 true 表示所有字段相同。 */
 static bool Gate_PidEqual(const upper_pid_cfg_t *left,
                           const upper_pid_cfg_t *right)
 {
     return memcmp(left, right, sizeof(*left)) == 0;
 }
 
+/* 功能：将数值限制在指定区间内；参数 value 为输入值，lower、upper 为上下限；返回限幅后的结果。 */
 static float Gate_Clamp(float value, float lower, float upper)
 {
     if (value < lower)
@@ -40,6 +43,7 @@ static float Gate_Clamp(float value, float lower, float upper)
     return value;
 }
 
+/* 功能：校验闸门控制目标并生成 M2006 电机命令；参数 target 为目标，output 为输出；返回 true 表示计算成功。 */
 bool Gate_Calc(const gate_target_t *target, gate_output_t *output)
 {
     if ((target == NULL) || (output == NULL))
@@ -98,6 +102,7 @@ bool Gate_Calc(const gate_target_t *target, gate_output_t *output)
     return true;
 }
 
+/* 功能：把闸门控制输出和更新后的 PID 参数写入电机管理器；参数 manager、output 分别为管理器和输出；返回 true 表示下发成功。 */
 bool Gate_Apply(motor_manager_t *manager, const gate_output_t *output)
 {
     bool success;

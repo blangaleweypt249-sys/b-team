@@ -1,3 +1,8 @@
+/**
+ * @file freertos_tasks.c
+ * @brief 实现上层控制周期任务和通信接收处理任务。
+ */
+
 #include "freertos_tasks.h"
 
 #include "FreeRTOS.h"
@@ -12,6 +17,7 @@ extern osThreadId_t commRxTaskHandle;
 
 volatile w25q_status_t w25q_init_status = W25Q_ERROR_NOT_INIT;
 
+/* 功能：运行上层应用周期任务；参数 argument 为 RTOS 任务入口参数；任务每 1 ms 执行控制并每 10 ms 执行周期处理。 */
 void StartAppTask(void *argument)
 {
   uint32_t next_wake;
@@ -35,6 +41,7 @@ void StartAppTask(void *argument)
   }
 }
 
+/* 功能：初始化 Flash 与通信运行时并持续处理接收事件；参数 argument 为 RTOS 任务入口参数；发生初始化错误时进入错误处理。 */
 void StartCommRxTask(void *argument)
 {
   uint32_t flags;
