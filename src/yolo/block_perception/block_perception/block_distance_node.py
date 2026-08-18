@@ -24,8 +24,8 @@
   Z: 上方为正
 
 Orbbec -> 夹爪外参 (t_G_C, 固连常量, 尺子量出):
-  默认 = (-91, 21, 27.8) mm -> (-0.091, 0.021, 0.0278) m
-  即相机光心在 TCP 后方 91mm、左 21mm、上 27.8mm。
+  默认 = (-102, -52.5, 28) mm -> (-0.102, -0.0525, 0.028) m
+  即相机光心在 TCP 后方 102mm、右 52.5mm、上 28mm。
 """
 
 import os
@@ -84,11 +84,11 @@ class BlockDistanceNode(Node):
         self.declare_parameter('max_depth_mm', 10000.0)
         self.declare_parameter('distance_alpha', 0.7)
         # ---- Orbbec -> 夹爪外参 (t_G_C, 单位 m) ----
-        #   默认 (-91, 21, 27.8) mm：相机在 TCP 后方 91mm、左 21mm、上 27.8mm
+        #   默认 (-102, -52.5, 28) mm：相机在 TCP 后方 102mm、右 52.5mm、上 28mm
         self.declare_parameter('output_to_gripper', True)
-        self.declare_parameter('t_g_c_x_m', -0.091)
-        self.declare_parameter('t_g_c_y_m', 0.021)
-        self.declare_parameter('t_g_c_z_m', 0.0278)
+        self.declare_parameter('t_g_c_x_m', -0.102)
+        self.declare_parameter('t_g_c_y_m', -0.0525)
+        self.declare_parameter('t_g_c_z_m', 0.028)
 
         model_path = self.get_parameter('model_path').value
         self.get_logger().info(f'加载 YOLO 模型: {model_path}')

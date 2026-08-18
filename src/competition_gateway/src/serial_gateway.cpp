@@ -70,16 +70,25 @@ struct position_cache_t
   bool field_pose_received = false;
 };
 
+enum class locked_block_t : uint8_t
+{
+  None = 0,
+  Red = 1,
+  Blue = 2,
+};
+
 class serial_gateway_t : public rclcpp::Node
 {
 public:
   serial_gateway_t()
-  : Node("serial_gateway"), serial_fd_(-1), perception_sequence_(0U), position_sequence_(0U)
+  : Node("serial_gateway"), serial_fd_(-1), perception_sequence_(0U), position_sequence_(0U),
+    locked_block_(locked_block_t::None)
   {
     this->declare_parameter("serial_device", "/dev/ttyUSB0");
-    this->declare_parameter("baudrate", 115200);
+    this->declare_parameter("baudrate", 921600);
     this->declare_parameter("send_period_ms", 10);
     this->declare_parameter("data_timeout_ms", 200);
+    this->declare_parameter("block_lost_timeout_ms", 300);
     this->declare_parameter("controller_timeout_ms", 500);
     this->declare_parameter("field_pose_topic", "/competition/field_pose");
     this->declare_parameter("ball_position_topic", "/perception/ball_position");
@@ -166,7 +175,7 @@ private:
       return;
     }
     tcflush(serial_fd_, TCIOFLUSH);
-    RCLCPP_INFO(this->get_logger(), "串口网关已打开 %s，波特率 %d。", serial_device.c_str(), baudrate);
+    RCLCPP_INFO(this->get_logger(), "串口网关已打开 %s，波特率 %ld。", serial_device.c_str(), baudrate);
   }
 
   void SerialGateway_Close()
@@ -239,6 +248,14 @@ private:
     SerialGateway_PublishConnectionTimeout();
   }
 
+  static float BlockDistanceSq(const perception_data_t & d, bool red)
+  {
+    const float x = red ? d.red_x_m : d.blue_x_m;
+    const float y = red ? d.red_y_m : d.blue_y_m;
+    const float z = red ? d.red_z_m : d.blue_z_m;
+    return x * x + y * y + z * z;
+  }
+
   void SerialGateway_SendPerception()
   {
     perception_data_t perception_data{};
@@ -246,24 +263,109 @@ private:
       std::lock_guard<std::mutex> lock(perception_mutex_);
       perception_data = perception_cache_.data;
       const auto now = this->now();
-      const auto timeout_ms = this->get_parameter("data_timeout_ms").as_int();
-      const auto timeout = rclcpp::Duration::from_nanoseconds(timeout_ms * 1000000LL);
-      // 取最新数据时间作为帧时间戳
-      rclcpp::Time latest_time = now;
-      if (perception_cache_.red_received && (now - perception_cache_.red_time) < timeout)
+      const auto data_timeout_ms = this->get_parameter("data_timeout_ms").as_int();
+      const auto data_timeout = rclcpp::Duration::from_nanoseconds(data_timeout_ms * 1000000LL);
+      const auto lost_timeout_ms = this->get_parameter("block_lost_timeout_ms").as_int();
+      const auto lost_timeout = rclcpp::Duration::from_nanoseconds(lost_timeout_ms * 1000000LL);
+
+      // 1) 判断红蓝块是否在数据有效期内
+      const bool red_fresh =
+        perception_cache_.red_received && (now - perception_cache_.red_time) < data_timeout;
+      const bool blue_fresh =
+        perception_cache_.blue_received && (now - perception_cache_.blue_time) < data_timeout;
+
+      // 2) 检查锁定目标是否已丢失（超过 block_lost_timeout_ms 没收到更新）
+      if (locked_block_ == locked_block_t::Red &&
+        (!perception_cache_.red_received || (now - perception_cache_.red_time) >= lost_timeout))
       {
-        perception_data.flags |= PERCEPTION_RED_VALID;
-        latest_time = perception_cache_.red_time;
+        locked_block_ = locked_block_t::None;
+        RCLCPP_INFO(this->get_logger(), "锁定的红块已消失，重新选择最近块");
       }
-      if (perception_cache_.blue_received && (now - perception_cache_.blue_time) < timeout)
+      else if (locked_block_ == locked_block_t::Blue &&
+        (!perception_cache_.blue_received || (now - perception_cache_.blue_time) >= lost_timeout))
       {
-        perception_data.flags |= PERCEPTION_BLUE_VALID;
-        if (perception_cache_.blue_time > latest_time)
+        locked_block_ = locked_block_t::None;
+        RCLCPP_INFO(this->get_logger(), "锁定的蓝块已消失，重新选择最近块");
+      }
+
+      // 3) 若未锁定，则从当前有效的红蓝块中选择距离最近的锁定
+      if (locked_block_ == locked_block_t::None)
+      {
+        bool red_choose = false;
+        bool blue_choose = false;
+        if (red_fresh && blue_fresh)
         {
-          latest_time = perception_cache_.blue_time;
+          const float d2_red = BlockDistanceSq(perception_data, true);
+          const float d2_blue = BlockDistanceSq(perception_data, false);
+          if (d2_red <= d2_blue)
+          {
+            red_choose = true;
+          }
+          else
+          {
+            blue_choose = true;
+          }
+        }
+        else if (red_fresh)
+        {
+          red_choose = true;
+        }
+        else if (blue_fresh)
+        {
+          blue_choose = true;
+        }
+
+        if (red_choose)
+        {
+          locked_block_ = locked_block_t::Red;
+          locked_last_time_ = now;
+          RCLCPP_INFO(
+            this->get_logger(), "锁定最近块: 红块, 距离≈%.1fmm",
+            std::sqrt(BlockDistanceSq(perception_data, true)) * 1000.0F);
+        }
+        else if (blue_choose)
+        {
+          locked_block_ = locked_block_t::Blue;
+          locked_last_time_ = now;
+          RCLCPP_INFO(
+            this->get_logger(), "锁定最近块: 蓝块, 距离≈%.1fmm",
+            std::sqrt(BlockDistanceSq(perception_data, false)) * 1000.0F);
         }
       }
-      if (perception_cache_.ball_received && (now - perception_cache_.ball_time) < timeout)
+
+      // 4) 按锁定状态决定哪些块标记为 VALID（只发送锁定的那一个，球保持原样）
+      rclcpp::Time latest_time = now;
+      if (locked_block_ == locked_block_t::Red && red_fresh)
+      {
+        perception_data.flags |= PERCEPTION_RED_VALID;
+        // 锁定状态下，未被锁定的块全部置零并清除 valid
+        perception_data.blue_x_m = 0.0F;
+        perception_data.blue_y_m = 0.0F;
+        perception_data.blue_z_m = 0.0F;
+        latest_time = perception_cache_.red_time;
+        locked_last_time_ = perception_cache_.red_time;
+      }
+      else if (locked_block_ == locked_block_t::Blue && blue_fresh)
+      {
+        perception_data.flags |= PERCEPTION_BLUE_VALID;
+        perception_data.red_x_m = 0.0F;
+        perception_data.red_y_m = 0.0F;
+        perception_data.red_z_m = 0.0F;
+        latest_time = perception_cache_.blue_time;
+        locked_last_time_ = perception_cache_.blue_time;
+      }
+      else
+      {
+        // 没有锁定或锁定块已失效：全部清除（避免发送旧的已锁定块数据）
+        perception_data.red_x_m = 0.0F;
+        perception_data.red_y_m = 0.0F;
+        perception_data.red_z_m = 0.0F;
+        perception_data.blue_x_m = 0.0F;
+        perception_data.blue_y_m = 0.0F;
+        perception_data.blue_z_m = 0.0F;
+      }
+
+      if (perception_cache_.ball_received && (now - perception_cache_.ball_time) < data_timeout)
       {
         perception_data.flags |= PERCEPTION_BALL_VALID;
         if (perception_cache_.ball_time > latest_time)
@@ -369,6 +471,9 @@ private:
   std::mutex position_mutex_;
   std::vector<uint8_t> receive_buffer_;
   rclcpp::Time last_controller_time_;
+  // 最近块锁定跟踪状态
+  locked_block_t locked_block_;
+  rclcpp::Time locked_last_time_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr field_pose_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr ball_position_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr block_red_sub_;

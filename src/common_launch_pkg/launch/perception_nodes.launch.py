@@ -96,13 +96,13 @@ def generate_launch_description():
         parameters=[{
             'model_path': ball_model_path,
             'conf_threshold': 0.5,
-            # 相机外参: 相机在雷达右侧17.3cm、后方3.5cm
+            # 相机外参: 相机在雷达右侧17.3cm、后方3.5cm，镜头朝车尾(相对雷达Z轴-90°)
             'extrinsic_x': -0.035,
             'extrinsic_y': -0.173,
             'extrinsic_z': 0.0,
             'extrinsic_roll': 0.0,
             'extrinsic_pitch': 0.0,
-            'extrinsic_yaw': 0.0,
+            'extrinsic_yaw': -1.5707963267948966,  # -90°
             # 输出坐标转换: 雷达→夹爪
             # 雷达在夹爪后方17.4cm、左方17.3cm，雷达朝向夹爪右方
             'output_to_gripper': True,
@@ -148,11 +148,11 @@ def generate_launch_description():
             'blue_class_name': 'blue',
             'distance_alpha': 0.7,
             # Orbbec -> 夹爪外参 (单位 m)
-            # 默认 (-91, 21, 27.8) mm：相机在 TCP 后方 91mm、左 21mm、上 27.8mm
+            # 默认 (-102, -52.5, 28) mm：相机在 TCP 后方 102mm、右 52.5mm、上 28mm
             'output_to_gripper': True,
-            't_g_c_x_m': -0.091,
-            't_g_c_y_m': 0.021,
-            't_g_c_z_m': 0.0278,
+            't_g_c_x_m': -0.102,
+            't_g_c_y_m': -0.0525,
+            't_g_c_z_m': 0.028,
         }],
     )
 

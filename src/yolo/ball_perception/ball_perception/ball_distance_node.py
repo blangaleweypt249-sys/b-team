@@ -77,16 +77,17 @@ class BallDistanceNode(Node):
         self.declare_parameter('d3', 0.0027336147522840394)
         self.declare_parameter('d4', 1.5452004344167767)
 
-        # 外参: 相机在雷达右侧17.3cm、后方3.5cm, 平行安装
-        # 雷达坐标系: X前 Y左 Z上 (ROS标准)
-        # 相机坐标系: Z前 X右 Y下 (OpenCV标准)
+        # 外参: 相机在雷达右侧17.3cm、后方3.5cm
+        # 雷达坐标系: X前 Y左 Z上 → 当前雷达朝车左方
+        # 相机坐标系: Z前 X右 Y下 (OpenCV标准) → 当前相机朝车尾
         # 相机在雷达坐标系中的位置: (-0.035, -0.173, 0)
+        # 相对雷达Z轴旋转: 相机Z前(车尾=雷达Y+) 相对 雷达X前(车左) = -90°
         self.declare_parameter('extrinsic_x', -0.035)   # 相机在雷达坐标系中的x位置 (后方为负)
         self.declare_parameter('extrinsic_y', -0.173)   # 相机在雷达坐标系中的y位置 (右侧为负)
         self.declare_parameter('extrinsic_z', 0.0)      # 相机在雷达坐标系中的z位置
         self.declare_parameter('extrinsic_roll', 0.0)   # 旋转(弧度)
         self.declare_parameter('extrinsic_pitch', 0.0)
-        self.declare_parameter('extrinsic_yaw', 0.0)
+        self.declare_parameter('extrinsic_yaw', -1.5707963267948966)  # -90°：镜头朝车尾=雷达Y+
 
         # 输出坐标转换: 雷达坐标系 → 夹爪坐标系
         # 雷达在夹爪后方17.4cm、左方17.3cm，雷达朝向夹爪右方(约-90°)

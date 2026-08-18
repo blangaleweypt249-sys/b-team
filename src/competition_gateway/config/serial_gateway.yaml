@@ -2,7 +2,7 @@ serial_gateway:
   ros__parameters:
     # 该进程必须是此设备文件的唯一打开者。
     serial_device: /dev/ttyUSB0
-    baudrate: 115200
+    baudrate: 921600
     # 感知帧和位置帧交替发送周期。10 ms → 共 100 Hz（每种帧 50 Hz）
     send_period_ms: 10
     # 超过此时间未收到定位或灵石目标时，在发送帧中清除对应有效位。

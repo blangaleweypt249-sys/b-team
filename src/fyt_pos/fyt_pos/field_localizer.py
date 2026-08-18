@@ -34,7 +34,7 @@ class FieldLocalizer(Node):
         self.declare_parameter('lidar_to_base_enabled', True)
         self.declare_parameter('base_to_lidar_x_m', 0.26182)
         self.declare_parameter('base_to_lidar_y_m', -0.23658)
-        self.declare_parameter('base_to_lidar_yaw_deg', -89.71)
+        self.declare_parameter('base_to_lidar_yaw_deg', 90.0)
         self.declare_parameter('allowed_min_x', 0.0)
         self.declare_parameter('allowed_max_x', 11.0)
         self.declare_parameter('allowed_min_y', 0.0)
