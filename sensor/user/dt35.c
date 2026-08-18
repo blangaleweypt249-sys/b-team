@@ -16,6 +16,7 @@
 #define DT35_DIST_NEAR_CM   5U
 #define DT35_DIST_FAR_CM    20U
 
+
 static I2C_HandleTypeDef *dt35_i2c;
 static uint8_t dt35_ready_40;
 static uint8_t dt35_ready_41;

@@ -91,6 +91,12 @@ HAL_StatusTypeDef ImuMain_ZeroYaw(void);
 int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega);
 
 /**
+ * @brief 将当前航向设为保持目标，并清除航向控制器动态量
+ * @retval HAL 状态
+ */
+HAL_StatusTypeDef ImuMain_CaptureCurrentYaw(void);
+
+/**
  * @brief 设置航向保持目标角
  * @param target_yaw_deg 目标偏航角，单位为 deg
  * @retval HAL 状态

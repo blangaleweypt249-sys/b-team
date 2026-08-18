@@ -41,5 +41,5 @@ b-up/computer_link.o: ..\user\com_link\computer_link.c \
   ..\user\chassis_vesc\vesc_motor.h ..\user\chassis_vesc\vesc_can.h \
   ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
-  ..\user\com_link\dt35_pnp_link.h ..\user\imu\imu_main.h \
+  ..\user\com_link\dt35_pnp_link.h ..\user\chassis_vesc\imu_main.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\string.h

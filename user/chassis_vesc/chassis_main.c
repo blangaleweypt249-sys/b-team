@@ -450,6 +450,8 @@ void Chassis_Run1ms(void)
             if (elapsed_ms >= CHASSIS_STOP_RAMP_MS)
             {
                 remaining_ms = 0U;
+                /* 锁定减速结束时的航向，避免闭环回追松手瞬间的旧目标。 */
+                (void)ImuMain_CaptureCurrentYaw();
                 chassis_motion_state = CHASSIS_MOTION_STOPPED;
             }
             else

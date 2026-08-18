@@ -16,6 +16,7 @@ extern volatile uint32_t lora_link_return_error_count;
 extern volatile uint32_t lora_link_returned_bytes;
 extern volatile uint8_t lora_remote_buttons;
 extern volatile uint8_t lora_remote_pe0_switch;
+extern volatile uint8_t lora_remote_pd6_switch;
 extern volatile uint8_t lora_remote_online;
 
 /**

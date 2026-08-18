@@ -1,4 +1,5 @@
-b-up/imu_main.o: ..\user\imu\imu_main.c ..\user\imu\imu_main.h \
+b-up/imu_main.o: ..\user\chassis_vesc\imu_main.c \
+  ..\user\chassis_vesc\imu_main.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
   ..\Core\Inc\stm32h7xx_hal_conf.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc.h \
@@ -36,7 +37,7 @@ b-up/imu_main.o: ..\user\imu\imu_main.c ..\user\imu\imu_main.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h ..\user\imu\imu.h \
-  ..\Core\Inc\usart.h ..\Core\Inc\main.h \
+  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
+  ..\user\chassis_vesc\imu.h ..\Core\Inc\usart.h ..\Core\Inc\main.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdlib.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\string.h

@@ -46,6 +46,6 @@ b-up/main.o: ..\Core\Src\main.c ..\Core\Inc\main.h \
   ..\Drivers\CMSIS\RTOS2\Include\cmsis_os2.h ..\Core\Inc\dma.h \
   ..\Core\Inc\fdcan.h ..\Core\Inc\usart.h ..\Core\Inc\gpio.h \
   ..\user\com_link\computer_link.h ..\user\com_link\dt35_pnp_link.h \
-  ..\user\imu\imu_main.h \
+  ..\user\chassis_vesc\imu_main.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
   ..\user\com_link\lora_link.h ..\user\com_link\mcu_link.h

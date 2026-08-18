@@ -1,5 +1,5 @@
-b-up/rs00.o: ..\user\up\rs00.c ..\user\up\rs00.h ..\user\up\rs_bus.h \
-  ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
+b-up/rs00.o: ..\user\motor\rs00.c ..\user\motor\rs00.h \
+  ..\user\motor\rs_bus.h ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
   ..\Core\Inc\stm32h7xx_hal_conf.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc.h \

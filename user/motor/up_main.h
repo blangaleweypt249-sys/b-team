@@ -9,7 +9,7 @@
 #include <stdint.h>
 
 /* 第一次标零后沿负方向运动的二次标零角度，后续动作共用。 */
-#define UP_SECOND_ZERO_OFFSET_DEG 45.0f
+#define UP_SECOND_ZERO_OFFSET_DEG 62.0f
 
 typedef struct
 {

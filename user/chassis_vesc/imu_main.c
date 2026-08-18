@@ -43,7 +43,7 @@ static const imu_config_t imu_config = {
     .gyro_filter_q = 0.1f,
     .gyro_filter_r = 2.0f,
     .yaw_tx_scale = 100.0f,
-    .yaw_deadzone_deg = 0.17f,
+    .yaw_deadzone_deg = 0.10f,
     .yaw_i_active_deg = 10.0f,
     .yaw_i_decay = 0.90f,
     .yaw_gyro_k = 5.0f
@@ -735,6 +735,27 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
                          active_pid->out_max);
     imu_data.omega_output = (int16_t)output;
     return imu_data.omega_output;
+}
+
+/**
+ * @brief 将当前航向设为保持目标，并清除航向控制器动态量
+ * @retval HAL 状态
+ */
+HAL_StatusTypeDef ImuMain_CaptureCurrentYaw(void)
+{
+    if (!initialized || (imu_data.state != IMU_STATE_READY) ||
+        !imu_data.online || !imu_data.yaw_valid)
+    {
+        return HAL_ERROR;
+    }
+
+    imu_data.target_yaw_deg = imu_data.yaw_deg;
+    imu_data.yaw_error_deg = 0.0f;
+    imu_data.omega_output = 0;
+    imu_data.yaw_hold_active = false;
+    yaw_control.target_valid = true;
+    reset_control_dynamics();
+    return HAL_OK;
 }
 
 /**

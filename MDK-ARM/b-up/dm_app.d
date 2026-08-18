@@ -1,5 +1,5 @@
-b-up/dm_app.o: ..\user\up\dm_app.c ..\user\up\dm_app.h \
-  ..\user\up\dm_2006_bus.h ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
+b-up/dm_app.o: ..\user\motor\dm_app.c ..\user\motor\dm_app.h \
+  ..\user\motor\dm_2006_bus.h ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
   ..\Core\Inc\stm32h7xx_hal_conf.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc.h \
@@ -38,6 +38,6 @@ b-up/dm_app.o: ..\user\up\dm_app.c ..\user\up\dm_app.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
-  ..\user\up\dm_motor.h \
+  ..\user\motor\dm_motor.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\float.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\string.h

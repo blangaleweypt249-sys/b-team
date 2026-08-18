@@ -291,6 +291,12 @@ __weak void StartCommTask(void *argument)
     McuLink_Run();
     Action_UpdatePnp(pnp_link[SENSOR_LINK_F_INDEX].trigger,
                      pnp_link[SENSOR_LINK_L_B_INDEX].trigger);
+    Action_UpdateAlignSwitch(lora_remote_pd6_switch,
+                             lora_remote_online);
+    Action_UpdateLiftSwitch(lora_remote_pe0_switch,
+                            lora_remote_online);
+    Action_UpdateRemoteButtons(lora_remote_buttons,
+                               lora_remote_online);
     ComputerLink_Run();
     osDelay(1);
   }

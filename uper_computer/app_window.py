@@ -4,6 +4,7 @@ import json
 import math
 import os
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -63,6 +64,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -824,6 +826,9 @@ class MainWindow(QMainWindow):
         self._current_baudrate = DEFAULT_BAUDRATE
         self._pressed_keys: set[int] = set()
         self._command = VelocityCommand()
+        self._auto_path_active = False
+        self._auto_path_deadline = 0.0
+        self._auto_path_axis: str | None = None
         self._rx_count = 0
         self._tx_count = 0
         self._auto_scroll = True
@@ -875,6 +880,11 @@ class MainWindow(QMainWindow):
         self._send_timer.setInterval(SEND_PERIOD_MS)
         self._send_timer.timeout.connect(self._send_active_command)
         self._send_timer.start()
+
+        self._auto_path_stop_timer = QTimer(self)
+        self._auto_path_stop_timer.setSingleShot(True)
+        self._auto_path_stop_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._auto_path_stop_timer.timeout.connect(self._finish_auto_path)
 
         QApplication.instance().installEventFilter(self)
         self.scan_ports()
@@ -940,7 +950,7 @@ class MainWindow(QMainWindow):
         tab_layout.setSpacing(0)
 
         self._tab_buttons = []
-        tab_names = ["调试", "串口", "定位"]
+        tab_names = ["调试", "自动路径", "串口", "定位"]
         for i, name in enumerate(tab_names):
             btn = TabButton(name)
             btn.clicked.connect(lambda idx=i: self._switch_tab(idx))
@@ -954,6 +964,7 @@ class MainWindow(QMainWindow):
         root.addWidget(self._stack, 1)
 
         self._build_debug_page()
+        self._build_auto_path_page()
         self._build_serial_page()
         self._build_location_page()
 
@@ -1136,6 +1147,137 @@ class MainWindow(QMainWindow):
         right_panel.addStretch(1)
 
         page_layout.addLayout(right_panel, 1)
+        self._stack.addWidget(page)
+
+    def _build_auto_path_page(self) -> None:
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(16)
+
+        auto_card = QFrame()
+        auto_card.setObjectName("CardPanel")
+        auto_layout = QVBoxLayout(auto_card)
+        auto_layout.setContentsMargins(24, 22, 24, 24)
+        auto_layout.setSpacing(18)
+
+        auto_header = QHBoxLayout()
+        auto_header.setSpacing(12)
+        auto_title = QLabel("自动路径")
+        auto_title.setObjectName("CardTitle")
+        self.auto_path_status = QLabel("待命")
+        self.auto_path_status.setObjectName("AutoPathStatus")
+        self.auto_path_status.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        auto_header.addWidget(auto_title)
+        auto_header.addStretch(1)
+        auto_header.addWidget(self.auto_path_status)
+        auto_layout.addLayout(auto_header)
+
+        vx_title = QLabel("Vx 路径")
+        vx_title.setObjectName("SectionLabel")
+        auto_layout.addWidget(vx_title)
+
+        vx_controls = QGridLayout()
+        vx_controls.setHorizontalSpacing(16)
+        vx_controls.setVerticalSpacing(8)
+        for column, text in enumerate(("运行时间", "Vx 速度", "Vx 方向", "执行")):
+            label = QLabel(text)
+            label.setObjectName("FieldLabel")
+            vx_controls.addWidget(label, 0, column)
+
+        self.auto_vx_duration_spin = QSpinBox()
+        self.auto_vx_duration_spin.setRange(1, 600_000)
+        self.auto_vx_duration_spin.setSingleStep(1)
+        self.auto_vx_duration_spin.setValue(1000)
+        self.auto_vx_duration_spin.setSuffix(" ms")
+        vx_controls.addWidget(self.auto_vx_duration_spin, 1, 0)
+
+        self.auto_speed_spin = QDoubleSpinBox()
+        self.auto_speed_spin.setRange(MIN_LINEAR_SPEED_M_S, MAX_LINEAR_SPEED_M_S)
+        self.auto_speed_spin.setDecimals(3)
+        self.auto_speed_spin.setSingleStep(LINEAR_SPEED_STEP_M_S)
+        self.auto_speed_spin.setValue(DEFAULT_LINEAR_SPEED_M_S)
+        self.auto_speed_spin.setSuffix(" m/s")
+        vx_controls.addWidget(self.auto_speed_spin, 1, 1)
+
+        direction_control = QWidget()
+        direction_layout = QHBoxLayout(direction_control)
+        direction_layout.setContentsMargins(0, 0, 0, 0)
+        direction_layout.setSpacing(0)
+        self.auto_positive_button = QPushButton("+Vx")
+        self.auto_positive_button.setObjectName("DirectionLeft")
+        self.auto_positive_button.setCheckable(True)
+        self.auto_negative_button = QPushButton("-Vx")
+        self.auto_negative_button.setObjectName("DirectionRight")
+        self.auto_negative_button.setCheckable(True)
+        self.auto_direction_group = QButtonGroup(self)
+        self.auto_direction_group.setExclusive(True)
+        self.auto_direction_group.addButton(self.auto_positive_button, 1)
+        self.auto_direction_group.addButton(self.auto_negative_button, 2)
+        self.auto_positive_button.setChecked(True)
+        direction_layout.addWidget(self.auto_positive_button)
+        direction_layout.addWidget(self.auto_negative_button)
+        vx_controls.addWidget(direction_control, 1, 2)
+
+        self.auto_vx_go_button = QPushButton("Vx GO")
+        self.auto_vx_go_button.setObjectName("AutoGoButton")
+        self.auto_vx_go_button.setProperty("running", False)
+        self.auto_vx_go_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay)
+        )
+        self.auto_vx_go_button.clicked.connect(lambda: self._toggle_auto_path("vx"))
+        vx_controls.addWidget(self.auto_vx_go_button, 1, 3)
+
+        for column in range(4):
+            vx_controls.setColumnStretch(column, 1)
+        auto_layout.addLayout(vx_controls)
+        auto_layout.addWidget(self._divider())
+
+        vy_title = QLabel("Vy 路径（正向）")
+        vy_title.setObjectName("SectionLabel")
+        auto_layout.addWidget(vy_title)
+
+        vy_controls = QGridLayout()
+        vy_controls.setHorizontalSpacing(16)
+        vy_controls.setVerticalSpacing(8)
+        for column, text in enumerate(("运行时间", "Vy 速度", "执行")):
+            label = QLabel(text)
+            label.setObjectName("FieldLabel")
+            vy_controls.addWidget(label, 0, column)
+
+        self.auto_vy_duration_spin = QSpinBox()
+        self.auto_vy_duration_spin.setRange(1, 600_000)
+        self.auto_vy_duration_spin.setSingleStep(1)
+        self.auto_vy_duration_spin.setValue(1000)
+        self.auto_vy_duration_spin.setSuffix(" ms")
+        vy_controls.addWidget(self.auto_vy_duration_spin, 1, 0)
+
+        self.auto_vy_speed_spin = QDoubleSpinBox()
+        self.auto_vy_speed_spin.setRange(0.0, MAX_LINEAR_SPEED_M_S)
+        self.auto_vy_speed_spin.setDecimals(3)
+        self.auto_vy_speed_spin.setSingleStep(LINEAR_SPEED_STEP_M_S)
+        self.auto_vy_speed_spin.setValue(DEFAULT_LINEAR_SPEED_M_S)
+        self.auto_vy_speed_spin.setSuffix(" m/s")
+        vy_controls.addWidget(self.auto_vy_speed_spin, 1, 1)
+
+        self.auto_vy_go_button = QPushButton("Vy GO")
+        self.auto_vy_go_button.setObjectName("AutoGoButton")
+        self.auto_vy_go_button.setProperty("running", False)
+        self.auto_vy_go_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay)
+        )
+        self.auto_vy_go_button.clicked.connect(lambda: self._toggle_auto_path("vy"))
+        vy_controls.addWidget(self.auto_vy_go_button, 1, 2)
+
+        vy_controls.setColumnStretch(0, 1)
+        vy_controls.setColumnStretch(1, 1)
+        vy_controls.setColumnStretch(2, 2)
+        auto_layout.addLayout(vy_controls)
+
+        page_layout.addWidget(auto_card)
+        page_layout.addStretch(1)
         self._stack.addWidget(page)
 
     def _build_serial_page(self) -> None:
@@ -1669,6 +1811,51 @@ class MainWindow(QMainWindow):
                 color: #ffffff;
             }
 
+            QLabel#AutoPathStatus {
+                color: #86868b;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QPushButton#DirectionLeft, QPushButton#DirectionRight {
+                min-width: 42px;
+                padding: 0 8px;
+                background: #f2f2f7;
+                color: #636366;
+            }
+            QPushButton#DirectionLeft {
+                border-top-right-radius: 0;
+                border-bottom-right-radius: 0;
+            }
+            QPushButton#DirectionRight {
+                border-left: none;
+                border-top-left-radius: 0;
+                border-bottom-left-radius: 0;
+            }
+            QPushButton#DirectionLeft:checked, QPushButton#DirectionRight:checked {
+                color: #ffffff;
+                background: #007aff;
+                border-color: #007aff;
+                font-weight: 700;
+            }
+            QPushButton#AutoGoButton {
+                color: #ffffff;
+                background: #34c759;
+                border-color: #34c759;
+                font-weight: 700;
+            }
+            QPushButton#AutoGoButton:hover {
+                background: #30b350;
+                border-color: #30b350;
+            }
+            QPushButton#AutoGoButton[running="true"] {
+                background: #ff3b30;
+                border-color: #ff3b30;
+            }
+            QPushButton#AutoGoButton[running="true"]:hover {
+                background: #d70015;
+                border-color: #d70015;
+            }
+
             QPushButton#StopButton {
                 color: #ffffff;
                 background: #ff3b30;
@@ -1884,7 +2071,16 @@ class MainWindow(QMainWindow):
         if not self.keyboard_check.isChecked():
             return False
 
+        if self._auto_path_active and event.type() == QEvent.Type.KeyRelease:
+            return True
+
         if event.type() == QEvent.Type.KeyPress:
+            if self._auto_path_active:
+                self._cancel_auto_path(
+                    send_stop=False,
+                    status_text="已由键盘接管",
+                )
+                self._append_log("SYS", "自动路径已由键盘接管", "#ff9500")
             self._pressed_keys.add(key)
         else:
             self._pressed_keys.discard(key)
@@ -1933,6 +2129,7 @@ class MainWindow(QMainWindow):
 
     def _toggle_connection(self) -> None:
         if self._connected:
+            self._cancel_auto_path(send_stop=False, status_text="串口已断开")
             self._clear_motion(send_now=False)
             self.disconnect_requested.emit(ZERO_FRAME)
             self._append_log("SYS", "串口已断开", "#ff9500")
@@ -1950,6 +2147,11 @@ class MainWindow(QMainWindow):
         self.connect_requested.emit(port, self._current_baudrate)
 
     def _on_serial_status(self, connected: bool, detail: str) -> None:
+        if self._auto_path_active:
+            self._cancel_auto_path(
+                send_stop=False,
+                status_text="待命" if connected else "串口已断开",
+            )
         self._connected = connected
         self.action_control.set_connected(connected)
         self.status_label.setStyleSheet("")
@@ -2015,11 +2217,16 @@ class MainWindow(QMainWindow):
             self.status_label.setStyleSheet("")
 
     def _speed_changed(self) -> None:
+        if self._auto_path_active:
+            self._cancel_auto_path(
+                send_stop=True,
+                status_text="已由手动控制取消",
+            )
         self._update_command(send_now=True)
 
     def _keyboard_toggled(self, enabled: bool) -> None:
         if not enabled:
-            self._clear_motion(send_now=True)
+            self._stop_motion()
         self.setFocus()
 
     def _update_command(self, send_now: bool) -> None:
@@ -2031,12 +2238,21 @@ class MainWindow(QMainWindow):
             counterclockwise=self.KEY_CCW in self._pressed_keys,
             clockwise=self.KEY_CW in self._pressed_keys,
         )
-        self._command = calculate_velocity(
-            state,
-            self.linear_speed_spin.value(),
-            self.angular_speed_spin.value(),
+        self._set_velocity_command(
+            calculate_velocity(
+                state,
+                self.linear_speed_spin.value(),
+                self.angular_speed_spin.value(),
+            ),
+            send_now=send_now,
         )
 
+    def _set_velocity_command(
+        self,
+        command: VelocityCommand,
+        send_now: bool,
+    ) -> None:
+        self._command = command
         self.vx_label.setText(f"Vx  {self._command.vx_mm_s / 1000.0:+.3f} m/s")
         self.vy_label.setText(f"Vy  {self._command.vy_mm_s / 1000.0:+.3f} m/s")
         self.wz_label.setText(f"Wz  {self._command.wz_mrad_s / 1000.0:+.3f} rad/s")
@@ -2057,16 +2273,122 @@ class MainWindow(QMainWindow):
         self._append_log("SYS", f"已发送{name}指令", "#86868b")
 
     def _send_active_command(self) -> None:
+        if self._auto_path_active:
+            remaining_s = self._auto_path_deadline - time.monotonic()
+            if remaining_s <= 0:
+                self._finish_auto_path()
+                return
+            axis_name = (self._auto_path_axis or "").upper()
+            self.auto_path_status.setText(
+                f"{axis_name} 剩余 {max(1, round(remaining_s * 1000.0))} ms"
+            )
+            self._send_current_command()
+            return
+
         if self._command == VelocityCommand():
             return
         self._send_current_command()
+
+    def _toggle_auto_path(self, axis: str) -> None:
+        if self._auto_path_active:
+            running_axis = self._auto_path_axis
+            self._cancel_auto_path(send_stop=True, status_text="已停止")
+            self._append_log(
+                "SYS",
+                f"{(running_axis or '').upper()} 自动路径已手动停止",
+                "#ff9500",
+            )
+            self.setFocus()
+            return
+
+        if not self._connected:
+            self.auto_path_status.setText("请先连接串口")
+            self._set_status_message("自动路径启动失败：串口未连接", error=True)
+            self._append_log("ERR", "自动路径启动失败：串口未连接", "#ff3b30")
+            return
+
+        if axis == "vx":
+            direction = 1 if self.auto_positive_button.isChecked() else -1
+            speed_mm_s = round(self.auto_speed_spin.value() * 1000.0) * direction
+            duration_ms = self.auto_vx_duration_spin.value()
+            command = VelocityCommand(vx_mm_s=speed_mm_s, vy_mm_s=0, wz_mrad_s=0)
+        elif axis == "vy":
+            speed_mm_s = round(self.auto_vy_speed_spin.value() * 1000.0)
+            duration_ms = self.auto_vy_duration_spin.value()
+            command = VelocityCommand(vx_mm_s=0, vy_mm_s=speed_mm_s, wz_mrad_s=0)
+        else:
+            raise ValueError(f"Unsupported auto path axis: {axis}")
+
+        self._pressed_keys.clear()
+        self._auto_path_active = True
+        self._auto_path_axis = axis
+        self._auto_path_deadline = time.monotonic() + duration_ms / 1000.0
+        self._set_auto_path_controls_enabled(False)
+        self._set_velocity_command(command, send_now=True)
+        self._auto_path_stop_timer.start(duration_ms)
+        axis_name = axis.upper()
+        self.auto_path_status.setText(f"{axis_name} 剩余 {duration_ms} ms")
+        self._append_log(
+            "SYS",
+            f"{axis_name} 自动路径启动：{speed_mm_s / 1000.0:+.3f} m/s，{duration_ms} ms",
+            "#34c759",
+        )
+        self.setFocus()
+
+    def _set_auto_path_controls_enabled(self, enabled: bool) -> None:
+        self.auto_vx_duration_spin.setEnabled(enabled)
+        self.auto_speed_spin.setEnabled(enabled)
+        self.auto_vy_duration_spin.setEnabled(enabled)
+        self.auto_vy_speed_spin.setEnabled(enabled)
+        self.auto_positive_button.setEnabled(enabled)
+        self.auto_negative_button.setEnabled(enabled)
+        for axis, button in (
+            ("vx", self.auto_vx_go_button),
+            ("vy", self.auto_vy_go_button),
+        ):
+            running = not enabled and axis == self._auto_path_axis
+            button.setEnabled(enabled or running)
+            button.setText("停止" if running else f"{axis.title()} GO")
+            button.setIcon(
+                self.style().standardIcon(
+                    QStyle.StandardPixmap.SP_MediaStop
+                    if running
+                    else QStyle.StandardPixmap.SP_MediaPlay
+                )
+            )
+            button.setProperty("running", running)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+    def _cancel_auto_path(self, send_stop: bool, status_text: str) -> bool:
+        if not self._auto_path_active:
+            return False
+
+        self._auto_path_active = False
+        self._auto_path_deadline = 0.0
+        self._auto_path_stop_timer.stop()
+        self._set_auto_path_controls_enabled(True)
+        self._auto_path_axis = None
+        self.auto_path_status.setText(status_text)
+        self._set_velocity_command(VelocityCommand(), send_now=False)
+        if send_stop and self._connected:
+            for _ in range(STOP_REPEAT_COUNT):
+                self.send_requested.emit(ZERO_FRAME)
+        return True
+
+    def _finish_auto_path(self) -> None:
+        axis_name = (self._auto_path_axis or "").upper()
+        if not self._cancel_auto_path(send_stop=True, status_text="已完成"):
+            return
+        self._append_log("SYS", f"{axis_name} 自动路径已完成，速度已清零", "#34c759")
 
     def _clear_motion(self, send_now: bool) -> None:
         self._pressed_keys.clear()
         self._update_command(send_now=send_now)
 
     def _stop_motion(self) -> None:
-        self._clear_motion(send_now=True)
+        auto_stopped = self._cancel_auto_path(send_stop=True, status_text="已停止")
+        self._clear_motion(send_now=not auto_stopped)
         self.setFocus()
 
     # ── 日志 ──
@@ -2334,6 +2656,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         self._send_timer.stop()
         self._port_timer.stop()
+        self._auto_path_stop_timer.stop()
+        self._cancel_auto_path(send_stop=False, status_text="待命")
         self._clear_motion(send_now=False)
         QApplication.instance().removeEventFilter(self)
 

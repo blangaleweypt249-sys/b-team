@@ -1,6 +1,6 @@
-b-up/rs_app.o: ..\user\up\rs_app.c ..\user\up\rs_app.h ..\user\up\rs00.h \
-  ..\user\up\rs_bus.h ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
-  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
+b-up/rs_app.o: ..\user\motor\rs_app.c ..\user\motor\rs_app.h \
+  ..\user\motor\rs00.h ..\user\motor\rs_bus.h ..\Core\Inc\fdcan.h \
+  ..\Core\Inc\main.h ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
   ..\Core\Inc\stm32h7xx_hal_conf.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_def.h \

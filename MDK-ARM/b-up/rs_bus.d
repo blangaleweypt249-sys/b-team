@@ -1,4 +1,4 @@
-b-up/rs_bus.o: ..\user\up\rs_bus.c ..\user\up\rs_bus.h \
+b-up/rs_bus.o: ..\user\motor\rs_bus.c ..\user\motor\rs_bus.h \
   ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
   ..\Core\Inc\stm32h7xx_hal_conf.h \

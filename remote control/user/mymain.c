@@ -20,7 +20,7 @@ static vofa_frame_t debug_frame;
 void MyMain_Init(void)
 {
     Remote_Init();
-    Remote_LoRaInit();
+    Remote_TransmitInit();
 }
 
 /**
