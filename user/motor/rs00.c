@@ -292,6 +292,41 @@ HAL_StatusTypeDef RsMotor_Start(rs_motor_t *motor, rs_mode_t mode,
         return HAL_ERROR;
     }
 
+    /* RobStride00 powers up in MIT motion mode.  Its documented sequence is
+       enable frame -> MIT frame -> feedback; feedback is not a prerequisite
+       for sending the first motion frame. */
+    if (mode == RS_MOTION)
+    {
+        if (motor->active && (motor->mode == (uint8_t)mode) &&
+            (motor->start_step == RS_START_IDLE))
+        {
+            return HAL_OK;
+        }
+
+        if (motor->active)
+        {
+            status = send_command(motor, RS_CMD_OFF, 0U);
+            if (status != HAL_OK)
+            {
+                return status;
+            }
+        }
+
+        status = send_command(motor, RS_CMD_ON, 0U);
+        if (status != HAL_OK)
+        {
+            motor->active = false;
+            return status;
+        }
+        motor->mode = (uint8_t)mode;
+        motor->requested_mode = (uint8_t)mode;
+        motor->active = true;
+        motor->pp_configured = false;
+        motor->limit_valid = 0U;
+        motor->start_step = RS_START_IDLE;
+        return HAL_OK;
+    }
+
     if ((motor->start_step != RS_START_IDLE) &&
         (motor->requested_mode != (uint8_t)mode))
     {
@@ -389,6 +424,9 @@ HAL_StatusTypeDef RsMotor_Stop(rs_motor_t *motor)
     }
 
     motor->start_step = RS_START_IDLE;
+    motor->zero.pending = false;
+    motor->zero.completed = false;
+    motor->zero.result = HAL_ERROR;
     status = send_command(motor, RS_CMD_OFF, 0U);
     if (status == HAL_OK)
     {

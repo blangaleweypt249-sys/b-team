@@ -216,11 +216,6 @@ void RsApp_Run(rs_app_t *app, uint32_t now_ms)
         {
             continue;
         }
-        if ((motor->motor.feedback.valid & RS_FDB_STATE) == 0U)
-        {
-            continue;
-        }
-
         if (!motor->motor.active ||
             (motor->motor.mode != (uint8_t)motor->command.mode) ||
             (motor->motor.start_step != RS_START_IDLE))

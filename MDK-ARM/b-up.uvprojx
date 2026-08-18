@@ -1403,16 +1403,6 @@
           <GroupName>BSP_CAN</GroupName>
           <Files>
             <File>
-              <FileName>dm_2006_bus.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\motor\dm_2006_bus.c</FilePath>
-            </File>
-            <File>
-              <FileName>dm_2006_bus.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\motor\dm_2006_bus.h</FilePath>
-            </File>
-            <File>
               <FileName>fdcan_task.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\user\motor\fdcan_task.c</FilePath>
@@ -1447,36 +1437,6 @@
         <Group>
           <GroupName>MOTOR</GroupName>
           <Files>
-            <File>
-              <FileName>c610_2006.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\motor\c610_2006.c</FilePath>
-            </File>
-            <File>
-              <FileName>c610_2006.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\motor\c610_2006.h</FilePath>
-            </File>
-            <File>
-              <FileName>dm_app.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\motor\dm_app.c</FilePath>
-            </File>
-            <File>
-              <FileName>dm_app.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\motor\dm_app.h</FilePath>
-            </File>
-            <File>
-              <FileName>dm_motor.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\motor\dm_motor.c</FilePath>
-            </File>
-            <File>
-              <FileName>dm_motor.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\motor\dm_motor.h</FilePath>
-            </File>
             <File>
               <FileName>rs_app.c</FileName>
               <FileType>1</FileType>
