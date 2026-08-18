@@ -1,3 +1,8 @@
+/**
+ * @file test_fdcan_dlc.c
+ * @brief 验证经典 CAN 长度与 FDCAN DLC 编码的换算。
+ */
+
 #include <assert.h>
 #include <stdint.h>
 

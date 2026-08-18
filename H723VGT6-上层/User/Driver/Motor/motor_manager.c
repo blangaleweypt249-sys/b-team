@@ -1,3 +1,8 @@
+/**
+ * @file motor_manager.c
+ * @brief 实现多型号电机的统一命令管理、覆盖控制和周期调度。
+ */
+
 #include "motor_manager.h"
 
 #include <string.h>
@@ -98,6 +103,7 @@ bool MotorManager_SetEnabled(motor_manager_t *manager,
     return true;
 }
 
+/* 功能：为指定电机设置临时覆盖命令；用途：允许调试或特殊流程绕过常规目标；返回 true 表示覆盖已生效。 */
 bool MotorManager_SetOverride(motor_manager_t *manager,
                               size_t motor_index,
                               const motor_cmd_t *cmd)
@@ -112,6 +118,7 @@ bool MotorManager_SetOverride(motor_manager_t *manager,
     return true;
 }
 
+/* 功能：清除指定电机的临时覆盖命令；用途：恢复常规应用目标控制；返回 true 表示覆盖已清除。 */
 bool MotorManager_ClearOverride(motor_manager_t *manager,
                                 size_t motor_index)
 {

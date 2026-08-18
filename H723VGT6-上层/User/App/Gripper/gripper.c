@@ -1,11 +1,16 @@
+/**
+ * @file gripper.c
+ * @brief 实现夹爪目标到电机命令的计算与下发。
+ */
+
 #include "gripper.h"
 
 #include <math.h>
 #include <string.h>
 
-#include "can_id.h"
+#include "bsp_can.h"
 #include "m2006.h"
-#include "upper_config.h"
+#include "upper_motor_port.h"
 
 /* 功能：校验夹爪 PID 参数；用途：阻止非法增益进入 M2006 控制器；返回 true 表示配置有效。 */
 static bool Gripper_PidValid(const upper_pid_cfg_t *cfg)
@@ -24,6 +29,7 @@ static bool Gripper_PidEqual(const upper_pid_cfg_t *left,
     return memcmp(left, right, sizeof(*left)) == 0;
 }
 
+/* 功能：将数值限制在给定上下界内；用途：约束夹爪控制量和积分状态；返回值表示限幅后的数值。 */
 static float Gripper_Clamp(float value, float lower, float upper)
 {
     if (value < lower)
@@ -58,19 +64,19 @@ bool Gripper_Calc(const gripper_target_t *target,
         if (!isfinite(target->m2006_pos_rad) ||
             (target->m2006_pos_rad <
              -UPPER_GRIPPER_M2006_POSITION_LIMIT_RAD -
-             UPPER_M2006_POSITION_EPSILON_RAD) ||
+             UPPER_GRIPPER_M2006_POSITION_EPSILON_RAD) ||
             (target->m2006_pos_rad >
              UPPER_GRIPPER_M2006_POSITION_LIMIT_RAD +
-             UPPER_M2006_POSITION_EPSILON_RAD))
+             UPPER_GRIPPER_M2006_POSITION_EPSILON_RAD))
         {
             return false;
         }
     }
     else if (!isfinite(target->m2006_vel_rad_s) ||
              (target->m2006_vel_rad_s <
-              -UPPER_M2006_POSITION_VEL_LIMIT_RAD_S) ||
+              -UPPER_GRIPPER_M2006_POSITION_VEL_LIMIT_RAD_S) ||
              (target->m2006_vel_rad_s >
-              UPPER_M2006_POSITION_VEL_LIMIT_RAD_S))
+              UPPER_GRIPPER_M2006_POSITION_VEL_LIMIT_RAD_S))
     {
         return false;
     }

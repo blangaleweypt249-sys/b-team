@@ -27,6 +27,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "my_main.h"
 
 /* USER CODE END Includes */
 
@@ -126,7 +127,7 @@ int main(void)
   MX_USART10_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  HAL_GPIO_WritePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin, GPIO_PIN_SET);
+  My_Init();
 
   /* USER CODE END 2 */
 

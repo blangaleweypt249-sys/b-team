@@ -1,3 +1,8 @@
+/**
+ * @file m2006.c
+ * @brief 实现 DJI M2006 电机反馈解析、闭环控制和参数整定。
+ */
+
 #include "m2006.h"
 
 #include <float.h>

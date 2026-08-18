@@ -1,3 +1,8 @@
+/**
+ * @file bsp_can.c
+ * @brief 实现逻辑 CAN 总线到 STM32 FDCAN 外设的发送适配。
+ */
+
 #include "bsp_can.h"
 
 #include "fdcan.h"
@@ -8,13 +13,13 @@ static FDCAN_HandleTypeDef *BspCan_GetHandle(uint8_t can_bus)
 {
     switch (can_bus)
     {
-    case 1U:
+    case CAN_BUS_ARM_J4310:
         return &hfdcan1;
 
-    case 2U:
+    case CAN_BUS_ARM_M3508:
         return &hfdcan2;
 
-    case 3U:
+    case CAN_BUS_AUX:
         return &hfdcan3;
 
     default:

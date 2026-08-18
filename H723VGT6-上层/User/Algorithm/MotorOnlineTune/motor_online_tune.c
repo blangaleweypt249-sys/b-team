@@ -1,3 +1,8 @@
+/**
+ * @file motor_online_tune.c
+ * @brief 实现电机 PID 与 MIT 控制参数的在线整定算法。
+ */
+
 #include "motor_online_tune.h"
 
 #include <float.h>
@@ -464,6 +469,19 @@ void MotorOnlineMit_Update(motor_online_mit_t *tuner,
     }
 
     absolute_error = fabsf(position_error);
+    if ((absolute_error <= tuner->cfg.near_error) &&
+        (fabsf(measured_velocity) <= tuner->cfg.stalled_velocity))
+    {
+        tuner->applied_kp = tuner->base_kp;
+        tuner->applied_kd = tuner->base_kd;
+        tuner->previous_error = position_error;
+        tuner->previous_abs_error = absolute_error;
+        tuner->convergence_rate = 0.0f;
+        tuner->started = 1U;
+        *kp = tuner->applied_kp;
+        *kd = tuner->applied_kd;
+        return;
+    }
     error_ratio = MotorOnline_Clamp(
         (absolute_error - tuner->cfg.near_error) /
         (tuner->cfg.far_error - tuner->cfg.near_error),

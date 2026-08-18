@@ -16,17 +16,19 @@ $cmsisRtos2Include = '../Drivers/CMSIS/RTOS2/Include'
 $rvdsInclude = '../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F'
 $localGccInclude = '../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F'
 $localGccM7Include = '../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1'
-$obsoleteVofaInclude = '../User/Application/Vofa'
+$excludedVofaIncludes = @('../User/Application/Vofa', '../User/Driver/Vofa')
 
 # Keep the include paths aligned with the actual source tree.
 $text = $text.Replace(";$rvdsInclude", '')
 $text = $text.Replace(";$localGccInclude", '')
 $text = $text.Replace(";$localGccM7Include", '')
-$text = $text.Replace(";$obsoleteVofaInclude", '')
-$text = $text.Replace("$obsoleteVofaInclude;", '')
+foreach ($vofaInclude in $excludedVofaIncludes) {
+    $text = $text.Replace(";$vofaInclude", '')
+    $text = $text.Replace("$vofaInclude;", '')
+}
 
 # Motor movement test/debug code is not part of the production target.
-$vofaGroupPattern = '(?s)\s*<Group>\s*<GroupName>User/Application/Vofa</GroupName>.*?</Group>'
+$vofaGroupPattern = '(?s)\s*<Group>\s*<GroupName>User/(?:Application|Driver)/Vofa</GroupName>.*?</Group>'
 $text = [regex]::Replace($text, $vofaGroupPattern, '', 1)
 
 # Remove any RVDS or locally generated ARM_CM4F/ARM_CM7 port entry.
@@ -46,7 +48,10 @@ $includePattern = '(?s)<IncludePath>([^<]*FreeRTOS/Source/include[^<]*)</Include
 $text = [regex]::Replace($text, $includePattern, {
     param($match)
     $value = $match.Groups[1].Value
-    $value = $value.Replace(";$rvdsInclude", '').Replace(";$localGccInclude", '').Replace(";$localGccM7Include", '').Replace(";$obsoleteVofaInclude", '').Replace("$obsoleteVofaInclude;", '')
+    $value = $value.Replace(";$rvdsInclude", '').Replace(";$localGccInclude", '').Replace(";$localGccM7Include", '')
+    foreach ($vofaInclude in $excludedVofaIncludes) {
+        $value = $value.Replace(";$vofaInclude", '').Replace("$vofaInclude;", '')
+    }
     if ($value -notlike "*$gccInclude*") {
         $value += ";$gccInclude"
     }

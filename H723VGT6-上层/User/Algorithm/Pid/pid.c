@@ -1,3 +1,8 @@
+/**
+ * @file pid.c
+ * @brief 实现通用 PID 控制器的初始化、复位和周期计算。
+ */
+
 #include "pid.h"
 
 #include <string.h>

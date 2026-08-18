@@ -1,3 +1,8 @@
+/**
+ * @file test_upper_remote_link.c
+ * @brief 验证遥控链路的分帧、粘包和异常数据重同步。
+ */
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -8,6 +13,7 @@
 
 #define TEST_FRAME_SIZE 10U
 
+/* 功能：构造一帧固定格式的遥控测试数据；用途：生成不同按键、摇杆和序列号输入；返回值表示完整帧数据。 */
 static void Test_BuildFixedFrame(uint8_t frame[TEST_FRAME_SIZE],
                                  uint8_t left_x,
                                  uint8_t left_y,
@@ -30,6 +36,7 @@ static void Test_BuildFixedFrame(uint8_t frame[TEST_FRAME_SIZE],
     frame[9] = secondary_switches;
 }
 
+/* 功能：执行 SplitFrame 场景测试；用途：验证对应输入下的行为和断言；无返回值表示由断言报告结果。 */
 static void Test_SplitFrame(void)
 {
     uint8_t frame[TEST_FRAME_SIZE];
@@ -51,6 +58,7 @@ static void Test_SplitFrame(void)
     assert(link.diagnostics.valid_frame_count == 1U);
 }
 
+/* 功能：执行 ConcatenatedFramesAndMasks 场景测试；用途：验证对应输入下的行为和断言；无返回值表示由断言报告结果。 */
 static void Test_ConcatenatedFramesAndMasks(void)
 {
     uint8_t stream[TEST_FRAME_SIZE * 2U];
@@ -69,6 +77,7 @@ static void Test_ConcatenatedFramesAndMasks(void)
     assert(link.diagnostics.valid_frame_count == 2U);
 }
 
+/* 功能：执行 NoiseAndHeaderResynchronization 场景测试；用途：验证对应输入下的行为和断言；无返回值表示由断言报告结果。 */
 static void Test_NoiseAndHeaderResynchronization(void)
 {
     const uint8_t prefix[] = {0x01U, 0x02U, 0xA5U, 0x10U};
@@ -87,13 +96,14 @@ static void Test_NoiseAndHeaderResynchronization(void)
     assert(link.diagnostics.valid_frame_count == 1U);
 }
 
+/* 功能：执行 ExtremeJoystickValuesAreStillFixedFrames 场景测试；用途：验证对应输入下的行为和断言；无返回值表示由断言报告结果。 */
 static void Test_ExtremeJoystickValuesAreStillFixedFrames(void)
 {
     uint8_t frame[TEST_FRAME_SIZE];
     upper_remote_link_t link;
     upper_remote_control_t control;
 
-    /* These values used to resemble the removed CRC frame signature. */
+    /* 这些数值过去曾类似于已移除的 CRC 帧签名。 */
     Test_BuildFixedFrame(frame, 2U, 1U, 2U, 6U,
                          0U, 0U, 0x2AU, 0x15U);
     UpperRemoteLink_Init(&link);
@@ -104,6 +114,7 @@ static void Test_ExtremeJoystickValuesAreStillFixedFrames(void)
     assert(link.diagnostics.valid_frame_count == 1U);
 }
 
+/* 功能：执行 PayloadMayContainHeaderBytes 场景测试；用途：验证对应输入下的行为和断言；无返回值表示由断言报告结果。 */
 static void Test_PayloadMayContainHeaderBytes(void)
 {
     uint8_t stream[TEST_FRAME_SIZE * 2U];
@@ -122,6 +133,7 @@ static void Test_PayloadMayContainHeaderBytes(void)
     assert(link.diagnostics.valid_frame_count == 2U);
 }
 
+/* 功能：运行本文件的遥控链路的分帧、粘包和异常数据重同步测试；用途：集中执行断言用例；返回 0 表示全部测试通过。 */
 int main(void)
 {
     Test_SplitFrame();

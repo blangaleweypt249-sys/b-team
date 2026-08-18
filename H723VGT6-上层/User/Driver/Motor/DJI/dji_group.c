@@ -1,3 +1,8 @@
+/**
+ * @file dji_group.c
+ * @brief 实现 DJI 电机分组电流命令帧的编码。
+ */
+
 #include "dji_group.h"
 
 #include <string.h>

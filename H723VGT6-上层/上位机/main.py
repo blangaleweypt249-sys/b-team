@@ -60,8 +60,10 @@ from protocol import (
 
 BAUD_RATES = (115200, 230400, 460800, 921600)
 SEND_PERIOD_MS = 50
-REMOTE_PD13_RESET_DELAY_MS = 1000
-REMOTE_PD8_FIRST_DELAY_MS = 1000
+REMOTE_PD11_FIRST_DELAY_MS = 500
+REMOTE_PD8_FIRST_DELAY_MS = 500
+REMOTE_PD9_ZERO_GATE_DEG = 0.0
+REMOTE_PD9_GATE_HALF_PERIOD_MS = 500
 HEARTBEAT_PERIOD_MS = 100
 HANDSHAKE_PERIOD_MS = 150
 HANDSHAKE_TIMEOUT_MS = 3000
@@ -69,17 +71,17 @@ HANDSHAKE_OPEN_DELAY_MS = 300
 HANDSHAKE_SEQUENCE = 0x1234
 J4310_POSITION_LIMIT = 12.5
 J4310_VELOCITY_LIMIT = 30.0
-J4310_KP_LIMIT = 500.0
-J4310_KD_LIMIT = 5.0
+J4310_KP_LIMIT = 49.0
+J4310_KD_LIMIT = 0.95
 J4310_TORQUE_LIMIT = 10.0
 J4310_RAW_MIN_DEG = -math.degrees(J4310_POSITION_LIMIT)
 J4310_RAW_MAX_DEG = math.degrees(J4310_POSITION_LIMIT)
 J4310_POSITION_MIN_DEG = -90.0
 J4310_POSITION_MAX_DEG = 270.0
-POSITION_MIN_DEG = -1000.0
-POSITION_MAX_DEG = 1000.0
-M3508_SYNC_POSITION_MIN_DEG = -1000.0
-M3508_SYNC_POSITION_MAX_DEG = 1000.0
+POSITION_MIN_DEG = 0.0
+POSITION_MAX_DEG = 1200.0
+M3508_SYNC_POSITION_MIN_DEG = 0.0
+M3508_SYNC_POSITION_MAX_DEG = 1200.0
 M3508_TARGET_RANGES_DEG = (
     (
         min(POSITION_MIN_DEG, M3508_SYNC_POSITION_MIN_DEG),
@@ -114,7 +116,8 @@ DJI_REDUCTION_RATIOS = {
 }
 MOTOR_LOG_PATH = Path(__file__).resolve().parents[2] / "电机日志.log"
 MOTOR_PARAMETER_PATH = Path(__file__).resolve().with_name("motor_parameters.json")
-REMOTE_ACTION_PARAMETER_VERSION = 2
+REMOTE_ACTION_PARAMETER_VERSION = 7
+LEGACY_GATE_ACTION_KEY = "\u5f00\u5173\u95e8"
 
 MOTOR_MODEL_NAMES = {
     0: "J4310",
@@ -138,12 +141,12 @@ J4310_FAULT_NAMES = {
 
 REFERENCE_PID_VALUES = {
     "M3508 / C620": (
-        ("速度环", "80", "40", "0", "57.2958", "2458"),
-        ("位置环", "60", "0", "0", "0", "150 rpm"),
+        ("速度环", "120", "80", "0", "57.2958", "2458"),
+        ("位置环", "100", "0", "0", "0", "150 rpm"),
     ),
     "M2006 / C610": (
         ("速度环", "350", "250", "0", "0.5", "10000"),
-        ("位置环", "220", "500", "5", "0.002", "50 rpm"),
+        ("位置环", "900", "500", "5", "0.002", "50 rpm"),
     ),
 }
 
@@ -339,8 +342,11 @@ class UpperConsole:
         self.rx_count = 0
         self.active_page = "机械臂"
         self.remote_action_states: dict[str, int] = {}
-        self.remote_pd13_reset_after_id: str | None = None
+        self.remote_pd9_zero_pending = False
+        self.remote_pd9_oscillation_pending = False
+        self.remote_pd11_first_after_id: str | None = None
         self.remote_pd8_first_after_id: str | None = None
+        self.remote_pd9_gate_after_id: str | None = None
         self.connection_requested = False
         self.last_heartbeat = 0.0
         self.last_board_response = 0.0
@@ -386,7 +392,7 @@ class UpperConsole:
             ),
             (2, 3, 1): tk.StringVar(
                 value=format_dji_feedback(
-                    "开关门 M2006", "--", "等待主控反馈"
+                    "闸门 M2006", "--", "等待主控反馈"
                 )
             ),
             (2, 3, 2): tk.StringVar(
@@ -397,8 +403,8 @@ class UpperConsole:
         }
         self.j_position = tk.DoubleVar(value=0.0)
         self.j_velocity = tk.DoubleVar(value=0.0)
-        self.j_kp = tk.DoubleVar(value=5.0)
-        self.j_kd = tk.DoubleVar(value=0.5)
+        self.j_kp = tk.DoubleVar(value=20.0)
+        self.j_kd = tk.DoubleVar(value=0.95)
         self.j_tau = tk.DoubleVar(value=0.0)
         self.j_torque_limit = tk.DoubleVar(value=10.0)
         self.m3508_position_1 = tk.DoubleVar(value=0.0)
@@ -431,39 +437,37 @@ class UpperConsole:
         self.gripper_enable = tk.BooleanVar(value=True)
         self.aux_output_bits = 0
         self.remote_action_angles: dict[str, dict[str, tk.DoubleVar]] = {
-            "存块": {
+            "取地面块": {
                 "m3508": tk.DoubleVar(value=500.0),
                 "j4310": tk.DoubleVar(value=90.0),
-                "m3508_return": tk.DoubleVar(value=0.0),
-                "j4310_return": tk.DoubleVar(value=-20.0),
-            },
-            "取地面一层块": {
-                "m3508": tk.DoubleVar(value=1000.0),
-                "j4310": tk.DoubleVar(value=90.0),
-                "m3508_return": tk.DoubleVar(value=0.0),
-                "j4310_return": tk.DoubleVar(value=180.0),
-            },
-            "取台阶二层块": {
-                "m3508": tk.DoubleVar(value=0.0),
-                "j4310": tk.DoubleVar(value=90.0),
-                "m3508_return": tk.DoubleVar(value=0.0),
-                "j4310_return": tk.DoubleVar(value=180.0),
-            },
-            "翻转块": {
-                "m3508": tk.DoubleVar(value=0.0),
-                "j4310": tk.DoubleVar(value=30.0),
-                "m3508_second": tk.DoubleVar(value=700.0),
+                "m3508_second": tk.DoubleVar(value=1000.0),
                 "j4310_second": tk.DoubleVar(value=90.0),
-                "m3508_third": tk.DoubleVar(value=0.0),
-                "j4310_third": tk.DoubleVar(value=180.0),
             },
-            "开关门": {
+            "取台阶块": {
+                "m3508": tk.DoubleVar(value=0.0),
+                "j4310": tk.DoubleVar(value=90.0),
+                "m3508_second": tk.DoubleVar(value=850.0),
+                "j4310_second": tk.DoubleVar(value=90.0),
+            },
+            "收块": {
+                "m3508": tk.DoubleVar(value=0.0),
+                "j4310": tk.DoubleVar(value=180.0),
+            },
+            "翻转/存块": {
+                "m3508": tk.DoubleVar(value=0.0),
+                "j4310": tk.DoubleVar(value=40.0),
+                "m3508_second": tk.DoubleVar(value=0.0),
+                "j4310_second": tk.DoubleVar(value=-10.0),
+            },
+            "闸门": {
                 "angle_on": tk.DoubleVar(value=180.0),
-                "angle_off": tk.DoubleVar(value=62.0),
+                "angle_off": tk.DoubleVar(value=60.0),
+                "oscillation_high": tk.DoubleVar(value=130.0),
+                "oscillation_low": tk.DoubleVar(value=55.0),
             },
             "夹爪": {
-                "angle_on": tk.DoubleVar(value=130.0),
-                "angle_off": tk.DoubleVar(value=55.0),
+                "angle_on": tk.DoubleVar(value=125.0),
+                "angle_off": tk.DoubleVar(value=45.0),
             },
         }
         self._restore_motor_parameters()
@@ -548,7 +552,7 @@ class UpperConsole:
         ttk.Label(status, text="通信与反馈超时自动停输出：已关闭", style="CardMuted.TLabel").grid(row=0, column=2, sticky="e")
         navigation = tk.Frame(root, bg="#e8f6fb")
         navigation.pack(fill="x", pady=(0, 2))
-        for page in ("机械臂", "开关门", "夹爪", "遥控控制"):
+        for page in ("机械臂", "闸门", "夹爪", "遥控控制"):
             tab = tk.Button(
                 navigation,
                 text=page,
@@ -571,7 +575,7 @@ class UpperConsole:
 
         self.page_container = ttk.Frame(root, style="PageContainer.TFrame", padding=2)
         self._build_arm_page()
-        self._build_single_motor_page("开关门", self.conveyor_position, "conveyor")
+        self._build_single_motor_page("闸门", self.conveyor_position, "conveyor")
         self._build_single_motor_page("夹爪", self.gripper_position, "gripper")
         self._build_remote_control_page()
         self._select_page("机械臂", log_change=False)
@@ -610,17 +614,17 @@ class UpperConsole:
         ).grid(row=1, column=0, columnspan=8, sticky="w", pady=(0, 12))
 
         action_rows = (
-            ("存块", "PD13", (("m3508", "M3508", -1000.0, 1000.0), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_return", "M3508", -1000.0, 1000.0), ("j4310_return", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
-            ("取地面一层块", "PD12", (("m3508", "M3508", -1000.0, 1000.0), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_return", "M3508", -1000.0, 1000.0), ("j4310_return", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
-            ("取台阶二层块", "PD11", (("m3508", "M3508", -1000.0, 1000.0), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_return", "M3508", -1000.0, 1000.0), ("j4310_return", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
-            ("翻转块", "PD8", (("m3508", "M3508", -1000.0, 1000.0), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_second", "M3508", -1000.0, 1000.0), ("j4310_second", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_third", "M3508", -1000.0, 1000.0), ("j4310_third", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
-            ("开关门", "PD9", (("angle_on", "打开", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), (None, "", 0.0, 0.0), ("angle_off", "关闭", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0))),
+            ("取地面块", "PD13", (("m3508", "M3508", POSITION_MIN_DEG, POSITION_MAX_DEG), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_second", "M3508", POSITION_MIN_DEG, POSITION_MAX_DEG), ("j4310_second", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
+            ("取台阶块", "PD12", (("m3508", "M3508", POSITION_MIN_DEG, POSITION_MAX_DEG), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_second", "M3508", POSITION_MIN_DEG, POSITION_MAX_DEG), ("j4310_second", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
+            ("收块", "PD11", (("m3508", "M3508", POSITION_MIN_DEG, POSITION_MAX_DEG), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0))),
+            ("翻转/存块", "PD8", (("m3508", "M3508", POSITION_MIN_DEG, POSITION_MAX_DEG), ("j4310", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG), ("m3508_second", "M3508", POSITION_MIN_DEG, POSITION_MAX_DEG), ("j4310_second", "J4310", J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG))),
+            ("闸门", "PD9", (("angle_on", "打开", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), (None, "", 0.0, 0.0), ("angle_off", "关闭", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), (None, "", 0.0, 0.0), ("oscillation_high", "摆动高位", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), ("oscillation_low", "摆动低位", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG))),
             ("夹爪", "PD10", (("angle_on", "夹紧", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), (None, "", 0.0, 0.0), ("angle_off", "松开", M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0), (None, "", 0.0, 0.0))),
         )
         ttk.Label(motor_card, text="动作", style="CardMuted.TLabel").grid(row=2, column=0, sticky="w")
         ttk.Label(motor_card, text="第一次动作（角度 deg）", style="CardMuted.TLabel").grid(row=2, column=1, columnspan=2, sticky="w")
-        ttk.Label(motor_card, text="第二次动作（取特殊块，角度 deg）", style="CardMuted.TLabel").grid(row=2, column=3, columnspan=2, sticky="w")
-        ttk.Label(motor_card, text="第三次动作/复位（收特殊块，角度 deg）", style="CardMuted.TLabel").grid(row=2, column=5, columnspan=2, sticky="w")
+        ttk.Label(motor_card, text="第二次动作（角度 deg）", style="CardMuted.TLabel").grid(row=2, column=3, columnspan=2, sticky="w")
+        ttk.Label(motor_card, text="PD8 二次后摆动（角度 deg）", style="CardMuted.TLabel").grid(row=2, column=5, columnspan=2, sticky="w")
         ttk.Label(motor_card, text="执行", style="CardMuted.TLabel").grid(row=2, column=7, sticky="w")
         self.remote_action_buttons: dict[str, ttk.Button] = {}
         for row, (name, key_name, fields) in enumerate(action_rows, start=3):
@@ -698,16 +702,14 @@ class UpperConsole:
         """Validate and persist the editable remote-action angle table."""
 
         ranges = {
-            "m3508": (-1000.0, 1000.0),
-            "m3508_return": (-1000.0, 1000.0),
-            "m3508_second": (-1000.0, 1000.0),
-            "m3508_third": (-1000.0, 1000.0),
+            "m3508": (POSITION_MIN_DEG, POSITION_MAX_DEG),
+            "m3508_second": (POSITION_MIN_DEG, POSITION_MAX_DEG),
             "j4310": (J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG),
-            "j4310_return": (J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG),
             "j4310_second": (J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG),
-            "j4310_third": (J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG),
             "angle_on": (M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG),
             "angle_off": (M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG),
+            "oscillation_high": (M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG),
+            "oscillation_low": (M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG),
         }
         errors: list[str] = []
         for action, values in self.remote_action_angles.items():
@@ -790,138 +792,166 @@ class UpperConsole:
 
     def _reset_remote_action_state(self, action: str) -> None:
         self.remote_action_states[action] = 0
+        if action == "翻转/存块":
+            self.remote_pd9_zero_pending = False
+            self.remote_pd9_oscillation_pending = False
         button = self.remote_action_buttons.get(action)
         if button is not None:
             button.configure(text="执行")
 
-    def _cancel_remote_pd13_reset(self) -> None:
-        after_id = self.remote_pd13_reset_after_id
+    def _cancel_remote_pd9_gate_oscillation(self) -> None:
+        after_id = self.remote_pd9_gate_after_id
         if after_id is None:
             return
         try:
             self.root.after_cancel(after_id)
         except tk.TclError:
             pass
-        self.remote_pd13_reset_after_id = None
+        self.remote_pd9_gate_after_id = None
 
-    def _cancel_remote_pd8_first(self) -> None:
-        after_id = self.remote_pd8_first_after_id
-        if after_id is None:
-            return
-        try:
-            self.root.after_cancel(after_id)
-        except tk.TclError:
-            pass
-        self.remote_pd8_first_after_id = None
-
-    def _cancel_remote_delayed_actions(self) -> None:
-        self._cancel_remote_pd13_reset()
-        self._cancel_remote_pd8_first()
-
-    def _complete_remote_pd13_reset(self, values: tuple[float, ...]) -> None:
-        self.remote_pd13_reset_after_id = None
-        enable_mask = ENABLE_J4310_ONLY
-        if not self._send_position_values(
-            "机械臂", values, True, enable_mask=enable_mask
+    def _cancel_remote_arm_delays(self) -> None:
+        for attribute in (
+            "remote_pd11_first_after_id",
+            "remote_pd8_first_after_id",
         ):
-            self.status_var.set("存块复位：J4310 目标未发送")
-            self.log("存块复位：J4310 延时目标发送失败")
+            after_id = getattr(self, attribute)
+            if after_id is None:
+                continue
+            try:
+                self.root.after_cancel(after_id)
+            except tk.TclError:
+                pass
+            setattr(self, attribute, None)
+
+    def _complete_remote_arm_j4310_delay(
+        self, action: str, values: tuple[float, ...]
+    ) -> None:
+        if action == "收块":
+            self.remote_pd11_first_after_id = None
+        else:
+            self.remote_pd8_first_after_id = None
+        if not self._send_position_values(
+            "机械臂", values, True, enable_mask=ENABLE_J4310_ONLY
+        ):
+            self.status_var.set(f"{action} 第一次动作：J4310 目标发送失败")
+            self.log(f"{action} 第一次动作：延时 J4310 目标发送失败")
             return
         self._sent_arm_values = values
-        self._active_arm_mask = enable_mask
-        self.status_var.set("存块复位：J4310 目标已发送")
-        self.log("存块复位：M3508 回位 1 秒后，J4310 目标已发送")
+        self._active_arm_mask = ENABLE_J4310_ONLY
+        self.status_var.set(f"{action} 第一次动作已完成")
+        self.log(f"{action} 第一次动作：M3508 动作 0.5 秒后，J4310 目标已发送")
 
-    def _complete_remote_pd8_first(self, values: tuple[float, ...]) -> None:
-        self.remote_pd8_first_after_id = None
-        enable_mask = ENABLE_J4310_ONLY
+    def _run_remote_pd9_gate_step(self, high: bool) -> None:
+        self.remote_pd9_gate_after_id = None
+        params = self.remote_action_angles["闸门"]
+        values = list(self._values())
+        field = "oscillation_high" if high else "oscillation_low"
+        values[6] = self._read_numeric(params[field])
         if not self._send_position_values(
-            "机械臂", values, True, enable_mask=enable_mask
+            "闸门", tuple(values), True, enable_mask=ENABLE_CONVEYOR
         ):
-            self.status_var.set("翻转块第一段：J4310 目标未发送")
-            self.log("翻转块第一段：J4310 延时目标发送失败")
+            self.status_var.set("PD9 闸门往复已停止：目标发送失败")
+            self.log("PD8 第二次动作后的 PD9 闸门往复目标发送失败")
             return
-        self._sent_arm_values = values
-        self._active_arm_mask = enable_mask
-        self.status_var.set("翻转块第一段：J4310 目标已发送")
-        self.log("翻转块第一段：M3508 动作 1 秒后，J4310 目标已发送")
+        self.remote_action_states["闸门"] = int(high)
+        self.status_var.set(f"PD9 闸门往复：{values[6]:g} deg")
+        self.remote_pd9_gate_after_id = self.root.after(
+            REMOTE_PD9_GATE_HALF_PERIOD_MS,
+            self._run_remote_pd9_gate_step,
+            not high,
+        )
 
     def _reset_remote_sequences_for(self, action: str) -> None:
-        arm_actions = ("存块", "取地面一层块", "取台阶二层块")
-        if action == "翻转块":
-            for name in arm_actions:
+        arm_actions = ("取地面块", "取台阶块", "收块", "翻转/存块")
+        two_stage_actions = ("取地面块", "取台阶块", "翻转/存块")
+        if action not in arm_actions:
+            return
+        for name in two_stage_actions:
+            if name != action:
                 self._reset_remote_action_state(name)
-        elif action in arm_actions:
-            for name in arm_actions:
-                if name != action:
-                    self._reset_remote_action_state(name)
-            self._reset_remote_action_state("翻转块")
 
     def execute_remote_action(self, action: str) -> bool:
-        arm_actions = ("存块", "取地面一层块", "取台阶二层块", "翻转块")
+        arm_actions = ("取地面块", "取台阶块", "收块", "翻转/存块")
+        two_stage_actions = ("取地面块", "取台阶块", "翻转/存块")
         if action in arm_actions:
-            self._cancel_remote_delayed_actions()
+            self._cancel_remote_arm_delays()
+        if action in arm_actions or action == "闸门":
+            self._cancel_remote_pd9_gate_oscillation()
         values = list(self._values())
         params = self.remote_action_angles[action]
-        delayed_pd13_values: tuple[float, ...] | None = None
-        delayed_pd8_values: tuple[float, ...] | None = None
-        if action == "翻转块":
-            stage = int(self.remote_action_states.get(action, 0)) % 3
-            m3508_name = ("m3508", "m3508_second", "m3508_third")[stage]
-            j4310_name = ("j4310", "j4310_second", "j4310_third")[stage]
-            if stage == 0:
-                values = list(self._sent_arm_values)
-                delayed_pd8_values = list(values)
-                delayed_pd8_values[0] = self._read_numeric(params[j4310_name])
-            values[0] = self._read_numeric(params[j4310_name])
-            values[4] = self._read_numeric(params[m3508_name])
-            values[5] = self._read_numeric(params[m3508_name])
-            if delayed_pd8_values is not None:
-                values[0] = self._sent_arm_values[0]
-                delayed_pd8_values[4] = values[4]
-                delayed_pd8_values[5] = values[5]
-                delayed_pd8_values = tuple(delayed_pd8_values)
-            page = "机械臂"
-            mask = (
-                ENABLE_M3508_ONLY
-                if delayed_pd8_values is not None
-                else ENABLE_J4310_ONLY | ENABLE_M3508_ONLY
-            )
-            next_state = (stage + 1) % 3
-            state_text = f"第{stage + 1}段"
-        elif action in ("存块", "取台阶二层块", "取地面一层块"):
+        updates_arm_snapshot = False
+        start_pd9_gate_oscillation = False
+        delayed_arm_action: str | None = None
+        delayed_arm_values: tuple[float, ...] | None = None
+        pd9_zero_action = False
+        pd9_oscillation_action = False
+        if action in two_stage_actions:
             active = bool(self.remote_action_states.get(action, False))
-            m3508_name = "m3508" if not active else "m3508_return"
-            j4310_name = "j4310" if not active else "j4310_return"
-            if action == "存块" and active:
+            m3508_name = "m3508_second" if active else "m3508"
+            j4310_name = "j4310_second" if active else "j4310"
+            m3508_value = self._read_numeric(params[m3508_name])
+            j4310_value = self._read_numeric(params[j4310_name])
+            if action == "翻转/存块" and not active:
                 values = list(self._sent_arm_values)
-                delayed_pd13_values = list(values)
-                delayed_pd13_values[0] = self._read_numeric(
-                    params["j4310_return"]
-                )
-            values[0] = self._read_numeric(params[j4310_name])
-            values[4] = self._read_numeric(params[m3508_name])
-            values[5] = self._read_numeric(params[m3508_name])
-            if delayed_pd13_values is not None:
-                values[0] = self._sent_arm_values[0]
-                delayed_pd13_values[4] = values[4]
-                delayed_pd13_values[5] = values[5]
-                delayed_pd13_values = tuple(delayed_pd13_values)
+                values[4] = m3508_value
+                values[5] = m3508_value
+                delayed_values = list(values)
+                delayed_values[0] = j4310_value
+                delayed_arm_action = action
+                delayed_arm_values = tuple(delayed_values)
+                mask = ENABLE_M3508_ONLY
+            else:
+                values[0] = j4310_value
+                values[4] = m3508_value
+                values[5] = m3508_value
+                mask = ENABLE_J4310_ONLY | ENABLE_M3508_ONLY
             page = "机械臂"
-            mask = (
-                ENABLE_M3508_ONLY
-                if delayed_pd13_values is not None
-                else ENABLE_J4310_ONLY | ENABLE_M3508_ONLY
-            )
             next_state = int(not active)
-            state_text = "第二段" if not active else "复位段"
-        elif action == "开关门":
+            state_text = "第二次动作" if active else "第一次动作"
+            updates_arm_snapshot = True
+        elif action == "收块":
+            values = list(self._sent_arm_values)
+            m3508_value = self._read_numeric(params["m3508"])
+            values[4] = m3508_value
+            values[5] = m3508_value
+            delayed_values = list(values)
+            delayed_values[0] = self._read_numeric(params["j4310"])
+            delayed_arm_action = action
+            delayed_arm_values = tuple(delayed_values)
+            page = "机械臂"
+            mask = ENABLE_M3508_ONLY
+            next_state = 0
+            state_text = "收块"
+            updates_arm_snapshot = True
+        elif action == "闸门":
             active = bool(self.remote_action_states.get(action, False))
-            values[6] = self._read_numeric(params["angle_on" if not active else "angle_off"])
-            page = "开关门"
+            pd9_zero_action = self.remote_pd9_zero_pending
+            pd9_oscillation_action = self.remote_pd9_oscillation_pending
+            values[6] = (
+                REMOTE_PD9_ZERO_GATE_DEG
+                if pd9_zero_action
+                else self._read_numeric(params[
+                    "oscillation_high"
+                    if pd9_oscillation_action
+                    else ("angle_on" if not active else "angle_off")
+                ])
+            )
+            page = "闸门"
             mask = ENABLE_CONVEYOR
-            next_state = int(not active)
-            state_text = "第二段" if not active else "复位段"
+            next_state = (
+                0 if pd9_zero_action
+                else (1 if pd9_oscillation_action else int(not active))
+            )
+            state_text = (
+                "PD8 第一次动作后的回零"
+                if pd9_zero_action
+                else (
+                    "PD8 第二次动作后的 130/55 往复"
+                    if pd9_oscillation_action
+                    else ("第二段" if not active else "复位段")
+                )
+            )
+            start_pd9_gate_oscillation = pd9_oscillation_action
         else:
             active = bool(self.remote_action_states.get(action, False))
             values[7] = self._read_numeric(params["angle_on" if not active else "angle_off"])
@@ -933,33 +963,55 @@ class UpperConsole:
             return False
         self._reset_remote_sequences_for(action)
         self.remote_action_states[action] = next_state
-        if action in arm_actions:
+        if action == "翻转/存块":
+            self.remote_pd9_zero_pending = not active
+            self.remote_pd9_oscillation_pending = active
+            if active:
+                self._reset_remote_action_state("闸门")
+        elif action == "闸门" and pd9_zero_action:
+            self.remote_pd9_zero_pending = False
+            self.remote_pd9_oscillation_pending = False
+        elif action == "闸门" and pd9_oscillation_action:
+            self.remote_pd9_oscillation_pending = False
+        elif action not in ("翻转/存块", "闸门"):
+            self.remote_pd9_zero_pending = False
+            self.remote_pd9_oscillation_pending = False
+        if updates_arm_snapshot:
             sent_values = tuple(values)
             self._sent_arm_values = sent_values
             self._active_arm_mask = mask
         button = self.remote_action_buttons.get(action)
         if button is not None:
-            if action == "翻转块":
-                button_text = ("执行", "第二次动作", "第三次动作")[next_state]
+            if action in two_stage_actions:
+                button_text = "第二次动作" if next_state else "执行"
+            elif action == "收块":
+                button_text = "执行"
             else:
                 button_text = "复位/第二次动作" if next_state else "执行"
             button.configure(text=button_text)
-        if delayed_pd8_values is not None:
-            self.remote_pd8_first_after_id = self.root.after(
-                REMOTE_PD8_FIRST_DELAY_MS,
-                self._complete_remote_pd8_first,
-                delayed_pd8_values,
+        if start_pd9_gate_oscillation:
+            self.remote_pd9_gate_after_id = self.root.after(
+                REMOTE_PD9_GATE_HALF_PERIOD_MS,
+                self._run_remote_pd9_gate_step,
+                False,
             )
-            self.status_var.set("翻转块第一段：M3508 已发送，1 秒后进行 J4310 动作")
-            self.log("翻转块第一段：先发送 M3508，1 秒后仅发送 J4310")
-        elif delayed_pd13_values is not None:
-            self.remote_pd13_reset_after_id = self.root.after(
-                REMOTE_PD13_RESET_DELAY_MS,
-                self._complete_remote_pd13_reset,
-                delayed_pd13_values,
+        if delayed_arm_action is not None and delayed_arm_values is not None:
+            after_id = self.root.after(
+                REMOTE_PD11_FIRST_DELAY_MS
+                if delayed_arm_action == "收块"
+                else REMOTE_PD8_FIRST_DELAY_MS,
+                self._complete_remote_arm_j4310_delay,
+                delayed_arm_action,
+                delayed_arm_values,
             )
-            self.status_var.set("存块复位：M3508 已发送，1 秒后进行 J4310 动作")
-            self.log("存块复位：先发送 M3508 回位，1 秒后仅发送 J4310 复位")
+            if delayed_arm_action == "收块":
+                self.remote_pd11_first_after_id = after_id
+            else:
+                self.remote_pd8_first_after_id = after_id
+            self.status_var.set(
+                f"{action} 第一次动作：M3508 已发送，0.5 秒后进行 J4310 动作"
+            )
+            self.log(f"{action} 第一次动作：先发送 M3508，0.5 秒后发送 J4310")
         else:
             self.status_var.set(f"{action} 已执行")
             self.log(f"遥控动作 {action} 已执行，状态={state_text}")
@@ -968,7 +1020,8 @@ class UpperConsole:
     def return_all_motors_to_zero(self) -> bool:
         """Send one absolute-position snapshot that holds every motor at zero."""
 
-        self._cancel_remote_delayed_actions()
+        self._cancel_remote_arm_delays()
+        self._cancel_remote_pd9_gate_oscillation()
         values = (
             0.0,
             0.0,
@@ -1015,6 +1068,8 @@ class UpperConsole:
         ):
             variable.set(True)
         self.remote_action_states.clear()
+        self.remote_pd9_zero_pending = False
+        self.remote_pd9_oscillation_pending = False
         for button in self.remote_action_buttons.values():
             button.configure(text="执行")
         self.status_var.set("全部电机归零目标已发送")
@@ -1574,22 +1629,27 @@ class UpperConsole:
         remote_actions = data.get("remote_actions")
         if isinstance(remote_actions, dict):
             remote_actions_version = data.get("remote_actions_version", 1)
-            legacy_names = {
-                "取地面一层块": "取台阶二层块",
-                "取台阶二层块": "取地面一层块",
-            }
             for action, variables in self.remote_action_angles.items():
-                stored_action = action
                 if remote_actions_version != REMOTE_ACTION_PARAMETER_VERSION:
-                    stored_action = legacy_names.get(action, action)
-                section = remote_actions.get(stored_action)
+                    if action == "闸门":
+                        continue
+                    if (not isinstance(remote_actions_version, int) or
+                            remote_actions_version < 4) and action != "夹爪":
+                        continue
+                section = remote_actions.get(action)
+                if (action == "闸门" and
+                        remote_actions_version == REMOTE_ACTION_PARAMETER_VERSION and
+                        not isinstance(section, dict)):
+                    section = remote_actions.get(LEGACY_GATE_ACTION_KEY)
+                if action == "收块" and not isinstance(section, dict):
+                    section = remote_actions.get("保留块")
                 if not isinstance(section, dict):
                     continue
                 for name, variable in variables.items():
                     if name.startswith("j4310"):
                         lower, upper = J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG
                     elif name.startswith("m3508"):
-                        lower, upper = -1000.0, 1000.0
+                        lower, upper = POSITION_MIN_DEG, POSITION_MAX_DEG
                     else:
                         lower, upper = M2006_POSITION_MIN_DEG, M2006_POSITION_MAX_DEG
                     self._restore_number(section, name, variable, lower, upper)
@@ -1650,7 +1710,7 @@ class UpperConsole:
             json.dump(self._saved_motor_parameters, stream, indent=2, ensure_ascii=False)
 
     def save_motor_parameters(self, target: str) -> bool:
-        page = "机械臂" if target in ("j4310", "m3508") else ("开关门" if target == "conveyor" else "夹爪")
+        page = "机械臂" if target in ("j4310", "m3508") else ("闸门" if target == "conveyor" else "夹爪")
         values = self._values()
         options: dict[str, object] = {"pid_values": self._pid_values(page)}
         if target == "j4310":
@@ -1948,16 +2008,19 @@ class UpperConsole:
         names = {
             (1, 2, 1): "M3508 #1",
             (1, 2, 2): "M3508 #2",
-            (2, 3, 1): "开关门 M2006",
+            (2, 3, 1): "闸门 M2006",
             (2, 3, 2): "夹爪 M2006",
         }
         for key, variable in self.dji_diagnostic_vars.items():
             variable.set(format_dji_feedback(names[key], "--", status))
 
     def _reset_connection_state(self) -> None:
-        self._cancel_remote_delayed_actions()
+        self._cancel_remote_arm_delays()
+        self._cancel_remote_pd9_gate_oscillation()
         self._active_arm_mask = 0
         self.remote_action_states.clear()
+        self.remote_pd9_zero_pending = False
+        self.remote_pd9_oscillation_pending = False
         for button in getattr(self, "remote_action_buttons", {}).values():
             button.configure(text="执行")
         self.connection_requested = False
@@ -2029,7 +2092,10 @@ class UpperConsole:
         return "break"
 
     def estop(self) -> None:
-        self._cancel_remote_delayed_actions()
+        self._cancel_remote_arm_delays()
+        self._cancel_remote_pd9_gate_oscillation()
+        self.remote_pd9_zero_pending = False
+        self.remote_pd9_oscillation_pending = False
         self._disable_all_outputs()
         self._send_estop_frame()
         self.status_var.set("已发送急停")
@@ -2064,7 +2130,7 @@ class UpperConsole:
             if self.m3508_enable.get():
                 mask |= ENABLE_M3508_ONLY
             return mask
-        if page == "开关门":
+        if page == "闸门":
             return ENABLE_CONVEYOR if self.conveyor_enable.get() else 0
         if page == "夹爪":
             return ENABLE_GRIPPER if self.gripper_enable.get() else 0
@@ -2185,7 +2251,7 @@ class UpperConsole:
 
     def _pid_values(self, page: str | None = None) -> tuple[float, ...]:
         m2006_key = {
-            "开关门": "conveyor",
+            "闸门": "conveyor",
             "夹爪": "gripper",
         }.get(page, "conveyor")
         groups = (
@@ -2307,7 +2373,17 @@ class UpperConsole:
 
         if enable_mask & ENABLE_M3508_ONLY:
             for index, (value, target_range) in enumerate(
-                zip(values[4:6], M3508_TARGET_RANGES_DEG), start=1
+                zip(
+                    values[4:6],
+                    (
+                        (M3508_SYNC_POSITION_MIN_DEG,
+                         M3508_SYNC_POSITION_MAX_DEG),
+                        (M3508_SYNC_POSITION_MIN_DEG,
+                         M3508_SYNC_POSITION_MAX_DEG),
+                    ),
+                    strict=True,
+                ),
+                start=1,
             ):
                 error = self._parameter_error(
                     f"M3508 #{index} 目标位置",
@@ -2321,8 +2397,8 @@ class UpperConsole:
                 self._pid_parameter_errors(pid_values, 0, "M3508 / C620")
             )
 
-        if page in ("开关门", "夹爪"):
-            value_index = 6 if page == "开关门" else 7
+        if page in ("闸门", "夹爪"):
+            value_index = 6 if page == "闸门" else 7
             error = self._parameter_error(
                 f"{page} M2006 目标位置",
                 values[value_index],
@@ -2404,7 +2480,7 @@ class UpperConsole:
         return encode_frame(MSG_UPPER_POSITION_CMD, self._next_sequence(), payload)
 
     def send_page_now(self, page: str) -> bool:
-        if page == "开关门":
+        if page == "闸门":
             self.conveyor_enable.set(True)
         elif page == "夹爪":
             self.gripper_enable.set(True)
@@ -2444,7 +2520,7 @@ class UpperConsole:
         return {
             "j4310": "J4310",
             "m3508": "M3508",
-            "conveyor": "开关门 M2006",
+            "conveyor": "闸门 M2006",
             "gripper": "夹爪 M2006",
         }[target]
 
@@ -2500,7 +2576,7 @@ class UpperConsole:
                 self._sent_pid_values = tuple(pid_values)
             return sent
 
-        page = "开关门" if target == "conveyor" else "夹爪"
+        page = "闸门" if target == "conveyor" else "夹爪"
         return self._send_position_values(page, self._values(), True)
 
     def _stop_slider_target(self, target: str) -> None:
@@ -2524,7 +2600,7 @@ class UpperConsole:
             return
 
         page, enable_var = {
-            "conveyor": ("开关门", self.conveyor_enable),
+            "conveyor": ("闸门", self.conveyor_enable),
             "gripper": ("夹爪", self.gripper_enable),
         }[target]
         enable_var.set(False)
@@ -2654,7 +2730,7 @@ class UpperConsole:
         if page == "机械臂":
             self.arm_enable.set(False)
             self.m3508_enable.set(False)
-        elif page == "开关门":
+        elif page == "闸门":
             self.conveyor_enable.set(False)
         elif page == "夹爪":
             self.gripper_enable.set(False)
@@ -2747,7 +2823,7 @@ class UpperConsole:
         names = {
             (1, 2, 1): "M3508 #1",
             (1, 2, 2): "M3508 #2",
-            (2, 3, 1): "开关门 M2006",
+            (2, 3, 1): "闸门 M2006",
             (2, 3, 2): "夹爪 M2006",
         }
         received_keys = set()

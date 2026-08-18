@@ -1,3 +1,8 @@
+/**
+ * @file pc_protocol.c
+ * @brief 实现 PC 链路帧的编解码、流式解析和 CRC 校验。
+ */
+
 #include "pc_protocol.h"
 
 #include <string.h>

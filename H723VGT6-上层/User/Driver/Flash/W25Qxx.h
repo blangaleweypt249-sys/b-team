@@ -152,10 +152,10 @@ w25q_status_t W25Q_PortInit(void);
 w25q_handle_t *W25Q_PortGetDevice(void);
 
 /**
- * @brief Get the result from the latest W25Q_PortInit call.
- * @retval W25Q_ERROR_NOT_INIT before port initialization, otherwise the
- *         exact initialization result.
+ * @brief 获取最近一次 W25Q_PortInit 调用的结果。
+ * @retval W25Q_ERROR_NOT_INIT 表示端口尚未初始化，否则返回确切的初始化结果。
  */
+/* 功能：读取 W25Q 板级端口初始化状态；用途：向上层报告 Flash 初始化结果；返回值表示当前初始化状态。 */
 w25q_status_t W25Q_PortGetInitStatus(void);
 
 /**

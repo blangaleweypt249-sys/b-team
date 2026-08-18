@@ -1,3 +1,8 @@
+/**
+ * @file test_motor_manager_override.c
+ * @brief 验证电机管理器覆盖命令的设置与清除。
+ */
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -7,6 +12,7 @@
 static motor_cmd_t test_last_command;
 static size_t test_send_count;
 
+/* 功能：提供测试用 CAN 发送桩并记录输出帧；用途：隔离真实硬件发送接口；返回 true 表示桩接受该帧。 */
 static bool Test_Send(const motor_cfg_t *cfg,
                       const motor_cmd_t *cmd,
                       void *user_data)
@@ -18,6 +24,7 @@ static bool Test_Send(const motor_cfg_t *cfg,
     return true;
 }
 
+/* 功能：运行本文件的电机管理器覆盖命令的设置与清除测试；用途：集中执行断言用例；返回 0 表示全部测试通过。 */
 int main(void)
 {
     const motor_cfg_t cfg = {

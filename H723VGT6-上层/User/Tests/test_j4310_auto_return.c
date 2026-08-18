@@ -1,9 +1,15 @@
+/**
+ * @file test_j4310_auto_return.c
+ * @brief 验证 J4310 重连自动回零状态机和轨迹行为。
+ */
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "j4310_auto_return.h"
 
+/* 功能：判断两个浮点数是否在给定误差内接近；用途：辅助验证数值控制结果；返回 true 表示比较通过。 */
 static bool Test_Close(float actual, float expected, float tolerance)
 {
     float error = actual - expected;
@@ -11,25 +17,26 @@ static bool Test_Close(float actual, float expected, float tolerance)
     return (error >= -tolerance) && (error <= tolerance);
 }
 
+/* 功能：运行本文件的 J4310 重连自动回零状态机和轨迹行为测试；用途：集中执行断言用例；返回 0 表示全部测试通过。 */
 int main(void)
 {
     j4310_auto_return_t control;
     float positive_midpoint;
 
-    /* MCU boot: first feedback establishes an online baseline only. */
+    /* MCU 启动时，第一帧反馈只用于建立在线基线。 */
     J4310AutoReturn_Init(&control, false);
     J4310AutoReturn_Update(&control, 10U, true, 1.0f, 0.0f, true);
     assert(control.seen_online);
     assert(!control.owns_control);
     assert(control.stage == J4310_AUTO_RETURN_DISABLED);
 
-    /* Enabling while online does not move the motor. */
+    /* 电机在线时执行使能不会移动电机。 */
     J4310AutoReturn_Configure(&control, true, true);
     assert(!control.reconnect_armed);
     J4310AutoReturn_Update(&control, 20U, true, 2.0f, 0.0f, true);
     assert(!control.owns_control);
 
-    /* Only a motor feedback loss and reconnect starts the return. */
+    /* 只有电机反馈丢失后重新连接，才会启动回零。 */
     J4310AutoReturn_Update(&control, 30U, false, 0.0f, 0.0f, true);
     assert(control.reconnect_armed);
     J4310AutoReturn_Update(&control, 40U, true, 2.0f, 0.0f, true);
@@ -81,8 +88,7 @@ int main(void)
     assert(!control.owns_control);
     assert(control.stage == J4310_AUTO_RETURN_ARMED);
 
-    /* Emergency-stop state must not arm or start a return when only the
-       motor is power-cycled. */
+    /* 仅电机重新上电时，急停状态不得准备或启动回零。 */
     J4310AutoReturn_Cancel(&control);
     J4310AutoReturn_Update(&control, 6040U, false, 0.0f, 0.0f, false);
     assert(!control.reconnect_armed);
@@ -93,23 +99,20 @@ int main(void)
     assert(!control.enabled);
     assert(control.stage == J4310_AUTO_RETURN_DISABLED);
 
-    /* A new MCU session defaults off and never treats first feedback as a
-       motor-only restart, even if the shaft is away from zero. */
+    /* 新的 MCU 会话默认关闭；即使轴偏离零点，也不能把第一帧反馈视为仅电机重启。 */
     J4310AutoReturn_Init(&control, false);
     assert(!control.enabled);
     J4310AutoReturn_Update(&control, 7000U, true, 2.5f, 0.0f, true);
     assert(!control.owns_control);
     assert(!control.reconnect_armed);
 
-    /* Enabling before the MCU has ever seen this motor also cannot make the
-       first connection look like a reconnect. */
+    /* MCU 从未见过该电机时提前使能，也不能把首次连接误认为重新连接。 */
     J4310AutoReturn_Init(&control, true);
     assert(!control.reconnect_armed);
     J4310AutoReturn_Update(&control, 8000U, true, -2.5f, 0.0f, true);
     assert(!control.owns_control);
 
-    /* If the motor was seen before it disappeared, enabling while it is
-       offline may arm the next genuine reconnect. */
+    /* 如果电机在消失前曾被检测到，离线期间使能可以准备下一次真实重连。 */
     J4310AutoReturn_Init(&control, false);
     J4310AutoReturn_Update(&control, 9000U, true, 0.5f, 0.0f, true);
     J4310AutoReturn_Update(&control, 9010U, false, 0.0f, 0.0f, true);

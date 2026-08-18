@@ -1,3 +1,8 @@
+/**
+ * @file m3508.c
+ * @brief 实现 DJI M3508 电机反馈解析、闭环控制和参数整定。
+ */
+
 #include "m3508.h"
 
 #include <float.h>

@@ -1,14 +1,17 @@
+/**
+ * @file upper_motor_port.c
+ * @brief 实现上层电机管理器到各型号驱动和 CAN 总线的适配。
+ */
+
 #include "upper_motor_port.h"
 
 #include <string.h>
 
 #include "bsp_can.h"
-#include "can_id.h"
 #include "DJI/dji_group.h"
 #include "DM J4310/j4310.h"
 #include "M2006/m2006.h"
 #include "M3508/m3508.h"
-#include "upper_config.h"
 
 #define UPPER_MOTOR_PORT_MAX_NODE_ID  255U
 #define UPPER_CAN_BUS_COUNT            3U
@@ -19,6 +22,51 @@
 #define UPPER_J4310_TWO_PI            6.28318530718f
 #define UPPER_J4310_STATE_ENABLED     0x01U
 #define UPPER_J4310_ENABLE_RETRY_MS   20U
+
+#define UPPER_CONTROL_PERIOD_MS                 1U
+#define UPPER_CONTROL_WATCHDOGS_ENABLED         0U
+#define UPPER_PC_TIMEOUT_MS                   200U
+#define UPPER_MOTOR_FEEDBACK_TIMEOUT_MS        50U
+
+/* MIT 映射限值必须与 J4310 中保存的数值一致。 */
+#define UPPER_J4310_POSITION_MAX_RAD           12.5f
+#define UPPER_J4310_VELOCITY_MAX_RAD_S         30.0f
+#define UPPER_J4310_TORQUE_MAP_MAX_NM          10.0f
+#define UPPER_J4310_DIRECTION_SIGN             (-1.0f)
+
+/* 电机端口负责协议方向、驱动限幅和默认闭环参数。 */
+#define UPPER_M3508_1_DIRECTION_SIGN            (1.0f)
+#define UPPER_M3508_2_DIRECTION_SIGN           (-1.0f)
+#define UPPER_M3508_CURRENT_LIMIT_A              3.0f
+#define UPPER_M3508_POSITION_VEL_LIMIT_RAD_S    15.708f
+#define UPPER_M3508_POSITION_PID_OUTPUT_LIMIT_RAD_S \
+    UPPER_M3508_POSITION_VEL_LIMIT_RAD_S
+#define UPPER_M3508_ACCEL_LIMIT_RAD_S2          62.832f
+#define UPPER_M3508_SPEED_KP                     1.3988f
+#define UPPER_M3508_SPEED_KI                     0.9325f
+#define UPPER_M3508_SPEED_KD                     0.0f
+#define UPPER_M3508_SPEED_I_LIMIT                6.0f
+#define UPPER_M3508_POSITION_KP                 10.4720f
+#define UPPER_M3508_POSITION_KI                  0.0f
+#define UPPER_M3508_POSITION_KD                  0.0f
+#define UPPER_M3508_POSITION_I_LIMIT             0.0f
+
+#define UPPER_M2006_CURRENT_LIMIT_A             10.0f
+#define UPPER_M2006_POSITION_CUTOFF_RAD          6.45771823238f
+#define UPPER_GRIPPER_M2006_POSITION_CUTOFF_RAD 12.74090353956f
+#define UPPER_M2006_POSITION_VEL_LIMIT_RAD_S     5.235987756f
+#define UPPER_M2006_POSITION_PID_OUTPUT_LIMIT_RAD_S \
+    UPPER_M2006_POSITION_VEL_LIMIT_RAD_S
+#define UPPER_M2006_ACCEL_LIMIT_RAD_S2          62.832f
+#define UPPER_M2006_SPEED_KP                     3.342253805f
+#define UPPER_M2006_SPEED_KI                     2.387324146f
+#define UPPER_M2006_SPEED_KD                     0.0f
+#define UPPER_M2006_SPEED_I_LIMIT                0.052359878f
+#define UPPER_M2006_POSITION_KP                 94.247779608f
+#define UPPER_M2006_POSITION_KI                 52.359877560f
+#define UPPER_M2006_POSITION_KD                  0.523598776f
+#define UPPER_M2006_POSITION_I_LIMIT             0.002f
+#define UPPER_GATE_M2006_DIRECTION_SIGN         (-1.0f)
 
 typedef enum
 {
@@ -62,6 +110,7 @@ static bool UpperMotorPort_IsDjiModel(motor_model_t model)
            (model == MOTOR_MODEL_M2006);
 }
 
+/* 功能：读取指定电机在机械安装中的方向符号；用途：统一逻辑目标与物理转向；返回值表示目标乘数。 */
 static float UpperMotorPort_DirectionSign(const motor_cfg_t *cfg)
 {
     if ((cfg != NULL) && (cfg->model == MOTOR_MODEL_M3508) &&
@@ -85,6 +134,7 @@ static float UpperMotorPort_DirectionSign(const motor_cfg_t *cfg)
     return 1.0f;
 }
 
+/* 功能：选择指定 M2006 电机的位置安全阈值；用途：为夹爪和通用机构应用不同限位；返回值表示位置截止值。 */
 static float UpperMotorPort_M2006PositionCutoff(const motor_cfg_t *cfg)
 {
     if ((cfg != NULL) && (cfg->model == MOTOR_MODEL_M2006) &&
@@ -96,6 +146,7 @@ static float UpperMotorPort_M2006PositionCutoff(const motor_cfg_t *cfg)
     return UPPER_M2006_POSITION_CUTOFF_RAD;
 }
 
+/* 功能：将 J4310 相邻位置差归一化到半圈范围；用途：处理单圈编码器跨零点变化；返回值表示最短角度增量。 */
 static float UpperMotorPort_WrapJ4310Delta(float delta_rad)
 {
     while (delta_rad > UPPER_J4310_PI)
@@ -109,8 +160,9 @@ static float UpperMotorPort_WrapJ4310Delta(float delta_rad)
     return delta_rad;
 }
 
-/* Preserve the logical joint angle across single-turn encoder branch changes.
-   This is valid while motion between two received samples is below half a turn. */
+/* 在单圈编码器分支变化时保持逻辑关节角连续。
+   只要两次接收采样之间的运动小于半圈，该处理就是有效的。 */
+/* 功能：根据最新单圈反馈更新 J4310 连续位置；用途：跨越编码器分支时保持逻辑关节角连续；无返回值表示位置状态已更新。 */
 static void UpperMotorPort_UpdateJ4310Position(uint8_t can_bus,
                                                 uint32_t tick_ms)
 {
@@ -154,6 +206,7 @@ static void UpperMotorPort_UpdateJ4310Position(uint8_t can_bus,
     }
 }
 
+/* 功能：清空指定 J4310 的连续位置跟踪状态；用途：电机掉电或重新置零后重新建立基准；无返回值表示跟踪状态已复位。 */
 static void UpperMotorPort_ResetJ4310Position(uint8_t node_id)
 {
     j4310_position_valid[node_id] = false;
@@ -389,8 +442,7 @@ static bool UpperMotorPort_FlushDjiGroup(uint8_t can_bus,
             continue;
         }
 
-        /* An inactive motor must occupy a literal zero-current slot even if
-         * its driver context still contains an older position command. */
+        /* 未激活的电机必须占用字面值为零电流的槽位，即使驱动上下文仍保留旧的位置命令。 */
         if (!upper_motor_active[motor_index] ||
             !upper_motor_scheduled[motor_index])
         {
@@ -796,7 +848,7 @@ bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
                              cfg[index].node_id & 0x0FU,
                              J4310_MODE_MIT,
                              &j4310_limits) ||
-             !J4310_SetOnlineMitEnabled(cfg[index].node_id, false)))
+             !J4310_SetOnlineMitEnabled(cfg[index].node_id, true)))
         {
             return false;
         }
@@ -874,8 +926,8 @@ bool UpperMotorPort_Init(const motor_cfg_t *cfg, size_t motor_count)
 /* 功能：开始新的电机发送周期并清空 DJI 分组暂存；用途：保证各槽位只包含本周期命令；无返回值表示周期状态已复位。 */
 void UpperMotorPort_BeginCycle(uint32_t tick_ms)
 {
-    /* Startup and idle cycles are read-only. Only an explicit command passed
-     * to UpperMotorPort_Send may schedule a motor CAN frame. */
+    /* 启动和空闲周期只读。只有传递给 UpperMotorPort_Send 的显式命令
+     * 才能安排电机 CAN 帧。 */
     upper_motor_tick_ms = tick_ms;
     (void)memset(upper_motor_scheduled, 0, sizeof(upper_motor_scheduled));
 }
@@ -948,7 +1000,7 @@ bool UpperMotorPort_Flush(void)
     return success;
 }
 
-/* 功能：按总线和标识符分发电机反馈帧；用途：更新 J4310、M3508、M2006 或 MG5010 驱动状态；无返回值表示已尝试路由。 */
+/* 功能：按总线和标识符分发电机反馈帧；用途：更新 J4310、M3508 或 M2006 驱动状态；无返回值表示已尝试路由。 */
 void UpperMotorPort_OnFrame(uint8_t can_bus,
                             const can_frame_t *frame,
                             uint32_t tick_ms)
@@ -1009,7 +1061,8 @@ void UpperMotorPort_OnFrame(uint8_t can_bus,
     }
 }
 
-/* Send only the J4310 protocol enable frame; no motion target is emitted. */
+/* 仅发送 J4310 协议使能帧，不发送运动目标。 */
+/* 功能：仅发送指定 J4310 的协议使能帧；用途：上电恢复时先使能电机而不下发运动目标；返回 true 表示使能帧发送成功。 */
 bool UpperMotorPort_EnableJ4310(uint8_t can_bus, uint8_t node_id)
 {
     can_frame_t frame;

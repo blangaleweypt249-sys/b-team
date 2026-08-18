@@ -1,3 +1,8 @@
+/**
+ * @file j4310.c
+ * @brief 实现达妙 J4310 电机命令编码、反馈解析和在线整定。
+ */
+
 #include "j4310.h"
 
 #include <float.h>
@@ -9,6 +14,10 @@
 #define J4310_FEEDBACK_ID_MAX 0x0FU
 #define J4310_KP_MAX          500.0f
 #define J4310_KD_MAX          5.0f
+#define J4310_ONLINE_MIT_KP_MAX 49.0f
+#define J4310_ONLINE_MIT_KD_MAX 0.95f
+#define J4310_ONLINE_MIT_NEAR_ERROR_RAD 0.01745329252f
+#define J4310_ONLINE_MIT_FAR_ERROR_RAD  0.17453292520f
 #define J4310_CMD_CLEAR_FAULT 0xFBU
 #define J4310_CMD_ENABLE      0xFCU
 #define J4310_CMD_DISABLE     0xFDU
@@ -21,7 +30,7 @@ typedef struct
     uint16_t master_id;
     uint8_t feedback_id;
     j4310_mode_t mode;
-    /* Protocol mappings stored in the motor, not editable safety limits. */
+    /* 协议映射值存储在电机中，不属于可编辑的安全限值。 */
     j4310_limits_t limits;
     float software_torque_limit_nm;
     motor_online_mit_t mit_tuner;
@@ -156,15 +165,11 @@ static bool J4310_ConfigureOnlineMit(j4310_context_t *context,
     motor_online_mit_cfg_t cfg;
 
     cfg.minimum_kp = 0.0f;
-    cfg.maximum_kp = J4310_KP_MAX;
+    cfg.maximum_kp = J4310_ONLINE_MIT_KP_MAX;
     cfg.minimum_kd = 0.0f;
-    cfg.maximum_kd = J4310_KD_MAX;
-    cfg.near_error = J4310_Clamp(context->limits.position_max_rad * 0.004f,
-                                 0.015f,
-                                 0.05f);
-    cfg.far_error = J4310_Clamp(context->limits.position_max_rad * 0.04f,
-                                0.25f,
-                                1.0f);
+    cfg.maximum_kd = J4310_ONLINE_MIT_KD_MAX;
+    cfg.near_error = J4310_ONLINE_MIT_NEAR_ERROR_RAD;
+    cfg.far_error = J4310_ONLINE_MIT_FAR_ERROR_RAD;
     if (cfg.far_error <= cfg.near_error)
     {
         cfg.far_error = cfg.near_error + 0.1f;

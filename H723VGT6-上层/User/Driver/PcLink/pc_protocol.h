@@ -1,3 +1,8 @@
+/**
+ * @file pc_protocol.h
+ * @brief 定义 PC 链路协议帧、解析器和编解码接口。
+ */
+
 #ifndef PC_PROTOCOL_H
 #define PC_PROTOCOL_H
 
@@ -20,7 +25,7 @@ typedef enum
     PC_MSG_HANDSHAKE = 0x03,
     PC_MSG_UPPER_CMD = 0x10,
     PC_MSG_LOWER_CMD = 0x11,
-    /* Position targets accept the legacy 34-byte and extended 122-byte layouts. */
+    /* 位置目标支持旧版 34 字节布局和扩展版 122 字节布局。 */
     PC_MSG_UPPER_POSITION_CMD = 0x12,
     PC_MSG_MOTOR_ACTION = 0x13,
     PC_MSG_FLASH_INFO_REQUEST = 0x14,
@@ -53,18 +58,22 @@ typedef struct
     uint32_t length_error_count;
 } pc_parser_t;
 
+/* 功能：清零并初始化流式协议解析器；用途：开始接收新会话；无返回值表示解析状态被复位。 */
 void PcProtocol_Init(pc_parser_t *parser);
+/* 功能：编码一帧完整的上位机协议数据；用途：生成同步头、帧头、载荷和 CRC；返回 0 表示参数或缓冲区无效。 */
 size_t PcProtocol_Encode(uint8_t type,
                          uint16_t sequence,
                          const uint8_t *payload,
                          uint16_t payload_len,
                          uint8_t *output,
                          size_t output_size);
+/* 功能：逐字节推进上位机协议解析；用途：从任意长度的数据块中识别完整帧；有效帧通过 handler 回调交付。 */
 void PcProtocol_Push(pc_parser_t *parser,
                      const uint8_t *data,
                      size_t size,
                      pc_frame_handler_t handler,
                      void *user_data);
+/* 功能：计算 Modbus 多项式形式的 CRC16；用途：校验上位机帧完整性；返回值表示校验码。 */
 uint16_t PcProtocol_Crc16(const uint8_t *data, size_t size);
 
 #ifdef __cplusplus

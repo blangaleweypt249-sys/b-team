@@ -27,8 +27,8 @@
 /* USER CODE BEGIN Includes */
 #include "comm_runtime.h"
 #include "freertos_app.h"
+#include "freertos_tasks.h"
 #include "upper_entry.h"
-#include "W25Qxx.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,14 +48,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-volatile uint32_t freertos_app_task_stack_free_bytes;
-volatile uint32_t freertos_comm_task_stack_free_bytes;
-volatile uint32_t freertos_monitor_task_stack_free_bytes;
-volatile uint32_t freertos_heap_free_bytes;
-volatile uint32_t freertos_heap_min_ever_free_bytes;
 volatile uint32_t freertos_malloc_failed_count;
 volatile const char *freertos_stack_overflow_task_name;
-volatile w25q_status_t w25q_init_status = W25Q_ERROR_NOT_INIT;
 /* USER CODE END Variables */
 /* Definitions for appTask */
 osThreadId_t appTaskHandle;
@@ -71,14 +65,6 @@ const osThreadAttr_t commRxTask_attributes = {
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityAboveNormal,
 };
-/* Definitions for monitorTask */
-osThreadId_t monitorTaskHandle;
-const osThreadAttr_t monitorTask_attributes = {
-  .name = "monitorTask",
-  .stack_size = 384 * 4,
-  .priority = (osPriority_t) osPriorityBelowNormal,
-};
-
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
@@ -86,7 +72,6 @@ const osThreadAttr_t monitorTask_attributes = {
 
 void StartAppTask(void *argument);
 void StartCommRxTask(void *argument);
-void StartMonitorTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -149,13 +134,9 @@ void MX_FREERTOS_Init(void) {
   /* creation of commRxTask */
   commRxTaskHandle = osThreadNew(StartCommRxTask, NULL, &commRxTask_attributes);
 
-  /* creation of monitorTask */
-  monitorTaskHandle = osThreadNew(StartMonitorTask, NULL, &monitorTask_attributes);
-
   /* USER CODE BEGIN RTOS_THREADS */
   if ((appTaskHandle == NULL) ||
-      (commRxTaskHandle == NULL) ||
-      (monitorTaskHandle == NULL))
+      (commRxTaskHandle == NULL))
   {
     Error_Handler();
   }
@@ -174,90 +155,17 @@ void MX_FREERTOS_Init(void) {
   * @retval None
   */
 /* USER CODE END Header_StartAppTask */
-void StartAppTask(void *argument)
+__weak void StartAppTask(void *argument)
 {
   /* USER CODE BEGIN StartAppTask */
-  uint32_t next_wake;
-  uint32_t period_10ms;
-
   (void)argument;
-  next_wake = osKernelGetTickCount();
-  period_10ms = 0U;
+
+  /* The strong implementation is provided by freertos_tasks.c. */
   for (;;)
   {
-    next_wake += 1U;
-    App_Control1ms();
-    period_10ms++;
-    if (period_10ms >= 10U)
-    {
-      period_10ms = 0U;
-      App_Periodic10ms();
-    }
-    (void)osDelayUntil(next_wake);
+    (void)osDelay(osWaitForever);
   }
   /* USER CODE END StartAppTask */
-}
-
-/* USER CODE BEGIN Header_StartCommRxTask */
-/**
-* @brief Function implementing the commRxTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartCommRxTask */
-void StartCommRxTask(void *argument)
-{
-  /* USER CODE BEGIN StartCommRxTask */
-  uint32_t flags;
-  HAL_StatusTypeDef comm_status;
-
-  (void)argument;
-  w25q_init_status = W25Q_PortInit();
-  comm_status = CommRuntime_Init(commRxTaskHandle);
-  if (comm_status != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  for (;;)
-  {
-    flags = osThreadFlagsWait(COMM_EVENT_ALL, osFlagsWaitAny, osWaitForever);
-    if ((flags & osFlagsError) == 0U)
-    {
-      CommRuntime_Process(flags);
-    }
-  }
-  /* USER CODE END StartCommRxTask */
-}
-
-/* USER CODE BEGIN Header_StartMonitorTask */
-/**
-* @brief Function implementing the monitorTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartMonitorTask */
-void StartMonitorTask(void *argument)
-{
-  /* USER CODE BEGIN StartMonitorTask */
-  uint32_t next_wake;
-
-  (void)argument;
-  next_wake = osKernelGetTickCount();
-  for (;;)
-  {
-    next_wake += 1000U;
-    freertos_app_task_stack_free_bytes =
-      uxTaskGetStackHighWaterMark((TaskHandle_t)appTaskHandle) * sizeof(StackType_t);
-    freertos_comm_task_stack_free_bytes =
-      uxTaskGetStackHighWaterMark((TaskHandle_t)commRxTaskHandle) * sizeof(StackType_t);
-    freertos_monitor_task_stack_free_bytes =
-      uxTaskGetStackHighWaterMark((TaskHandle_t)monitorTaskHandle) * sizeof(StackType_t);
-    freertos_heap_free_bytes = xPortGetFreeHeapSize();
-    freertos_heap_min_ever_free_bytes = xPortGetMinimumEverFreeHeapSize();
-    (void)osDelayUntil(next_wake);
-  }
-  /* USER CODE END StartMonitorTask */
 }
 
 /* Private application code --------------------------------------------------*/

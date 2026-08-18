@@ -1,16 +1,22 @@
+/**
+ * @file upper_entry.c
+ * @brief 实现上层应用入口，协调通信、遥控、电机和周期任务。
+ */
+
 #include "upper_entry.h"
 
 #include <string.h>
 
-#include "can_id.h"
+#include "arm.h"
+#include "bsp_can.h"
 #include "cmsis_os2.h"
 #include "comm_runtime.h"
 #include "j4310_auto_return.h"
 #include "j4310_position_control.h"
-#include "upper_config.h"
 #include "upper_motor_port.h"
 #include "upper_pc_link.h"
 #include "upper_remote_link.h"
+#include "upper_robot.h"
 #include "W25Qxx.h"
 
 #define UPPER_CMD_QUEUE_DEPTH  4U
@@ -18,8 +24,6 @@
 #define UPPER_DJI_TELEMETRY_PERIOD_MS 10U
 #define UPPER_TX_BUFFER_SIZE   160U
 #define UPPER_HANDSHAKE_ACK_GUARD_MS 20U
-#define UPPER_J4310_AUTO_RETURN_KP 5.0f
-#define UPPER_J4310_AUTO_RETURN_KD 0.5f
 #define UPPER_J4310_STARTUP_ENABLE_RETRY_MS 20U
 #define UPPER_REMOTE_KEY_PD13        (1U << 0U)
 #define UPPER_REMOTE_KEY_PD12        (1U << 1U)
@@ -34,6 +38,17 @@
 #define UPPER_AUX_SPI_TYPE_CONTROL     0x02U
 #define UPPER_AUX_SPI_PAYLOAD_SIZE     1U
 #define UPPER_AUX_SPI_REPEAT_PERIOD_MS 50U
+#define UPPER_CONTROL_PERIOD_MS          1U
+
+#define UPPER_J4310_TRAJECTORY_MAX_VEL_RAD_S       3.7f
+#define UPPER_J4310_TRAJECTORY_MAX_ACCEL_RAD_S2   15.0f
+#define UPPER_J4310_GRAVITY_MODEL_LIMIT_NM          8.0f
+#define UPPER_J4310_GRAVITY_LEARNING_RATE           0.01f
+#define UPPER_J4310_GRAVITY_COMPENSATION_GAIN       1.0f
+#define UPPER_J4310_GRAVITY_DISABLE_HALF_WIDTH_RAD  0.0872664626f
+#define UPPER_J4310_GRAVITY_SETTLE_ERROR_RAD         0.01745329252f
+#define UPPER_J4310_GRAVITY_SETTLE_FEEDBACK_COUNT  100U
+#define UPPER_J4310_GRAVITY_TORQUE_RATE_NM_S         3.0f
 
 #define UPPER_REMOTE_PD13_RESET_KEYS \
     (UPPER_REMOTE_KEY_PD12 | UPPER_REMOTE_KEY_PD11 | \
@@ -41,9 +56,43 @@
 #define UPPER_REMOTE_PD12_RESET_KEYS \
     (UPPER_REMOTE_KEY_PD13 | UPPER_REMOTE_KEY_PD11 | \
      UPPER_REMOTE_KEY_PD8)
-#define UPPER_REMOTE_PD11_RESET_KEYS \
+#define UPPER_REMOTE_PD8_RESET_KEYS \
     (UPPER_REMOTE_KEY_PD13 | UPPER_REMOTE_KEY_PD12 | \
-     UPPER_REMOTE_KEY_PD8)
+     UPPER_REMOTE_KEY_PD11)
+
+static const motor_cfg_t upper_motor_cfg[UPPER_MOTOR_COUNT] =
+{
+    [UPPER_MOTOR_ARM_M3508_1] =
+    {
+        "arm_m3508_1", MOTOR_MODEL_M3508,
+        CAN_BUS_ARM_M3508, NODE_ARM_M3508_1,
+        UPPER_CONTROL_PERIOD_MS, 0U, true
+    },
+    [UPPER_MOTOR_ARM_M3508_2] =
+    {
+        "arm_m3508_2", MOTOR_MODEL_M3508,
+        CAN_BUS_ARM_M3508, NODE_ARM_M3508_2,
+        UPPER_CONTROL_PERIOD_MS, 0U, true
+    },
+    [UPPER_MOTOR_ARM_J4310] =
+    {
+        "arm_j4310", MOTOR_MODEL_J4310,
+        CAN_BUS_ARM_J4310, NODE_ARM_J4310,
+        UPPER_CONTROL_PERIOD_MS, 0U, true
+    },
+    [UPPER_MOTOR_GATE_M2006] =
+    {
+        "gate_m2006", MOTOR_MODEL_M2006,
+        CAN_BUS_AUX, NODE_GATE_M2006,
+        UPPER_CONTROL_PERIOD_MS, 0U, true
+    },
+    [UPPER_MOTOR_GRIPPER_M2006] =
+    {
+        "gripper_m2006", MOTOR_MODEL_M2006,
+        CAN_BUS_AUX, NODE_GRIPPER_M2006,
+        UPPER_CONTROL_PERIOD_MS, 0U, true
+    }
+};
 
 static upper_robot_t upper_robot;
 static upper_pc_link_t upper_pc_link;
@@ -74,13 +123,17 @@ static bool upper_j4310_startup_enable_attempted;
 static uint32_t upper_j4310_startup_enable_last_tick_ms;
 static uint8_t upper_remote_previous_key_bits;
 static bool upper_remote_pd13_second;
-static bool upper_remote_pd13_reset_pending;
-static uint32_t upper_remote_pd13_reset_due_tick_ms;
 static bool upper_remote_pd12_second;
-static bool upper_remote_pd11_second;
-static uint8_t upper_remote_pd8_stage;
+static bool upper_remote_pd11_first_pending;
+static uint32_t upper_remote_pd11_first_due_tick_ms;
+static bool upper_remote_pd8_second;
 static bool upper_remote_pd8_first_pending;
 static uint32_t upper_remote_pd8_first_due_tick_ms;
+static bool upper_remote_pd9_zero_pending;
+static bool upper_remote_pd9_oscillation_pending;
+static bool upper_remote_pd9_gate_oscillating;
+static bool upper_remote_pd9_gate_high_next;
+static uint32_t upper_remote_pd9_gate_due_tick_ms;
 static bool upper_remote_pd9_second;
 static bool upper_remote_pd10_second;
 static volatile bool upper_aux_spi3_pending;
@@ -102,11 +155,79 @@ volatile uint32_t upper_aux_spi3_sent_count;
 volatile uint32_t upper_aux_spi3_fail_count;
 __ALIGNED(32) static uint8_t upper_tx_buffer[UPPER_TX_BUFFER_SIZE];
 
-/* 功能：接收上位机目标回调并暂存命令；用途：把通信上下文的数据安全移交给控制周期；无返回值表示设置待处理标志。 */
-static void UpperEntry_OnPcCmd(const upper_target_t *target, void *user_data)
+static upper_pid_cfg_t UpperEntry_ConvertPcPid(
+    const upper_pc_pid_cfg_t *source)
 {
+    return (upper_pid_cfg_t)
+    {
+        source->kp,
+        source->ki,
+        source->kd,
+        source->integral_limit,
+        source->output_limit
+    };
+}
+
+static void UpperEntry_ConvertPcTarget(const upper_pc_target_t *source,
+                                       upper_target_t *target)
+{
+    size_t index;
+
+    (void)memset(target, 0, sizeof(*target));
+    target->position_mode = source->position_mode;
+    target->arm.enabled = source->arm.enabled;
+    target->arm.j4310_commanded = source->arm.j4310_commanded;
+    target->arm.m3508_enabled = source->arm.m3508_enabled;
+    target->arm.position_mode = source->arm.position_mode;
+    target->arm.grip_pos_rad = source->arm.grip_pos_rad;
+    target->arm.grip_vel_rad_s = source->arm.grip_vel_rad_s;
+    target->arm.grip_kp = source->arm.grip_kp;
+    target->arm.grip_kd = source->arm.grip_kd;
+    target->arm.grip_torque_nm = source->arm.grip_torque_nm;
+    target->arm.grip_torque_limit_nm = source->arm.grip_torque_limit_nm;
+    target->arm.pid_update = source->arm.pid_update;
+    target->arm.m3508_speed_pid =
+        UpperEntry_ConvertPcPid(&source->arm.m3508_speed_pid);
+    target->arm.m3508_position_pid =
+        UpperEntry_ConvertPcPid(&source->arm.m3508_position_pid);
+    for (index = 0U; index < UPPER_ARM_M3508_COUNT; index++)
+    {
+        target->arm.m3508_vel_rad_s[index] =
+            source->arm.m3508_vel_rad_s[index];
+        target->arm.m3508_pos_rad[index] =
+            source->arm.m3508_pos_rad[index];
+    }
+
+    target->gate.enabled = source->gate.enabled;
+    target->gate.position_mode = source->gate.position_mode;
+    target->gate.m2006_vel_rad_s = source->gate.m2006_vel_rad_s;
+    target->gate.m2006_pos_rad = source->gate.m2006_pos_rad;
+    target->gate.pid_update = source->gate.pid_update;
+    target->gate.m2006_speed_pid =
+        UpperEntry_ConvertPcPid(&source->gate.m2006_speed_pid);
+    target->gate.m2006_position_pid =
+        UpperEntry_ConvertPcPid(&source->gate.m2006_position_pid);
+
+    target->gripper.enabled = source->gripper.enabled;
+    target->gripper.position_mode = source->gripper.position_mode;
+    target->gripper.m2006_vel_rad_s = source->gripper.m2006_vel_rad_s;
+    target->gripper.m2006_pos_rad = source->gripper.m2006_pos_rad;
+    target->gripper.pid_update = source->gripper.pid_update;
+    target->gripper.m2006_speed_pid =
+        UpperEntry_ConvertPcPid(&source->gripper.m2006_speed_pid);
+    target->gripper.m2006_position_pid =
+        UpperEntry_ConvertPcPid(&source->gripper.m2006_position_pid);
+}
+
+/* 功能：接收上位机目标回调并暂存命令；用途：把通信上下文的数据安全移交给控制周期；无返回值表示设置待处理标志。 */
+static void UpperEntry_OnPcCmd(const upper_pc_target_t *source,
+                               void *user_data)
+{
+    upper_target_t target;
+
     (void)user_data;
-    if (osMessageQueuePut(upper_cmd_queue, target, 0U, 0U) != osOK)
+    UpperEntry_ConvertPcTarget(source, &target);
+    if (osMessageQueuePut(upper_cmd_queue, &target, 0U, 0U) != osOK)
     {
         upper_cmd_drop_count++;
     }
@@ -119,6 +240,7 @@ static void UpperEntry_OnPcEStop(void *user_data)
     upper_estop_pending = true;
 }
 
+/* 功能：处理 PC 下发的辅助输出位；用途：更新可经 SPI 转发的辅助控制状态；无返回值表示最新位状态已保存。 */
 static void UpperEntry_OnPcAuxControl(uint8_t output_bits, void *user_data)
 {
     (void)user_data;
@@ -126,6 +248,7 @@ static void UpperEntry_OnPcAuxControl(uint8_t output_bits, void *user_data)
     upper_aux_spi3_pending = true;
 }
 
+/* 功能：计算字节序列的 CRC8 校验值；用途：保护辅助 SPI3 数据帧；返回值表示 CRC8 结果。 */
 static uint8_t UpperEntry_Crc8(const uint8_t *data, size_t size)
 {
     uint8_t crc;
@@ -146,6 +269,7 @@ static uint8_t UpperEntry_Crc8(const uint8_t *data, size_t size)
     return crc;
 }
 
+/* 功能：周期构造并发送辅助 SPI3 控制帧；用途：把 PC 辅助输出状态转发给外部设备；无返回值表示本周期发送已处理。 */
 static void UpperEntry_ProcessAuxSpi3(uint32_t tick_ms)
 {
     uint8_t output_bits;
@@ -195,7 +319,7 @@ static void UpperEntry_OnUart(comm_uart_channel_t channel,
                               size_t size,
                               void *user_data)
 {
-    /* UART4 is the PC link; UART5 carries the fixed 10-byte remote frame. */
+    /* UART4 用于 PC 链路；UART5 传输固定 10 字节的遥控帧。 */
     (void)user_data;
     if (channel == COMM_UART_PC)
     {
@@ -234,6 +358,7 @@ static void UpperEntry_OnPcMotorAction(uint8_t action,
     upper_motor_action_pending = true;
 }
 
+/* 功能：取消 J4310 自动回零并释放其控制权；用途：切换到遥控或 PC 主动控制；无返回值表示回零状态已清除。 */
 static void UpperEntry_CancelJ4310AutoReturn(void)
 {
     J4310AutoReturn_Cancel(&upper_j4310_auto_return);
@@ -241,6 +366,7 @@ static void UpperEntry_CancelJ4310AutoReturn(void)
                                      UPPER_MOTOR_ARM_J4310);
 }
 
+/* 功能：按上层配置重新初始化 J4310 位置控制器；用途：恢复轨迹与重力补偿的初始状态；返回 true 表示初始化成功。 */
 static bool UpperEntry_ResetJ4310PositionControl(void)
 {
     return J4310PositionControl_Init(
@@ -248,9 +374,15 @@ static bool UpperEntry_ResetJ4310PositionControl(void)
         UPPER_J4310_TRAJECTORY_MAX_VEL_RAD_S,
         UPPER_J4310_TRAJECTORY_MAX_ACCEL_RAD_S2,
         UPPER_J4310_GRAVITY_MODEL_LIMIT_NM,
-        UPPER_J4310_GRAVITY_LEARNING_RATE);
+        UPPER_J4310_GRAVITY_LEARNING_RATE,
+        UPPER_J4310_GRAVITY_COMPENSATION_GAIN,
+        UPPER_J4310_GRAVITY_DISABLE_HALF_WIDTH_RAD,
+        UPPER_J4310_GRAVITY_SETTLE_ERROR_RAD,
+        UPPER_J4310_GRAVITY_SETTLE_FEEDBACK_COUNT,
+        UPPER_J4310_GRAVITY_TORQUE_RATE_NM_S);
 }
 
+/* 功能：为 J4310 启动到指定角度的位置轨迹；用途：将离散目标转换为平滑运动；无返回值表示启动请求已处理。 */
 static void UpperEntry_StartJ4310Trajectory(uint32_t tick_ms,
                                              float target_position_rad)
 {
@@ -307,8 +439,8 @@ static void UpperEntry_ServiceJ4310StartupEnable(uint32_t tick_ms)
             target.arm.position_mode = true;
             target.arm.grip_pos_rad = feedback.position_rad;
             target.arm.grip_vel_rad_s = 0.0f;
-            target.arm.grip_kp = UPPER_J4310_AUTO_RETURN_KP;
-            target.arm.grip_kd = UPPER_J4310_AUTO_RETURN_KD;
+            target.arm.grip_kp = UPPER_J4310_POSITION_KP;
+            target.arm.grip_kd = UPPER_J4310_POSITION_KD;
             target.arm.grip_torque_nm = 0.0f;
             target.arm.grip_torque_limit_nm =
                 UPPER_J4310_TORQUE_MAP_MAX_NM;
@@ -333,6 +465,7 @@ static void UpperEntry_ServiceJ4310StartupEnable(uint32_t tick_ms)
                                      NODE_ARM_J4310);
 }
 
+/* 功能：执行 J4310 位置轨迹和自动回零的周期服务；用途：更新目标并合成关节控制命令；无返回值表示本周期控制已完成。 */
 static void UpperEntry_ServiceJ4310Control(uint32_t tick_ms)
 {
     const size_t index = UPPER_MOTOR_ARM_J4310;
@@ -367,8 +500,8 @@ static void UpperEntry_ServiceJ4310Control(uint32_t tick_ms)
             &upper_j4310_position_control);
         command.pos_rad = upper_j4310_auto_return.target_position_rad;
         command.vel_rad_s = 0.0f;
-        command.kp = UPPER_J4310_AUTO_RETURN_KP;
-        command.kd = UPPER_J4310_AUTO_RETURN_KD;
+        command.kp = UPPER_J4310_POSITION_KP;
+        command.kd = UPPER_J4310_POSITION_KD;
     }
     else
     {
@@ -397,12 +530,14 @@ static void UpperEntry_ServiceJ4310Control(uint32_t tick_ms)
     UpperRobot_Start(&upper_robot);
 }
 
+/* 功能：把遥控协议中的角度从度转换为弧度；用途：统一应用层内部角度单位；返回值表示弧度值。 */
 static float UpperEntry_RemoteDegreesToRadians(float degrees)
 {
     return degrees * UPPER_REMOTE_ANGLE_DEG_TO_RAD;
 }
 
-/* Apply one complete arm target so the two M3508s and J4310 move together. */
+/* 应用完整的机械臂目标，使两台 M3508 与 J4310 同步运动。 */
+/* 功能：应用遥控器给出的机械臂双电机角度目标；用途：同步更新 M3508 与 J4310 关节命令；无返回值表示目标已提交。 */
 static void UpperEntry_ApplyRemoteArm(float m3508_angle_deg,
                                       float j4310_angle_deg,
                                       uint32_t tick_ms)
@@ -420,8 +555,8 @@ static void UpperEntry_ApplyRemoteArm(float m3508_angle_deg,
     target.arm.grip_pos_rad =
         UpperEntry_RemoteDegreesToRadians(j4310_angle_deg);
     target.arm.grip_vel_rad_s = 0.0f;
-    target.arm.grip_kp = UPPER_J4310_AUTO_RETURN_KP;
-    target.arm.grip_kd = UPPER_J4310_AUTO_RETURN_KD;
+    target.arm.grip_kp = UPPER_J4310_POSITION_KP;
+    target.arm.grip_kd = UPPER_J4310_POSITION_KD;
     target.arm.grip_torque_nm = 0.0f;
     target.arm.grip_torque_limit_nm = UPPER_J4310_TORQUE_MAP_MAX_NM;
     target.arm.pid_update = false;
@@ -436,7 +571,8 @@ static void UpperEntry_ApplyRemoteArm(float m3508_angle_deg,
     UpperRobot_Start(&upper_robot);
 }
 
-/* Hold the current J4310 target while moving only the two M3508s. */
+/* 保持当前 J4310 目标，仅运动两台 M3508。 */
+/* 功能：应用遥控器给出的机械臂 M3508 角度目标；用途：单独控制机械臂前级关节；无返回值表示目标已提交。 */
 static void UpperEntry_ApplyRemoteM3508(float angle_deg)
 {
     upper_target_t target;
@@ -459,7 +595,8 @@ static void UpperEntry_ApplyRemoteM3508(float angle_deg)
     UpperRobot_Start(&upper_robot);
 }
 
-/* Keep the M3508 target unchanged while moving only J4310. */
+/* 保持两台 M3508 目标不变，仅运动 J4310。 */
+/* 功能：应用遥控器给出的 J4310 角度目标；用途：启动末端关节的平滑位置轨迹；无返回值表示目标已提交。 */
 static void UpperEntry_ApplyRemoteJ4310(float angle_deg, uint32_t tick_ms)
 {
     upper_target_t target;
@@ -471,8 +608,8 @@ static void UpperEntry_ApplyRemoteJ4310(float angle_deg, uint32_t tick_ms)
     target.arm.position_mode = true;
     target.arm.grip_pos_rad = UpperEntry_RemoteDegreesToRadians(angle_deg);
     target.arm.grip_vel_rad_s = 0.0f;
-    target.arm.grip_kp = UPPER_J4310_AUTO_RETURN_KP;
-    target.arm.grip_kd = UPPER_J4310_AUTO_RETURN_KD;
+    target.arm.grip_kp = UPPER_J4310_POSITION_KP;
+    target.arm.grip_kd = UPPER_J4310_POSITION_KD;
     target.arm.grip_torque_nm = 0.0f;
     target.arm.grip_torque_limit_nm = UPPER_J4310_TORQUE_MAP_MAX_NM;
 
@@ -483,21 +620,23 @@ static void UpperEntry_ApplyRemoteJ4310(float angle_deg, uint32_t tick_ms)
     UpperRobot_Start(&upper_robot);
 }
 
+/* 功能：应用遥控器给出的闸门角度目标；用途：更新闸门位置和使能状态；无返回值表示目标已提交。 */
 static void UpperEntry_ApplyRemoteGate(float angle_deg)
 {
     upper_target_t target;
 
     target = upper_robot.target;
     target.position_mode = true;
-    target.conveyor.enabled = true;
-    target.conveyor.position_mode = true;
-    target.conveyor.pid_update = false;
-    target.conveyor.m2006_pos_rad =
+    target.gate.enabled = true;
+    target.gate.position_mode = true;
+    target.gate.pid_update = false;
+    target.gate.m2006_pos_rad =
         UpperEntry_RemoteDegreesToRadians(angle_deg);
     UpperRobot_SetTarget(&upper_robot, &target);
     UpperRobot_Start(&upper_robot);
 }
 
+/* 功能：应用遥控器给出的夹爪角度目标；用途：更新夹爪位置和使能状态；无返回值表示目标已提交。 */
 static void UpperEntry_ApplyRemoteGripper(float angle_deg)
 {
     upper_target_t target;
@@ -514,8 +653,28 @@ static void UpperEntry_ApplyRemoteGripper(float angle_deg)
     UpperRobot_Start(&upper_robot);
 }
 
-/* Consume only rising edges; the received remote frame is a level snapshot. */
-/* Consume rising edges from the UART5 fixed-frame remote level snapshot. */
+/* 功能：处理遥控器 PD9 输入对应的闸门动作；用途：根据电平和消抖状态更新闸门目标；无返回值表示本周期输入已处理。 */
+static void UpperEntry_ProcessRemotePd9Gate(uint32_t tick_ms)
+{
+    float angle_deg;
+
+    if (!upper_remote_pd9_gate_oscillating ||
+        ((int32_t)(tick_ms - upper_remote_pd9_gate_due_tick_ms) < 0))
+    {
+        return;
+    }
+    angle_deg = upper_remote_pd9_gate_high_next ?
+                UPPER_REMOTE_PD9_OSCILLATION_HIGH_DEG :
+                UPPER_REMOTE_PD9_OSCILLATION_LOW_DEG;
+    UpperEntry_ApplyRemoteGate(angle_deg);
+    upper_remote_pd9_gate_high_next =
+        !upper_remote_pd9_gate_high_next;
+    upper_remote_pd9_gate_due_tick_ms += 500U;
+}
+
+/* 只处理上升沿；接收到的遥控帧是电平快照。 */
+/* 从 UART5 固定帧遥控电平快照中处理上升沿。 */
+/* 功能：解析遥控按键和摇杆并更新机器人目标；用途：实现遥控动作映射、边沿触发和超时处理；无返回值表示本周期遥控输入已处理。 */
 static void UpperEntry_ProcessRemote(uint32_t tick_ms)
 {
     upper_remote_control_t control;
@@ -528,8 +687,11 @@ static void UpperEntry_ProcessRemote(uint32_t tick_ms)
     if (!remote_online)
     {
         key_bits = 0U;
-        upper_remote_pd13_reset_pending = false;
+        upper_remote_pd11_first_pending = false;
         upper_remote_pd8_first_pending = false;
+        upper_remote_pd9_zero_pending = false;
+        upper_remote_pd9_oscillation_pending = false;
+        upper_remote_pd9_gate_oscillating = false;
     }
     else
     {
@@ -537,13 +699,23 @@ static void UpperEntry_ProcessRemote(uint32_t tick_ms)
     }
     rising_bits = key_bits & (uint8_t)~upper_remote_previous_key_bits;
     upper_remote_previous_key_bits = key_bits;
-    if (rising_bits != 0U)
+    if ((rising_bits & (UPPER_REMOTE_KEY_PD13 |
+                       UPPER_REMOTE_KEY_PD12 |
+                       UPPER_REMOTE_KEY_PD11 |
+                       UPPER_REMOTE_KEY_PD8)) != 0U)
     {
-        /* A fresh action supersedes any delayed remote action. */
-        upper_remote_pd13_reset_pending = false;
+        upper_remote_pd11_first_pending = false;
         upper_remote_pd8_first_pending = false;
+        upper_remote_pd9_gate_oscillating = false;
     }
-
+    if ((rising_bits & (UPPER_REMOTE_KEY_PD13 |
+                       UPPER_REMOTE_KEY_PD12 |
+                       UPPER_REMOTE_KEY_PD11 |
+                       UPPER_REMOTE_KEY_PD10)) != 0U)
+    {
+        upper_remote_pd9_zero_pending = false;
+        upper_remote_pd9_oscillation_pending = false;
+    }
     if ((rising_bits & UPPER_REMOTE_PD13_RESET_KEYS) != 0U)
     {
         upper_remote_pd13_second = false;
@@ -552,26 +724,19 @@ static void UpperEntry_ProcessRemote(uint32_t tick_ms)
     {
         upper_remote_pd12_second = false;
     }
-    if ((rising_bits & UPPER_REMOTE_PD11_RESET_KEYS) != 0U)
+    if ((rising_bits & UPPER_REMOTE_PD8_RESET_KEYS) != 0U)
     {
-        upper_remote_pd11_second = false;
-    }
-    if ((rising_bits & (UPPER_REMOTE_KEY_PD13 |
-                       UPPER_REMOTE_KEY_PD12 |
-                       UPPER_REMOTE_KEY_PD11)) != 0U)
-    {
-        upper_remote_pd8_stage = 0U;
+        upper_remote_pd8_second = false;
     }
 
     if ((rising_bits & UPPER_REMOTE_KEY_PD13) != 0U)
     {
         if (upper_remote_pd13_second)
         {
-            UpperEntry_ApplyRemoteM3508(
-                UPPER_REMOTE_PD13_SECOND_M3508_DEG);
-            upper_remote_pd13_reset_pending = true;
-            upper_remote_pd13_reset_due_tick_ms =
-                tick_ms + UPPER_REMOTE_PD13_RESET_DELAY_MS;
+            UpperEntry_ApplyRemoteArm(
+                UPPER_REMOTE_PD13_SECOND_M3508_DEG,
+                UPPER_REMOTE_PD13_SECOND_J4310_DEG,
+                tick_ms);
             upper_remote_pd13_second = false;
         }
         else
@@ -604,58 +769,68 @@ static void UpperEntry_ProcessRemote(uint32_t tick_ms)
     }
     if ((rising_bits & UPPER_REMOTE_KEY_PD11) != 0U)
     {
-        if (upper_remote_pd11_second)
-        {
-            UpperEntry_ApplyRemoteArm(
-                UPPER_REMOTE_PD11_SECOND_M3508_DEG,
-                UPPER_REMOTE_PD11_SECOND_J4310_DEG,
-                tick_ms);
-            upper_remote_pd11_second = false;
-        }
-        else
-        {
-            UpperEntry_ApplyRemoteArm(
-                UPPER_REMOTE_PD11_FIRST_M3508_DEG,
-                UPPER_REMOTE_PD11_FIRST_J4310_DEG,
-                tick_ms);
-            upper_remote_pd11_second = true;
-        }
+        UpperEntry_ApplyRemoteM3508(
+            UPPER_REMOTE_PD11_FIRST_M3508_DEG);
+        upper_remote_pd11_first_pending = true;
+        upper_remote_pd11_first_due_tick_ms =
+            tick_ms + 500U;
     }
     if ((rising_bits & UPPER_REMOTE_KEY_PD8) != 0U)
     {
-        if (upper_remote_pd8_stage == 0U)
+        if (upper_remote_pd8_second)
+        {
+            upper_remote_pd9_zero_pending = false;
+            upper_remote_pd9_oscillation_pending = true;
+            upper_remote_pd9_gate_oscillating = false;
+            upper_remote_pd9_second = false;
+            UpperEntry_ApplyRemoteArm(
+                UPPER_REMOTE_PD8_SECOND_M3508_DEG,
+                UPPER_REMOTE_PD8_SECOND_J4310_DEG,
+                tick_ms);
+            upper_remote_pd8_second = false;
+        }
+        else
         {
             UpperEntry_ApplyRemoteM3508(
                 UPPER_REMOTE_PD8_FIRST_M3508_DEG);
             upper_remote_pd8_first_pending = true;
             upper_remote_pd8_first_due_tick_ms =
-                tick_ms + UPPER_REMOTE_PD8_FIRST_DELAY_MS;
-            upper_remote_pd8_stage = 1U;
-        }
-        else if (upper_remote_pd8_stage == 1U)
-        {
-            UpperEntry_ApplyRemoteArm(
-                UPPER_REMOTE_PD8_SECOND_M3508_DEG,
-                UPPER_REMOTE_PD8_SECOND_J4310_DEG,
-                tick_ms);
-            upper_remote_pd8_stage = 2U;
-        }
-        else
-        {
-            UpperEntry_ApplyRemoteArm(
-                UPPER_REMOTE_PD8_THIRD_M3508_DEG,
-                UPPER_REMOTE_PD8_THIRD_J4310_DEG,
-                tick_ms);
-            upper_remote_pd8_stage = 0U;
+                tick_ms + 500U;
+            upper_remote_pd9_zero_pending = true;
+            upper_remote_pd9_oscillation_pending = false;
+            upper_remote_pd9_gate_oscillating = false;
+            upper_remote_pd8_second = true;
         }
     }
     if ((rising_bits & UPPER_REMOTE_KEY_PD9) != 0U)
     {
-        UpperEntry_ApplyRemoteGate(
-            upper_remote_pd9_second ?
-                UPPER_REMOTE_PD9_SECOND_GATE_DEG :
-                UPPER_REMOTE_PD9_FIRST_GATE_DEG);
-        upper_remote_pd9_second = !upper_remote_pd9_second;
+        upper_remote_pd9_gate_oscillating = false;
+        if (upper_remote_pd9_zero_pending)
+        {
+            UpperEntry_ApplyRemoteGate(UPPER_REMOTE_PD9_ZERO_GATE_DEG);
+            upper_remote_pd9_zero_pending = false;
+            upper_remote_pd9_oscillation_pending = false;
+            upper_remote_pd9_second = false;
+        }
+        else if (upper_remote_pd9_oscillation_pending)
+        {
+            UpperEntry_ApplyRemoteGate(
+                UPPER_REMOTE_PD9_OSCILLATION_HIGH_DEG);
+            upper_remote_pd9_oscillation_pending = false;
+            upper_remote_pd9_gate_oscillating = true;
+            upper_remote_pd9_gate_high_next = false;
+            upper_remote_pd9_gate_due_tick_ms =
+                tick_ms + 500U;
+            upper_remote_pd9_second = true;
+        }
+        else
+        {
+            UpperEntry_ApplyRemoteGate(
+                upper_remote_pd9_second ?
+                    UPPER_REMOTE_PD9_SECOND_GATE_DEG :
+                    UPPER_REMOTE_PD9_FIRST_GATE_DEG);
+            upper_remote_pd9_second = !upper_remote_pd9_second;
+        }
     }
     if ((rising_bits & UPPER_REMOTE_KEY_PD10) != 0U)
     {
@@ -665,31 +840,12 @@ static void UpperEntry_ProcessRemote(uint32_t tick_ms)
                 UPPER_REMOTE_PD10_FIRST_GRIPPER_DEG);
         upper_remote_pd10_second = !upper_remote_pd10_second;
     }
-
-    /* A different edge in the same frame supersedes the delayed reset. */
-    if ((rising_bits & (UPPER_REMOTE_KEY_PD12 |
-                       UPPER_REMOTE_KEY_PD11 |
-                       UPPER_REMOTE_KEY_PD8 |
-                       UPPER_REMOTE_KEY_PD9 |
-                       UPPER_REMOTE_KEY_PD10)) != 0U)
-    {
-        upper_remote_pd13_reset_pending = false;
-    }
-    if ((rising_bits & (UPPER_REMOTE_KEY_PD13 |
-                       UPPER_REMOTE_KEY_PD12 |
-                       UPPER_REMOTE_KEY_PD11 |
-                       UPPER_REMOTE_KEY_PD9 |
-                       UPPER_REMOTE_KEY_PD10)) != 0U)
-    {
-        upper_remote_pd8_first_pending = false;
-    }
-
-    if (upper_remote_pd13_reset_pending &&
-        ((int32_t)(tick_ms - upper_remote_pd13_reset_due_tick_ms) >= 0))
+    if (upper_remote_pd11_first_pending &&
+        ((int32_t)(tick_ms - upper_remote_pd11_first_due_tick_ms) >= 0))
     {
         UpperEntry_ApplyRemoteJ4310(
-            UPPER_REMOTE_PD13_SECOND_J4310_DEG, tick_ms);
-        upper_remote_pd13_reset_pending = false;
+            UPPER_REMOTE_PD11_FIRST_J4310_DEG, tick_ms);
+        upper_remote_pd11_first_pending = false;
     }
     if (upper_remote_pd8_first_pending &&
         ((int32_t)(tick_ms - upper_remote_pd8_first_due_tick_ms) >= 0))
@@ -698,6 +854,7 @@ static void UpperEntry_ProcessRemote(uint32_t tick_ms)
             UPPER_REMOTE_PD8_FIRST_J4310_DEG, tick_ms);
         upper_remote_pd8_first_pending = false;
     }
+    UpperEntry_ProcessRemotePd9Gate(tick_ms);
 }
 
 /* 功能：初始化上层入口、机器人、链路和通信回调；用途：完成用户应用启动；返回 true 表示所有子模块初始化成功。 */
@@ -736,16 +893,20 @@ bool UpperEntry_Init(void)
     upper_j4310_startup_enable_last_tick_ms = 0U;
     upper_remote_previous_key_bits = 0U;
     upper_remote_pd13_second = false;
-    upper_remote_pd13_reset_pending = false;
-    upper_remote_pd13_reset_due_tick_ms = 0U;
     upper_remote_pd12_second = false;
-    upper_remote_pd11_second = false;
-    upper_remote_pd8_stage = 0U;
+    upper_remote_pd11_first_pending = false;
+    upper_remote_pd11_first_due_tick_ms = 0U;
+    upper_remote_pd8_second = false;
     upper_remote_pd8_first_pending = false;
     upper_remote_pd8_first_due_tick_ms = 0U;
+    upper_remote_pd9_zero_pending = false;
+    upper_remote_pd9_oscillation_pending = false;
+    upper_remote_pd9_gate_oscillating = false;
+    upper_remote_pd9_gate_high_next = false;
+    upper_remote_pd9_gate_due_tick_ms = 0U;
     upper_remote_pd9_second = false;
     upper_remote_pd10_second = false;
-    /* Send an initial zero state and keep repeating it until the receiver is up. */
+    /* 发送初始零状态，并在接收端就绪前持续重复发送。 */
     upper_aux_spi3_pending = true;
     upper_aux_output_bits = 0U;
     upper_aux_spi3_sequence = 0U;
@@ -754,7 +915,11 @@ bool UpperEntry_Init(void)
     upper_aux_spi3_sent_count = 0U;
     upper_aux_spi3_fail_count = 0U;
     CommRuntime_SetHandlers(UpperEntry_OnUart, UpperEntry_OnCan, NULL);
-    robot_ready = UpperRobot_Init(&upper_robot, UpperMotorPort_Send, NULL);
+    robot_ready = UpperRobot_Init(&upper_robot,
+                                  upper_motor_cfg,
+                                  UPPER_MOTOR_COUNT,
+                                  UpperMotorPort_Send,
+                                  NULL);
     return robot_ready;
 }
 
@@ -946,7 +1111,8 @@ static void UpperEntry_SendHandshakeAck(uint32_t tick_ms)
     }
 }
 
-/* Flash diagnostics are independent from the motor-control session. */
+/* Flash 诊断独立于电机控制会话。 */
+/* 功能：在请求待处理时构造并发送 Flash 信息；用途：响应 PC 对外部 Flash 状态的查询；无返回值表示发送流程已处理。 */
 static void UpperEntry_SendFlashInfo(void)
 {
     size_t frame_size;
@@ -986,7 +1152,7 @@ static void UpperEntry_SendState(uint32_t tick_ms)
     upper_motor_fault_t fault;
     upper_j4310_rx_diagnostic_t j4310_rx_diagnostic;
     upper_j4310_tx_diagnostic_t j4310_tx_diagnostic;
-    upper_j4310_auto_return_status_t j4310_auto_return_status;
+    upper_pc_state_t pc_state;
     float j4310_position_rad;
     bool j4310_position_valid;
     bool j4310_diagnostic_valid;
@@ -1056,26 +1222,66 @@ static void UpperEntry_SendState(uint32_t tick_ms)
                                     CAN_BUS_ARM_J4310,
                                     NODE_ARM_J4310,
                                     &j4310_tx_diagnostic);
-    j4310_auto_return_status.available = true;
-    j4310_auto_return_status.enabled =
+    (void)memset(&pc_state, 0, sizeof(pc_state));
+    pc_state.robot_state = (uint8_t)upper_robot.state;
+    pc_state.motor_sent_count = upper_robot.motor_manager.sent_count;
+    pc_state.motor_send_fail_count =
+        upper_robot.motor_manager.send_fail_count;
+    pc_state.motor_protocol_block_count =
+        upper_robot.motor_manager.protocol_block_count;
+    pc_state.j4310_position_valid = j4310_position_valid;
+    pc_state.j4310_position_rad = j4310_position_valid ?
+                                  j4310_position_rad : 0.0f;
+    pc_state.j4310_bus_rx_frames =
+        comm_fdcan_rx_count[CAN_BUS_ARM_J4310 - 1U];
+    pc_state.j4310_rx_valid = j4310_diagnostic_valid;
+    if (j4310_diagnostic_valid)
+    {
+        pc_state.j4310_rx.accepted_frames =
+            j4310_rx_diagnostic.accepted_frames;
+        pc_state.j4310_rx.rejected_format_frames =
+            j4310_rx_diagnostic.rejected_format_frames;
+        pc_state.j4310_rx.rejected_master_id_frames =
+            j4310_rx_diagnostic.rejected_master_id_frames;
+        pc_state.j4310_rx.rejected_feedback_id_frames =
+            j4310_rx_diagnostic.rejected_feedback_id_frames;
+        pc_state.j4310_rx.last_can_id = j4310_rx_diagnostic.last_can_id;
+        pc_state.j4310_rx.last_dlc = j4310_rx_diagnostic.last_dlc;
+        pc_state.j4310_rx.last_data0 = j4310_rx_diagnostic.last_data0;
+        pc_state.j4310_rx.last_result = j4310_rx_diagnostic.last_result;
+    }
+    pc_state.j4310_tx_valid = j4310_tx_diagnostic_valid;
+    if (j4310_tx_diagnostic_valid)
+    {
+        pc_state.j4310_tx.attempted_frames =
+            j4310_tx_diagnostic.attempted_frames;
+        pc_state.j4310_tx.queued_frames =
+            j4310_tx_diagnostic.queued_frames;
+        pc_state.j4310_tx.failed_frames =
+            j4310_tx_diagnostic.failed_frames;
+        pc_state.j4310_tx.enable_frames =
+            j4310_tx_diagnostic.enable_frames;
+        pc_state.j4310_tx.mit_frames = j4310_tx_diagnostic.mit_frames;
+        pc_state.j4310_tx.disable_frames =
+            j4310_tx_diagnostic.disable_frames;
+        pc_state.j4310_tx.last_can_id = j4310_tx_diagnostic.last_can_id;
+        pc_state.j4310_tx.last_dlc = j4310_tx_diagnostic.last_dlc;
+        pc_state.j4310_tx.last_data7 = j4310_tx_diagnostic.last_data7;
+        pc_state.j4310_tx.enable_confirmed =
+            j4310_tx_diagnostic.enable_confirmed;
+        pc_state.j4310_tx.feedback_state =
+            j4310_tx_diagnostic.feedback_state;
+    }
+    pc_state.j4310_auto_return.available = true;
+    pc_state.j4310_auto_return.enabled =
         upper_j4310_auto_return_enabled;
-    j4310_auto_return_status.active =
+    pc_state.j4310_auto_return.active =
         J4310AutoReturn_IsActive(&upper_j4310_auto_return);
-    j4310_auto_return_status.stage =
+    pc_state.j4310_auto_return.stage =
         (uint8_t)upper_j4310_auto_return.stage;
     frame_size = UpperPcLink_BuildState(&upper_pc_link,
-                                         &upper_robot,
+                                         &pc_state,
                                          tick_ms,
-                                         j4310_position_valid,
-                                         j4310_position_valid ?
-                                         j4310_position_rad : 0.0f,
-                                         comm_fdcan_rx_count[
-                                             CAN_BUS_ARM_J4310 - 1U],
-                                         j4310_diagnostic_valid ?
-                                         &j4310_rx_diagnostic : NULL,
-                                         j4310_tx_diagnostic_valid ?
-                                         &j4310_tx_diagnostic : NULL,
-                                         &j4310_auto_return_status,
                                          upper_tx_buffer,
                                          sizeof(upper_tx_buffer));
     if ((frame_size > 0U) &&
@@ -1095,6 +1301,7 @@ static void UpperEntry_SendDjiTelemetry(uint32_t tick_ms)
 {
     upper_dji_diagnostic_t diagnostics[UPPER_PC_DJI_DIAGNOSTIC_COUNT];
     uint32_t fdcan_rx_counts[UPPER_PC_FDCAN_COUNT];
+    upper_pc_dji_telemetry_t telemetry;
     size_t diagnostic_count;
     size_t index;
     size_t frame_size;
@@ -1127,9 +1334,27 @@ static void UpperEntry_SendDjiTelemetry(uint32_t tick_ms)
     {
         fdcan_rx_counts[index] = comm_fdcan_rx_count[index];
     }
+    telemetry.model =
+        (uint8_t)diagnostics[upper_dji_telemetry_next_index].model;
+    telemetry.can_bus =
+        diagnostics[upper_dji_telemetry_next_index].can_bus;
+    telemetry.node_id =
+        diagnostics[upper_dji_telemetry_next_index].node_id;
+    telemetry.feedback_received =
+        diagnostics[upper_dji_telemetry_next_index].feedback_received;
+    telemetry.zero_valid =
+        diagnostics[upper_dji_telemetry_next_index].zero_valid;
+    telemetry.feedback_fresh =
+        diagnostics[upper_dji_telemetry_next_index].feedback_fresh;
+    telemetry.rotor_position_rad =
+        diagnostics[upper_dji_telemetry_next_index].rotor_position_rad;
+    telemetry.zero_rotor_position_rad =
+        diagnostics[upper_dji_telemetry_next_index].zero_rotor_position_rad;
+    telemetry.relative_output_position_rad =
+        diagnostics[upper_dji_telemetry_next_index].relative_output_position_rad;
     frame_size = UpperPcLink_BuildDjiTelemetry(
                      &upper_pc_link,
-                     &diagnostics[upper_dji_telemetry_next_index],
+                     &telemetry,
                      fdcan_rx_counts,
                      upper_tx_buffer,
                      sizeof(upper_tx_buffer));
@@ -1157,7 +1382,7 @@ void UpperEntry_Control1ms(uint32_t tick_ms)
     if (upper_estop_pending)
     {
         upper_estop_pending = false;
-        upper_remote_pd13_reset_pending = false;
+        upper_remote_pd11_first_pending = false;
         upper_remote_pd8_first_pending = false;
         upper_j4310_startup_enable_pending = false;
         J4310AutoReturn_Cancel(&upper_j4310_auto_return);
@@ -1201,6 +1426,7 @@ bool UpperEntry_GetSecondaryRemoteControl(upper_remote_control_t *control,
     return UpperRemoteLink_GetControl(&upper_remote_link, tick_ms, control);
 }
 
+/* 功能：读取副遥控链路诊断信息；用途：向监控或调试模块提供收帧统计；无返回值表示诊断数据已复制。 */
 void UpperEntry_GetSecondaryRemoteDiagnostics(
     upper_remote_diagnostics_t *diagnostics)
 {

@@ -1,3 +1,8 @@
+/**
+ * @file test_upper_pc_link.c
+ * @brief 验证上层 PC 链路的命令解析、会话和回传组帧。
+ */
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -7,8 +12,10 @@
 #include "upper_pc_link.h"
 
 #define TEST_FRAME_CAPACITY  140U
+#define TEST_MOTOR_MODEL_J4310 0U
+#define TEST_MOTOR_MODEL_M2006 2U
 
-static upper_target_t test_target;
+static upper_pc_target_t test_target;
 static bool test_target_received;
 static bool test_estop_received;
 static bool test_action_received;
@@ -61,6 +68,7 @@ static uint32_t Test_ReadU32(const uint8_t *data)
            ((uint32_t)data[3] << 24U);
 }
 
+/* 功能：从测试帧中读取 16 位整数；用途：校验编码后的协议字段；返回值表示解码结果。 */
 static uint16_t Test_ReadU16(const uint8_t *data)
 {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8U);
@@ -75,7 +83,7 @@ static bool Test_FloatClose(float actual, float expected, float tolerance)
 }
 
 /* 功能：记录链路解码出的整机目标；用途：作为命令回调测试桩；无返回值表示目标快照与调用次数已保存。 */
-static void Test_OnTarget(const upper_target_t *target, void *user_data)
+static void Test_OnTarget(const upper_pc_target_t *target, void *user_data)
 {
     (void)user_data;
     assert(target != NULL);
@@ -105,6 +113,7 @@ static void Test_OnMotorAction(uint8_t action,
     test_action_received = true;
 }
 
+/* 功能：执行 OnAuxControl 场景测试；用途：验证对应输入下的行为和断言；无返回值表示由断言报告结果。 */
 static void Test_OnAuxControl(uint8_t output_bits, void *user_data)
 {
     (void)user_data;
@@ -201,7 +210,7 @@ static size_t Test_BuildExtendedPositionCommand(uint16_t enable_mask,
         63.7950221167f, 38.2228810547f, 3.61399672504f,
         0.00290389972619f, 66.3985601018f,
         350.0f, 250.0f, 0.0f, 0.5f, 10000.0f,
-        220.0f, 500.0f, 5.0f, 0.002f, 50.0f
+        900.0f, 500.0f, 5.0f, 0.002f, 50.0f
     };
     size_t index;
 
@@ -377,7 +386,7 @@ int main(void)
     assert(test_target.arm.enabled);
     assert(test_target.arm.j4310_commanded);
     assert(test_target.arm.m3508_enabled);
-    assert(test_target.conveyor.enabled);
+    assert(test_target.gate.enabled);
     assert(!test_target.gripper.enabled);
     assert(test_target.arm.grip_pos_rad == 1.0f);
     assert(test_target.arm.grip_vel_rad_s == 2.0f);
@@ -385,7 +394,7 @@ int main(void)
     assert(test_target.arm.grip_kd == 4.0f);
     assert(test_target.arm.m3508_vel_rad_s[0] == 5.0f);
     assert(test_target.arm.m3508_vel_rad_s[1] == 6.0f);
-    assert(test_target.conveyor.m2006_vel_rad_s == 7.0f);
+    assert(test_target.gate.m2006_vel_rad_s == 7.0f);
     assert(test_target.gripper.m2006_vel_rad_s == 8.0f);
 
     test_target_received = false;
@@ -410,7 +419,7 @@ int main(void)
     assert(test_target.arm.position_mode);
     assert(test_target.arm.m3508_pos_rad[0] == 1.57f);
     assert(test_target.arm.m3508_pos_rad[1] == -1.57f);
-    assert(test_target.conveyor.m2006_pos_rad == 0.78f);
+    assert(test_target.gate.m2006_pos_rad == 0.78f);
     assert(test_target.gripper.m2006_pos_rad == -0.78f);
     assert(link.last_rx_sequence == 18U);
 
@@ -420,20 +429,40 @@ int main(void)
     UpperPcLink_Push(&link, frame, frame_size, 104U);
     assert(test_target_received);
     assert(!test_target.arm.pid_update);
-    assert(test_target.conveyor.pid_update);
+    assert(test_target.gate.pid_update);
     assert(!test_target.gripper.pid_update);
     assert(test_target.arm.grip_torque_nm == 0.5f);
     assert(test_target.arm.grip_torque_limit_nm == 8.0f);
     assert(test_target.arm.m3508_pos_rad[0] == 1.57f);
     assert(test_target.arm.m3508_pos_rad[1] == -1.57f);
-    assert(test_target.conveyor.m2006_pos_rad == 0.78f);
+    assert(test_target.gate.m2006_pos_rad == 0.78f);
     assert(test_target.gripper.m2006_pos_rad == -0.78f);
-    assert(Test_FloatClose(test_target.conveyor.m2006_speed_pid.kp,
+    assert(Test_FloatClose(test_target.gate.m2006_speed_pid.kp,
                            3.34225380f,
                            0.000001f));
-    assert(Test_FloatClose(test_target.conveyor.m2006_position_pid.kp,
-                           23.03834613f,
+    assert(Test_FloatClose(test_target.gate.m2006_speed_pid.ki,
+                           2.38732415f,
+                           0.000001f));
+    assert(test_target.gate.m2006_speed_pid.kd == 0.0f);
+    assert(Test_FloatClose(
+        test_target.gate.m2006_speed_pid.integral_limit,
+        0.05235988f,
+        0.000001f));
+    assert(test_target.gate.m2006_speed_pid.output_limit == 10.0f);
+    assert(Test_FloatClose(test_target.gate.m2006_position_pid.kp,
+                           94.24777961f,
                            0.00001f));
+    assert(Test_FloatClose(test_target.gate.m2006_position_pid.ki,
+                           52.35987756f,
+                           0.00001f));
+    assert(Test_FloatClose(test_target.gate.m2006_position_pid.kd,
+                           0.52359878f,
+                           0.000001f));
+    assert(test_target.gate.m2006_position_pid.integral_limit == 0.002f);
+    assert(Test_FloatClose(
+        test_target.gate.m2006_position_pid.output_limit,
+        5.23598776f,
+        0.000001f));
     assert(link.last_rx_sequence == 19U);
 
     test_target_received = false;
@@ -441,9 +470,9 @@ int main(void)
     assert(frame_size > 0U);
     UpperPcLink_Push(&link, frame, frame_size, 105U);
     assert(test_target_received);
-    assert(test_target.conveyor.enabled);
+    assert(test_target.gate.enabled);
     assert(!test_target.gripper.enabled);
-    assert(!test_target.conveyor.pid_update);
+    assert(!test_target.gate.pid_update);
     assert(test_target.arm.grip_torque_nm == 0.5f);
 
     test_target_received = false;
@@ -451,9 +480,9 @@ int main(void)
     assert(frame_size > 0U);
     UpperPcLink_Push(&link, frame, frame_size, 106U);
     assert(test_target_received);
-    assert(test_target.conveyor.enabled);
+    assert(test_target.gate.enabled);
     assert(test_target.gripper.enabled);
-    assert(!test_target.conveyor.pid_update);
+    assert(!test_target.gate.pid_update);
     assert(!test_target.gripper.pid_update);
 
     test_target_received = false;
@@ -477,7 +506,7 @@ int main(void)
         UpperPcLink_Push(&link, frame, frame_size, 105U);
         assert(!test_target.arm.enabled);
         assert(test_target.arm.m3508_enabled);
-        assert(!test_target.conveyor.enabled);
+        assert(!test_target.gate.enabled);
         assert(!test_target.gripper.enabled);
     }
 
@@ -496,7 +525,7 @@ int main(void)
         assert(test_target.arm.enabled);
         assert(test_target.arm.j4310_commanded);
         assert(!test_target.arm.m3508_enabled);
-        assert(!test_target.conveyor.enabled);
+        assert(!test_target.gate.enabled);
         assert(!test_target.gripper.enabled);
     }
 
@@ -515,7 +544,7 @@ int main(void)
         assert(!test_target.arm.enabled);
         assert(test_target.arm.m3508_enabled);
         assert(!test_target.arm.j4310_commanded);
-        assert(!test_target.conveyor.enabled);
+        assert(!test_target.gate.enabled);
         assert(!test_target.gripper.enabled);
     }
 
@@ -616,7 +645,7 @@ int main(void)
     assert(frame[11] == 0U);
 
     frame_size = UpperPcLink_BuildMotorFault(&link,
-                                              (uint8_t)MOTOR_MODEL_J4310,
+                                              TEST_MOTOR_MODEL_J4310,
                                               1U,
                                               0x06U,
                                               0x0BU,
@@ -625,51 +654,56 @@ int main(void)
                                               TEST_FRAME_CAPACITY);
     assert(frame_size > 0U);
     assert(frame[3] == PC_MSG_FAULT);
-    assert(frame[8] == (uint8_t)MOTOR_MODEL_J4310);
+    assert(frame[8] == TEST_MOTOR_MODEL_J4310);
     assert(frame[9] == 1U);
     assert(frame[10] == 0x06U);
     assert(frame[11] == 0x0BU);
 
-    frame_size = UpperPcLink_BuildState(&link,
-                                         &(upper_robot_t){0},
-                                         110U,
-                                         true,
-                                         1.25f,
-                                         123U,
-                                         &(upper_j4310_rx_diagnostic_t)
-                                         {
-                                             .accepted_frames = 100U,
-                                             .rejected_format_frames = 4U,
-                                             .rejected_master_id_frames = 5U,
-                                             .rejected_feedback_id_frames = 6U,
-                                             .last_can_id = 0x016U,
-                                             .last_dlc = 8U,
-                                             .last_data0 = 0x06U,
-                                             .last_result = 1U
-                                         },
-                                         &(upper_j4310_tx_diagnostic_t)
-                                         {
-                                             .attempted_frames = 120U,
-                                             .queued_frames = 118U,
-                                             .failed_frames = 2U,
-                                             .enable_frames = 5U,
-                                             .mit_frames = 110U,
-                                             .disable_frames = 3U,
-                                             .last_can_id = 0x006U,
-                                             .last_dlc = 8U,
-                                             .last_data7 = 0xFCU,
-                                             .enable_confirmed = true,
-                                             .feedback_state = 0x01U
-                                         },
-                                         &(upper_j4310_auto_return_status_t)
-                                         {
-                                             .available = true,
-                                             .enabled = true,
-                                             .active = true,
-                                             .stage = 2U
-                                         },
-                                         frame,
-                                         TEST_FRAME_CAPACITY);
+    frame_size = UpperPcLink_BuildState(
+        &link,
+        &(upper_pc_state_t)
+        {
+            .j4310_position_valid = true,
+            .j4310_position_rad = 1.25f,
+            .j4310_bus_rx_frames = 123U,
+            .j4310_rx_valid = true,
+            .j4310_rx =
+            {
+                .accepted_frames = 100U,
+                .rejected_format_frames = 4U,
+                .rejected_master_id_frames = 5U,
+                .rejected_feedback_id_frames = 6U,
+                .last_can_id = 0x016U,
+                .last_dlc = 8U,
+                .last_data0 = 0x06U,
+                .last_result = 1U
+            },
+            .j4310_tx_valid = true,
+            .j4310_tx =
+            {
+                .attempted_frames = 120U,
+                .queued_frames = 118U,
+                .failed_frames = 2U,
+                .enable_frames = 5U,
+                .mit_frames = 110U,
+                .disable_frames = 3U,
+                .last_can_id = 0x006U,
+                .last_dlc = 8U,
+                .last_data7 = 0xFCU,
+                .enable_confirmed = true,
+                .feedback_state = 0x01U
+            },
+            .j4310_auto_return =
+            {
+                .available = true,
+                .enabled = true,
+                .active = true,
+                .stage = 2U
+            }
+        },
+        110U,
+        frame,
+        TEST_FRAME_CAPACITY);
     assert(frame_size > 0U);
     assert(frame[3] == PC_MSG_ROBOT_STATE);
     assert(frame[6] == 84U);
@@ -705,9 +739,9 @@ int main(void)
 
     frame_size = UpperPcLink_BuildDjiTelemetry(
                      &link,
-                     &(upper_dji_diagnostic_t)
+                     &(upper_pc_dji_telemetry_t)
                      {
-                         MOTOR_MODEL_M2006,
+                         TEST_MOTOR_MODEL_M2006,
                          3U,
                          1U,
                          true,
@@ -724,7 +758,7 @@ int main(void)
     assert(frame[3] == PC_MSG_DJI_TELEMETRY);
     assert(frame[6] == 28U);
     assert(frame[7] == 0U);
-    assert(frame[8] == (uint8_t)MOTOR_MODEL_M2006);
+    assert(frame[8] == TEST_MOTOR_MODEL_M2006);
     assert(frame[9] == 3U);
     assert(frame[10] == 1U);
     assert(frame[11] == 0x07U);

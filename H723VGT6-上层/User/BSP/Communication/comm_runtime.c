@@ -1,8 +1,13 @@
+/**
+ * @file comm_runtime.c
+ * @brief 实现 UART、SPI、FDCAN 通信运行时及 DMA 缓存维护。
+ */
+
 #include "comm_runtime.h"
 
 #include <string.h>
 
-#include "can_id.h"
+#include "bsp_can.h"
 #include "fdcan.h"
 #include "fdcan_dlc.h"
 #include "spi.h"
@@ -285,8 +290,8 @@ static void ProcessUartChannel(uint32_t index)
   uint32_t pending;
 
   channel = &uart_channels[index];
-  /* DMA channels keep a circular buffer; interrupt-only channels contain one
-     complete idle-delimited packet and are rearmed after it is consumed. */
+  /* DMA 通道使用环形缓冲区；仅中断通道包含一个由空闲线界定的完整数据包，
+     数据包处理完毕后重新启动接收。 */
   if (channel->use_dma && (channel->restart_requested != 0U))
   {
     comm_uart_restart_count[index]++;
@@ -512,6 +517,7 @@ bool CommRuntime_Spi3Transmit(const uint8_t *data, uint16_t size)
   return HAL_SPI_Transmit(&hspi3, (uint8_t *)data, size, 2U) == HAL_OK;
 }
 
+/* 功能：检查 SPI3 发送通道是否空闲；用途：避免在 DMA 发送期间覆盖缓冲区；返回 true 表示可以提交新数据。 */
 bool CommRuntime_Spi3TxReady(void)
 {
   return HAL_SPI_GetState(&hspi3) == HAL_SPI_STATE_READY;

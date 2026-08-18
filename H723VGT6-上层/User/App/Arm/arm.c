@@ -1,17 +1,27 @@
+/**
+ * @file arm.c
+ * @brief 实现机械臂目标校验、控制量计算和电机命令下发。
+ */
+
 #include "arm.h"
 
 #include <math.h>
 #include <string.h>
 
-#include "can_id.h"
+#include "bsp_can.h"
 #include "j4310.h"
 #include "m3508.h"
-#include "upper_config.h"
 
 /* 功能：检查数值是否有限且位于正负限制内；用途：校验机械臂目标；返回 true 表示输入安全有效。 */
 static bool Arm_ValueWithin(float value, float limit)
 {
     return isfinite(value) && (value >= -limit) && (value <= limit);
+}
+
+/* 功能：检查位置是否位于机构的单向安全区间；用途：限制上位机和遥控目标；返回 true 表示目标可执行。 */
+static bool Arm_PositionWithin(float value, float minimum, float maximum)
+{
+    return isfinite(value) && (value >= minimum) && (value <= maximum);
 }
 
 /* 功能：检查数值是否为有限浮点数；用途：过滤机械臂命令中的异常值；返回 true 表示数值有效。 */
@@ -91,7 +101,9 @@ bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
     {
         if (position_mode)
         {
-            if (!Arm_ValueFinite(target->m3508_pos_rad[index]))
+            if (!Arm_PositionWithin(target->m3508_pos_rad[index],
+                                    UPPER_M3508_POSITION_MIN_RAD,
+                                    UPPER_M3508_POSITION_MAX_RAD))
             {
                 return false;
             }
@@ -195,9 +207,8 @@ bool Arm_Apply(motor_manager_t *manager, const arm_output_t *output)
         }
     }
 
-    /* Stage every arm target before the manager's single-cycle CAN dispatch.
-     * This keeps J4310 and both M3508 targets from being treated as separate
-     * control requests even though their CAN frames use different buses. */
+    /* 在管理器执行单周期 CAN 下发前，先暂存机械臂的全部目标。
+     * 即使 J4310 和两台 M3508 使用不同 CAN 总线，也要将它们作为同一组控制请求处理。 */
     success = MotorManager_SetCmd(manager,
                                   UPPER_MOTOR_ARM_J4310,
                                   &output->j4310);

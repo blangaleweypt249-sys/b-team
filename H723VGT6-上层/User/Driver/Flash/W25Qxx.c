@@ -20,7 +20,6 @@
 #define W25Q_STATUS_WEL_MASK           0x02U
 #define W25Q_DUMMY_BYTE                0xFFU
 #define W25Q_KB_SIZE_BYTE              1024UL
-#define W25Q_POLL_INTERVAL_MS          1U
 #define W25Q_ADDR_HIGH_SHIFT           16U
 #define W25Q_ADDR_MID_SHIFT            8U
 #define W25Q_ID_MFR_SHIFT              16U
@@ -123,6 +122,7 @@ w25q_handle_t *W25Q_PortGetDevice(void)
     return &w25q_device;
 }
 
+/* 功能：读取 W25Q 板级端口初始化状态；用途：向上层报告 Flash 初始化结果；返回值表示当前初始化状态。 */
 w25q_status_t W25Q_PortGetInitStatus(void)
 {
     return w25q_port_init_status;
@@ -806,8 +806,8 @@ static w25q_status_t W25Q_WaitReady(w25q_handle_t *dev)
             return W25Q_ERROR_TIMEOUT;
         }
 
-        dev->delay_ms(W25Q_POLL_INTERVAL_MS);
-        waited_ms += W25Q_POLL_INTERVAL_MS;
+        dev->delay_ms(1U);
+        waited_ms += 1U;
     }
 
     return W25Q_ERROR_TIMEOUT;
