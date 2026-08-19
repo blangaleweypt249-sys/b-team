@@ -6,12 +6,11 @@
     — fastlio_mapping    (FAST-LIO 里程计, /Odometry)  [延迟 3s 内部启动]
 
   阶段 2 (6s) : 感知节点模块
-    — usb_camera_node        (USB 相机,金球后方朝向, /camera/image_raw)
     — orbbec_camera_node     (Orbbec RGB-D,块朝向正前方, /orbbec/color + /orbbec/depth)
-    — ball_distance_node     (金球检测+融合测距, /perception/ball_position)  [延迟 2s]
     — block_distance_node    (块IOU跟踪+单块输出(不分色), /perception/block_position, 仅block/special1/special2区)  [延迟 2s]
     — field_localizer        (场地定位, /competition/field_pose + /competition/current_zone, 统一使用field.yaml, 内部坐标系不变)  [延迟 3s]
     — field_visualizer       (RViz 场地可视化)  [延迟 3s]
+    注: 金球检测默认不启动(需 enable_ball:=true 才跑),总启动只跑块检测+定位
 
   阶段 3 (12s): 信息发布模块（串口网关,两套独立可执行文件）
     — team=blue: serial_gateway       (蓝方, /dev/ttyUSB0 → STM32, X 原样发送, 50Hz/类 100Hz)
@@ -20,9 +19,9 @@
 通信连接建立顺序：
   /livox/lidar  ──→  fastlio_mapping  ──→  /Odometry  ──→  field_localizer  ──→  /competition/field_pose ──┐
                                                                                                              │
-  usb_camera ──→ ball_distance_node  ──→  /perception/ball_position  ──────────────────────────────────────────┤──→  serial_gateway(_red)  ──→  STM32
+  orbbec_cam  ──→ block_distance_node ──→  /perception/block_position (单块,IOU确认,只在块/特殊区)  ────────────┤──→  serial_gateway(_red)  ──→  STM32
                                                                                                              │
-  orbbec_cam  ──→ block_distance_node ──→  /perception/block_position (单块,IOU确认,只在块/特殊区)  ────────────┘
+  [enable_ball:=true 时才跑]  usb_camera ──→ ball_distance_node ──→ /perception/ball_position ─────────────────┘
 
 错误处理：
   - livox 驱动退出 → 关闭整个系统（所有模块依赖雷达数据）
@@ -39,10 +38,12 @@
   serial_device:=/dev/ttyUSB0   串口设备路径
   baudrate:=921600              串口波特率 (9600/57600/115200/460800/921600)
   team:=blue|red                队伍: blue=串口X原样; red=串口位置帧X取反(两套独立cpp executable)
+  enable_ball:=false            是否启动金球检测(默认false,总启动不跑球;true=启动USB相机+ball_distance_node)
 
 独立模块启动命令：
   ros2 launch common_launch_pkg lidar_driver.launch.py                    # 雷达驱动+里程计
-  ros2 launch common_launch_pkg perception_nodes.launch.py                # 感知节点(team:=red选红方串口)
+  ros2 launch common_launch_pkg perception_nodes.launch.py                # 感知节点(默认不跑球)
+  ros2 launch common_launch_pkg perception_nodes.launch.py enable_ball:=true  # 单独测球时打开
   ros2 launch common_launch_pkg serial_gateway.launch.py                  # 仅蓝方串口网关
   ros2 launch common_launch_pkg serial_gateway_red.launch.py              # 仅红方串口网关(写死X取反)
 """
@@ -65,6 +66,7 @@ def generate_launch_description():
     serial_device = LaunchConfiguration('serial_device')
     baudrate = LaunchConfiguration('baudrate')
     team = LaunchConfiguration('team')
+    enable_ball = LaunchConfiguration('enable_ball')
 
     # ---- 声明启动参数 ----
     declare_rviz_cmd = DeclareLaunchArgument(
@@ -86,6 +88,10 @@ def generate_launch_description():
     declare_team_cmd = DeclareLaunchArgument(
         'team', default_value='blue',
         description='队伍: blue=蓝方 serial_gateway(X原样); red=红方 serial_gateway_red(位置帧X写死取反,内部坐标不变)'
+    )
+    declare_enable_ball_cmd = DeclareLaunchArgument(
+        'enable_ball', default_value='false',
+        description='是否启动金球检测(默认false,总启动不跑球;true=启动USB相机+ball_distance_node)'
     )
 
     # ---- 模块 launch 文件路径 ----
@@ -116,13 +122,17 @@ def generate_launch_description():
     )
 
     # ---- 阶段 2: 感知节点模块（延迟 6 秒，等待 FAST-LIO 里程计就绪）----
+    # enable_ball 默认 false → 总启动不跑金球;需测球时 enable_ball:=true
     stage2_perception = TimerAction(
         period=6.0,
         actions=[
             LogInfo(msg='========== [集成启动] 阶段 2/3: 启动感知节点模块 =========='),
             IncludeLaunchDescription(
                 perception_launch,
-                launch_arguments={'team': team}.items(),
+                launch_arguments={
+                    'team': team,
+                    'enable_ball': enable_ball,
+                }.items(),
             ),
         ],
     )
@@ -153,15 +163,17 @@ def generate_launch_description():
     ld.add_action(declare_serial_cmd)
     ld.add_action(declare_baudrate_cmd)
     ld.add_action(declare_team_cmd)
+    ld.add_action(declare_enable_ball_cmd)
 
     # 启动概要日志
     ld.add_action(LogInfo(msg=''))
     ld.add_action(LogInfo(msg='============================================================'))
     ld.add_action(LogInfo(msg='  系统集成启动 — 比赛感知与串口通信系统'))
     ld.add_action(LogInfo(msg=['  队伍: ', team, ' (blue=串口X原样, red=串口X取反,内部坐标系不变)']))
+    ld.add_action(LogInfo(msg=['  金球检测: ', enable_ball, ' (false=总启动不跑球, true=启动USB相机+ball_distance_node)']))
     ld.add_action(LogInfo(msg='============================================================'))
     ld.add_action(LogInfo(msg='  阶段 1 (0s) :  雷达驱动 + FAST-LIO 里程计'))
-    ld.add_action(LogInfo(msg='  阶段 2 (6s) :  感知节点 (统一field.yaml定位 + 球检测 + IOU单块跟踪(仅块/特殊区))'))
+    ld.add_action(LogInfo(msg='  阶段 2 (6s) :  感知节点 (统一field.yaml定位 + IOU单块跟踪(仅块/特殊区);金球按enable_ball条件)'))
     ld.add_action(LogInfo(msg='  阶段 3 (12s):  串口网关 (信息发布 → STM32, blue/red 用两套独立C++ executable)'))
     ld.add_action(LogInfo(msg='============================================================'))
     ld.add_action(LogInfo(msg=''))
