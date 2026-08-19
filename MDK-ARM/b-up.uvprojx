@@ -341,7 +341,7 @@
               <MiscControls></MiscControls>
               <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H723xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../user/Action_api;../user/chassis_vesc;../user/com_link;../user/motor;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include</IncludePath>
+              <IncludePath>../Core/Inc;../user/Action_api;../user/chassis_vesc;../user/com_link;../user/motor;../user/path;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/RTOS2/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1386,6 +1386,16 @@
               <FileName>auto_chassis.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\user\chassis_vesc\auto_chassis.h</FilePath>
+            </File>
+            <File>
+              <FileName>path_main.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\path\path_main.c</FilePath>
+            </File>
+            <File>
+              <FileName>path_main.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\path\path_main.h</FilePath>
             </File>
             <File>
               <FileName>imu_main.c</FileName>

@@ -44,6 +44,8 @@
 "b-up\port.o"
 "b-up\up_main.o"
 "b-up\chassis_main.o"
+"b-up\auto_chassis.o"
+"b-up\path_main.o"
 "b-up\imu_main.o"
 "b-up\action_api.o"
 "b-up\fdcan_task.o"
@@ -56,6 +58,7 @@
 "b-up\dt35_pnp_link_1.o"
 "b-up\lora_link.o"
 "b-up\mcu_link.o"
+"b-up\sc_link.o"
 "b-up\imu_1.o"
 --strict --scatter "b-up\b-up.sct"
 --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols

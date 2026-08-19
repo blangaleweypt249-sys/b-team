@@ -34,6 +34,7 @@
 #include "imu_main.h"
 #include "lora_link.h"
 #include "mcu_link.h"
+#include "path_main.h"
 #include "sc_link.h"
 #include "up_main.h"
 #include "usart.h"
@@ -286,6 +287,7 @@ __weak void StartCommTask(void *argument)
   (void)McuLink_Init(&huart6);
   (void)ScLink_Init(&huart8);
   AutoChassis_Init();
+  PathMain_Init();
 
   /* Infinite loop */
   for(;;)
@@ -302,6 +304,7 @@ __weak void StartCommTask(void *argument)
                                lora_remote_online);
     ComputerLink_Run();
     AutoChassis_Run();
+    PathMain_Run(lora_remote_buttons, lora_remote_online);
     osDelay(1);
   }
   /* USER CODE END StartCommTask */

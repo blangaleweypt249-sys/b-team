@@ -308,7 +308,7 @@ void AutoChassis_Run(void)
     {
         AutoChassis_RunAlignment(now_ms, state);
     }
-    else
+    else if (state != AUTO_CHASSIS_MANUAL)
     {
         Chassis_ReleaseVelocity(CHASSIS_CMD_SOURCE_AUTONOMOUS);
     }

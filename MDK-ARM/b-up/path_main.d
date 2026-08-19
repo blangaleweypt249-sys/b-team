@@ -1,16 +1,8 @@
-b-up/freertos.o: ..\Core\Src\freertos.c \
-  ..\Middlewares\Third_Party\FreeRTOS\Source\include\FreeRTOS.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stddef.h \
+b-up/path_main.o: ..\user\path\path_main.c ..\user\path\path_main.h \
+  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdint.h \
-  ..\Core\Inc\FreeRTOSConfig.h \
-  ..\Middlewares\Third_Party\FreeRTOS\Source\include\projdefs.h \
-  ..\Middlewares\Third_Party\FreeRTOS\Source\include\portable.h \
-  ..\Middlewares\Third_Party\FreeRTOS\Source\include\deprecated_definitions.h \
-  ..\Middlewares\Third_Party\FreeRTOS\Source\portable\RVDS\ARM_CM4F\portmacro.h \
-  ..\Middlewares\Third_Party\FreeRTOS\Source\include\mpu_wrappers.h \
-  ..\Middlewares\Third_Party\FreeRTOS\Source\include\task.h \
-  ..\Middlewares\Third_Party\FreeRTOS\Source\include\list.h \
-  ..\Core\Inc\main.h ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
+  ..\user\chassis_vesc\auto_chassis.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
   ..\Core\Inc\stm32h7xx_hal_conf.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_def.h \
@@ -24,6 +16,7 @@ b-up/freertos.o: ..\Core\Src\freertos.c \
   ..\Drivers\CMSIS\Include\cachel1_armv7.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\system_stm32h7xx.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\Legacy\stm32_hal_legacy.h \
+  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stddef.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\math.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_gpio.h \
@@ -45,14 +38,6 @@ b-up/freertos.o: ..\Core\Src\freertos.c \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
-  ..\Drivers\CMSIS\RTOS2\Include\cmsis_os2.h \
-  ..\user\Action_api\action_api.h ..\user\chassis_vesc\auto_chassis.h \
   ..\user\chassis_vesc\chassis_main.h ..\user\chassis_vesc\vesc_motor.h \
-  ..\user\chassis_vesc\vesc_can.h ..\Core\Inc\fdcan.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
-  ..\user\com_link\computer_link.h ..\user\com_link\dt35_pnp_link.h \
-  ..\user\chassis_vesc\imu_main.h ..\user\com_link\lora_link.h \
-  ..\user\com_link\mcu_link.h ..\user\path\path_main.h \
-  ..\user\com_link\sc_link.h ..\user\motor\up_main.h \
-  ..\user\motor\rs_app.h ..\user\motor\rs00.h ..\user\motor\rs_bus.h \
-  ..\Core\Inc\usart.h ..\Core\Inc\gpio.h
+  ..\user\chassis_vesc\vesc_can.h ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
+  ..\user\com_link\dt35_pnp_link.h ..\user\chassis_vesc\imu_main.h
