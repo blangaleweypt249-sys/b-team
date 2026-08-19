@@ -24,6 +24,7 @@
 #define CHASSIS_RX_DRAIN_MAX       32U
 
 #define CHASSIS_ROTATION_SCALE     (3.5f + 3.30f)
+#define CHASSIS_LEGACY_TIMEOUT_MS  500U
 
 typedef enum
 {
@@ -33,6 +34,16 @@ typedef enum
     CHASSIS_MOTION_STOPPING,
     CHASSIS_MOTION_EMERGENCY_STOP
 } chassis_motion_state_t;
+
+typedef struct
+{
+    int16_t vx;
+    int16_t vy;
+    int16_t z;
+    uint32_t updated_ms;
+    uint32_t timeout_ms;
+    bool active;
+} chassis_command_t;
 
 static const vesc_motor_config_t chassis_motor_cfg[] =
 {
@@ -73,6 +84,10 @@ static uint32_t chassis_ramp_begin_ms;
 static int32_t chassis_stop_start_rpm[CHASSIS_WHEEL_COUNT];
 static bool chassis_ready;
 static volatile bool chassis_emergency_stop;
+static chassis_command_t chassis_commands[CHASSIS_CMD_SOURCE_COUNT];
+static volatile int8_t chassis_active_source = -1;
+static volatile chassis_control_mode_t chassis_control_mode =
+    CHASSIS_CONTROL_MANUAL;
 
 volatile int16_t chassis_target_vx = 0;
 volatile int16_t chassis_target_vy = 0;
@@ -301,18 +316,42 @@ HAL_StatusTypeDef Chassis_Init(void)
  */
 HAL_StatusTypeDef Chassis_SetVelocity(int16_t vx, int16_t vy, int16_t z)
 {
+    return Chassis_RequestVelocity(CHASSIS_CMD_SOURCE_COMPUTER,
+                                   vx, vy, z,
+                                   CHASSIS_LEGACY_TIMEOUT_MS);
+}
+
+HAL_StatusTypeDef Chassis_RequestVelocity(chassis_cmd_source_t source,
+                                          int16_t vx, int16_t vy, int16_t z,
+                                          uint32_t timeout_ms)
+{
     uint32_t primask;
 
-    if (!chassis_ready)
+    if (!chassis_ready || (source >= CHASSIS_CMD_SOURCE_COUNT) ||
+        (timeout_ms == 0U))
     {
         return HAL_ERROR;
     }
 
     primask = __get_PRIMASK();
     __disable_irq();
-    chassis_target_vx = vx;
-    chassis_target_vy = vy;
-    chassis_target_z = z;
+    if (((source == CHASSIS_CMD_SOURCE_AUTONOMOUS) &&
+         (chassis_control_mode != CHASSIS_CONTROL_AUTONOMOUS)) ||
+        ((source != CHASSIS_CMD_SOURCE_AUTONOMOUS) &&
+         (chassis_control_mode != CHASSIS_CONTROL_MANUAL)))
+    {
+        if (primask == 0U)
+        {
+            __enable_irq();
+        }
+        return HAL_BUSY;
+    }
+    chassis_commands[source].vx = vx;
+    chassis_commands[source].vy = vy;
+    chassis_commands[source].z = z;
+    chassis_commands[source].updated_ms = HAL_GetTick();
+    chassis_commands[source].timeout_ms = timeout_ms;
+    chassis_commands[source].active = true;
     if ((vx != 0) || (vy != 0) || (z != 0))
     {
         chassis_emergency_stop = false;
@@ -322,6 +361,74 @@ HAL_StatusTypeDef Chassis_SetVelocity(int16_t vx, int16_t vy, int16_t z)
         __enable_irq();
     }
     return HAL_OK;
+}
+
+void Chassis_ReleaseVelocity(chassis_cmd_source_t source)
+{
+    uint32_t primask;
+
+    if (source >= CHASSIS_CMD_SOURCE_COUNT)
+    {
+        return;
+    }
+
+    primask = __get_PRIMASK();
+    __disable_irq();
+    chassis_commands[source].active = false;
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+}
+
+bool Chassis_GetActiveSource(chassis_cmd_source_t *source)
+{
+    int8_t active_source;
+
+    if (source == NULL)
+    {
+        return false;
+    }
+    active_source = chassis_active_source;
+    if (active_source < 0)
+    {
+        return false;
+    }
+    *source = (chassis_cmd_source_t)active_source;
+    return true;
+}
+
+void Chassis_SetControlMode(chassis_control_mode_t mode)
+{
+    uint32_t primask;
+
+    if ((mode != CHASSIS_CONTROL_MANUAL) &&
+        (mode != CHASSIS_CONTROL_AUTONOMOUS))
+    {
+        return;
+    }
+
+    primask = __get_PRIMASK();
+    __disable_irq();
+    chassis_control_mode = mode;
+    if (mode == CHASSIS_CONTROL_MANUAL)
+    {
+        chassis_commands[CHASSIS_CMD_SOURCE_AUTONOMOUS].active = false;
+    }
+    else
+    {
+        chassis_commands[CHASSIS_CMD_SOURCE_COMPUTER].active = false;
+        chassis_commands[CHASSIS_CMD_SOURCE_LORA].active = false;
+    }
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+}
+
+chassis_control_mode_t Chassis_GetControlMode(void)
+{
+    return chassis_control_mode;
 }
 
 /**
@@ -342,6 +449,7 @@ void Chassis_Run1ms(void)
     bool motion_requested;
     bool send_now = false;
     uint8_t i;
+    int8_t source;
 
     if (!chassis_ready)
     {
@@ -353,9 +461,31 @@ void Chassis_Run1ms(void)
 
     primask = __get_PRIMASK();
     __disable_irq();
-    vx = chassis_target_vx;
-    vy = chassis_target_vy;
-    z = chassis_target_z;
+    vx = 0;
+    vy = 0;
+    z = 0;
+    chassis_active_source = -1;
+    for (source = (int8_t)CHASSIS_CMD_SOURCE_COUNT - 1;
+         source >= 0; source--)
+    {
+        chassis_command_t *command = &chassis_commands[(uint8_t)source];
+
+        if (command->active &&
+            ((now_ms - command->updated_ms) > command->timeout_ms))
+        {
+            command->active = false;
+        }
+        if (command->active && (chassis_active_source < 0))
+        {
+            vx = command->vx;
+            vy = command->vy;
+            z = command->z;
+            chassis_active_source = source;
+        }
+    }
+    chassis_target_vx = vx;
+    chassis_target_vy = vy;
+    chassis_target_z = z;
     emergency_stop = chassis_emergency_stop;
     if (primask == 0U)
     {
@@ -501,6 +631,7 @@ void Chassis_Run1ms(void)
 void Chassis_StopAll(void)
 {
     uint32_t primask;
+    uint8_t i;
 
     if (!chassis_ready)
     {
@@ -512,6 +643,11 @@ void Chassis_StopAll(void)
     chassis_target_vx = 0;
     chassis_target_vy = 0;
     chassis_target_z = 0;
+    chassis_active_source = -1;
+    for (i = 0U; i < CHASSIS_CMD_SOURCE_COUNT; i++)
+    {
+        chassis_commands[i].active = false;
+    }
     chassis_emergency_stop = true;
     if (primask == 0U)
     {

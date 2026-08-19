@@ -32,6 +32,7 @@
 #include "imu_main.h"
 #include "lora_link.h"
 #include "mcu_link.h"
+#include "sc_link.h"
 
 /* USER CODE END Includes */
 
@@ -245,6 +246,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
   LoraLink_HandleTxCplt(huart);
   McuLink_HandleTxCplt(huart);
+  ScLink_HandleTxCplt(huart);
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
@@ -254,6 +256,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
   ImuMain_HandleUartError(huart);
   LoraLink_HandleUartError(huart);
   McuLink_HandleUartError(huart);
+  ScLink_HandleUartError(huart);
 }
 
 /* USER CODE END 4 */

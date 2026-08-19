@@ -250,7 +250,9 @@ void ComputerLink_Run(void)
 
     if (has_command)
     {
-        (void)Chassis_SetVelocity(cmd.vx, cmd.vy, cmd.z);
+        (void)Chassis_RequestVelocity(CHASSIS_CMD_SOURCE_COMPUTER,
+                                      cmd.vx, cmd.vy, cmd.z,
+                                      COMPUTER_LINK_TIMEOUT_MS);
     }
     if (has_action)
     {
@@ -264,7 +266,7 @@ void ComputerLink_Run(void)
     if (link_online && ((now_ms - last_rx_ms) > COMPUTER_LINK_TIMEOUT_MS))
     {
         link_online = false;
-        Chassis_StopAll();
+        Chassis_ReleaseVelocity(CHASSIS_CMD_SOURCE_COMPUTER);
     }
 }
 

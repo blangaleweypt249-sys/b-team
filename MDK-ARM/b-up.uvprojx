@@ -1378,6 +1378,16 @@
               <FilePath>..\user\chassis_vesc\chassis_main.h</FilePath>
             </File>
             <File>
+              <FileName>auto_chassis.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\chassis_vesc\auto_chassis.c</FilePath>
+            </File>
+            <File>
+              <FileName>auto_chassis.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\chassis_vesc\auto_chassis.h</FilePath>
+            </File>
+            <File>
               <FileName>imu_main.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\user\chassis_vesc\imu_main.c</FilePath>
@@ -1511,6 +1521,16 @@
               <FileName>mcu_link.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\user\com_link\mcu_link.h</FilePath>
+            </File>
+            <File>
+              <FileName>sc_link.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\com_link\sc_link.c</FilePath>
+            </File>
+            <File>
+              <FileName>sc_link.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\com_link\sc_link.h</FilePath>
             </File>
           </Files>
         </Group>

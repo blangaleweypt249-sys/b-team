@@ -46,6 +46,8 @@ static uint32_t remote_frame_last_rx_ms;
 static uint32_t remote_last_rx_ms;
 static uint8_t mcu_return_buffer[MCU_RETURN_BUFFER_SIZE];
 static uint16_t mcu_return_length;
+static bool remote_pe0_initialized;
+static uint8_t remote_pe0_last;
 
 volatile uint32_t lora_link_rx_bytes;
 volatile uint32_t lora_link_uart_error_count;
@@ -123,7 +125,26 @@ static void LoraLink_HandleLocalPayload(const uint8_t *payload)
         ((payload[5] & REMOTE_PD6_SWITCH_BIT) != 0U) ? 1U : 0U;
     lora_remote_online = 1U;
     remote_last_rx_ms = HAL_GetTick();
-    (void)Chassis_SetVelocity(vx, vy, z);
+    if (!remote_pe0_initialized)
+    {
+        remote_pe0_last = lora_remote_pe0_switch;
+        remote_pe0_initialized = true;
+    }
+    else if (remote_pe0_last != lora_remote_pe0_switch)
+    {
+        remote_pe0_last = lora_remote_pe0_switch;
+        Chassis_SetControlMode(CHASSIS_CONTROL_MANUAL);
+    }
+
+    if (Chassis_GetControlMode() == CHASSIS_CONTROL_MANUAL)
+    {
+        (void)Chassis_RequestVelocity(CHASSIS_CMD_SOURCE_LORA,
+                                      vx, vy, z, REMOTE_TIMEOUT_MS);
+    }
+    else
+    {
+        Chassis_ReleaseVelocity(CHASSIS_CMD_SOURCE_LORA);
+    }
 }
 
 static void LoraLink_ResetRemoteFrame(void)
@@ -271,6 +292,8 @@ HAL_StatusTypeDef LoraLink_Init(UART_HandleTypeDef *uart)
     lora_remote_pe0_switch = 0U;
     lora_remote_pd6_switch = 0U;
     lora_remote_online = 0U;
+    remote_pe0_initialized = false;
+    remote_pe0_last = 0U;
     LoraLink_ResetRemoteFrame();
     remote_last_rx_ms = 0U;
     mcu_return_length = 0U;
@@ -327,7 +350,8 @@ void LoraLink_Run(void)
         lora_remote_buttons = 0U;
         lora_remote_pe0_switch = 0U;
         lora_remote_pd6_switch = 0U;
-        (void)Chassis_SetVelocity(0, 0, 0);
+        remote_pe0_initialized = false;
+        Chassis_ReleaseVelocity(CHASSIS_CMD_SOURCE_LORA);
     }
 }
 

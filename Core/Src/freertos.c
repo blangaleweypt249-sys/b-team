@@ -27,12 +27,14 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "action_api.h"
+#include "auto_chassis.h"
 #include "chassis_main.h"
 #include "computer_link.h"
 #include "dt35_pnp_link.h"
 #include "imu_main.h"
 #include "lora_link.h"
 #include "mcu_link.h"
+#include "sc_link.h"
 #include "up_main.h"
 #include "usart.h"
 #include "gpio.h"
@@ -282,6 +284,8 @@ __weak void StartCommTask(void *argument)
   (void)DT35PnpLink_Init(&huart9);
   (void)LoraLink_Init(&huart7);
   (void)McuLink_Init(&huart6);
+  (void)ScLink_Init(&huart8);
+  AutoChassis_Init();
 
   /* Infinite loop */
   for(;;)
@@ -289,15 +293,15 @@ __weak void StartCommTask(void *argument)
     DT35PnpLink_Run();
     LoraLink_Run();
     McuLink_Run();
+    ScLink_Run();
     Action_UpdatePnp(pnp_link[SENSOR_LINK_F_INDEX].trigger,
                      pnp_link[SENSOR_LINK_L_B_INDEX].trigger);
     Action_UpdateAlignSwitch(lora_remote_pd6_switch,
                              lora_remote_online);
-    Action_UpdateLiftSwitch(lora_remote_pe0_switch,
-                            lora_remote_online);
     Action_UpdateRemoteButtons(lora_remote_buttons,
                                lora_remote_online);
     ComputerLink_Run();
+    AutoChassis_Run();
     osDelay(1);
   }
   /* USER CODE END StartCommTask */
@@ -307,4 +311,3 @@ __weak void StartCommTask(void *argument)
 /* USER CODE BEGIN Application */
 
 /* USER CODE END Application */
-
