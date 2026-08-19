@@ -7,11 +7,11 @@
 启动内容：
   1. lidar 驱动 + FAST-LIO 由 lidar_driver.launch.py 单独启动,本文件不重复。
      本文件依赖 /Odometry 已发布。
-  2. fyt_pos (field_localizer + field_visualizer)
+  2. fyt_pos (field_localizer)   
      — 订阅 /Odometry,发布 /competition/field_pose, /competition/current_zone
   3. block_perception (orbbec_camera_node + block_distance_node)
      — 只在 block/special1/special2 区域内检测块
-     — 发布 /perception/block_position, /perception/block_overlay
+     — 发布 /perception/block_position
 
 启动顺序：
   阶段 0s : Orbbec 相机

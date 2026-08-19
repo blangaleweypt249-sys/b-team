@@ -16,13 +16,11 @@
   ros2 launch common_launch_pkg lidar_driver.launch.py
 
 可选参数：
-  rviz:=true    启动 RViz 可视化（默认 false）
   xfer_format:=0  雷达点云格式 0=PointCloud2, 1=CustomMsg（默认 0，兼容球检测节点）
 """
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, RegisterEventHandler, EmitEvent, TimerAction
-from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -31,13 +29,8 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    rviz_use = LaunchConfiguration('rviz')
     xfer_format = LaunchConfiguration('xfer_format')
 
-    declare_rviz_cmd = DeclareLaunchArgument(
-        'rviz', default_value='false',
-        description='启动 RViz 可视化'
-    )
     declare_xfer_format_cmd = DeclareLaunchArgument(
         'xfer_format', default_value='0',
         description='点云格式: 0=PointCloud2(兼容球检测), 1=CustomMsg(FAST-LIO原生)'
@@ -70,9 +63,6 @@ def generate_launch_description():
     fastlio_config = PathJoinSubstitution([
         FindPackageShare('fast_lio'), 'config', 'mid360.yaml',
     ])
-    fastlio_rviz_cfg = PathJoinSubstitution([
-        FindPackageShare('fast_lio'), 'rviz', 'fastlio.rviz',
-    ])
 
     fastlio_node = Node(
         package='fast_lio',
@@ -80,15 +70,6 @@ def generate_launch_description():
         name='fastlio_mapping',
         output='screen',
         parameters=[fastlio_config, {'use_sim_time': False}],
-    )
-
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        arguments=['-d', fastlio_rviz_cfg],
-        condition=IfCondition(rviz_use),
     )
 
     # ---- 错误处理：livox 驱动退出时关闭整个系统 ----
@@ -113,7 +94,6 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    ld.add_action(declare_rviz_cmd)
     ld.add_action(declare_xfer_format_cmd)
 
     # 阶段 1: 立即启动雷达驱动
@@ -128,7 +108,6 @@ def generate_launch_description():
             LogInfo(msg='[雷达驱动] 正在启动 FAST-LIO 里程计...'),
             fastlio_node,
             fastlio_exit_handler,
-            rviz_node,
             LogInfo(msg='[雷达驱动] FAST-LIO 已启动，等待里程计数据 /Odometry'),
         ],
     ))

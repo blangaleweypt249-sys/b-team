@@ -9,7 +9,6 @@
     — orbbec_camera_node     (Orbbec RGB-D,块朝向正前方, /orbbec/color + /orbbec/depth)
     — block_distance_node    (块IOU跟踪+单块输出(不分色), /perception/block_position, 仅block/special1/special2区)  [延迟 2s]
     — field_localizer        (场地定位, /competition/field_pose + /competition/current_zone, 统一使用field.yaml, 内部坐标系不变)  [延迟 3s]
-    — field_visualizer       (RViz 场地可视化)  [延迟 3s]
 
   阶段 3 (12s): 信息发布模块（串口网关,两套独立可执行文件）
     — team=blue: serial_gateway       (蓝方, /dev/ttyUSB0 → STM32, X 原样发送, 50Hz/类 100Hz)
@@ -30,7 +29,6 @@
   ros2 launch common_launch_pkg common_launch.py team:=red        # 红方 (串口层X取反,内部不变)
 
 可选参数：
-  rviz:=true                    启动 RViz 可视化（默认 false）
   xfer_format:=0                雷达点云格式 0=PointCloud2, 1=CustomMsg（默认 0）
   serial_device:=/dev/ttyUSB0   串口设备路径
   baudrate:=921600              串口波特率 (9600/57600/115200/460800/921600)
@@ -56,17 +54,12 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    rviz_use = LaunchConfiguration('rviz')
     xfer_format = LaunchConfiguration('xfer_format')
     serial_device = LaunchConfiguration('serial_device')
     baudrate = LaunchConfiguration('baudrate')
     team = LaunchConfiguration('team')
 
     # ---- 声明启动参数 ----
-    declare_rviz_cmd = DeclareLaunchArgument(
-        'rviz', default_value='false',
-        description='启动 RViz 可视化'
-    )
     declare_xfer_format_cmd = DeclareLaunchArgument(
         'xfer_format', default_value='0',
         description='点云格式: 0=PointCloud2, 1=CustomMsg'
@@ -106,7 +99,6 @@ def generate_launch_description():
     stage1_lidar = IncludeLaunchDescription(
         lidar_launch,
         launch_arguments={
-            'rviz': rviz_use,
             'xfer_format': xfer_format,
         }.items(),
     )
@@ -143,7 +135,6 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     # 声明参数
-    ld.add_action(declare_rviz_cmd)
     ld.add_action(declare_xfer_format_cmd)
     ld.add_action(declare_serial_cmd)
     ld.add_action(declare_baudrate_cmd)

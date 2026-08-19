@@ -8,7 +8,6 @@
 
 订阅话题：
   /competition/field_pose           (geometry_msgs/PoseStamped)   — 机器人位姿
-  /perception/ball_position         (geometry_msgs/PointStamped)  — 金球 3D 位置
   /perception/block_position        (geometry_msgs/PointStamped)  — 当前跟踪块 3D 位置
 
 发布话题：

@@ -4,7 +4,7 @@
 串口网关由 common_launch.py 阶段3 或 serial_gateway(_red).launch.py 单独启动。
 
 启动内容：
-  1. fyt_pos (field_localizer + field_visualizer)
+  1. fyt_pos (field_localizer)
      — 配置: field.yaml (全局赛场坐标,两车统一,内部坐标系不变)
      — 依赖 /Odometry,发布 /competition/field_pose, /competition/current_zone
   2. block_perception (orbbec_camera_node + block_distance_node)
@@ -40,13 +40,6 @@ def generate_launch_description():
         package='fyt_pos',
         executable='field_localizer',
         name='field_localizer',
-        output='screen',
-        parameters=[fyt_pos_config],
-    )
-    field_visualizer = Node(
-        package='fyt_pos',
-        executable='field_visualizer',
-        name='field_visualizer',
         output='screen',
         parameters=[fyt_pos_config],
     )
@@ -114,9 +107,7 @@ def generate_launch_description():
     ld.add_action(TimerAction(period=3.0, actions=[
         LogInfo(msg='[感知] 启动场地定位(统一field.yaml,内部坐标系不变)...'),
         field_localizer,
-        field_visualizer,
         make_exit_handler('field_localizer', '/competition/field_pose 停止发布'),
-        make_exit_handler('field_visualizer', 'RViz场地可视化停止'),
     ]))
 
     return ld
