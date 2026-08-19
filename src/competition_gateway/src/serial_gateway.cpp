@@ -51,14 +51,12 @@ speed_t SerialGateway_GetBaudrate(int baudrate)
 }  // namespace
 
 // ======= 蓝方串口网关: X 原样发送,内部坐标系不变 =======
-// 感知帧缓存: 当前跟踪块 + 球位置
+// 感知帧缓存: 当前跟踪块
 struct perception_cache_t
 {
   perception_data_t data;
   rclcpp::Time block_time;
-  rclcpp::Time ball_time;
   bool block_received = false;
-  bool ball_received = false;
 };
 
 // 位置帧缓存: 机器人位置 + 旋转
@@ -81,7 +79,6 @@ public:
     this->declare_parameter("data_timeout_ms", 200);
     this->declare_parameter("controller_timeout_ms", 500);
     this->declare_parameter("field_pose_topic", "/competition/field_pose");
-    this->declare_parameter("ball_position_topic", "/perception/ball_position");
     this->declare_parameter("block_position_topic", "/perception/block_position");
     this->declare_parameter("controller_connected_topic", "/competition/serial/controller_connected");
     this->declare_parameter("controller_state_topic", "/competition/serial/controller_state");
@@ -92,9 +89,6 @@ public:
     field_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
       this->get_parameter("field_pose_topic").as_string(), 10,
       std::bind(&serial_gateway_t::SerialGateway_FieldPoseCallback, this, std::placeholders::_1));
-    ball_position_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
-      this->get_parameter("ball_position_topic").as_string(), 10,
-      std::bind(&serial_gateway_t::SerialGateway_BallPositionCallback, this, std::placeholders::_1));
     block_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
       this->get_parameter("block_position_topic").as_string(), 10,
       std::bind(&serial_gateway_t::SerialGateway_BlockCallback, this, std::placeholders::_1));
@@ -191,16 +185,6 @@ private:
     position_cache_.field_pose_received = true;
   }
 
-  void SerialGateway_BallPositionCallback(const geometry_msgs::msg::PointStamped::SharedPtr message)
-  {
-    std::lock_guard<std::mutex> lock(perception_mutex_);
-    perception_cache_.data.ball_x_m = static_cast<float>(message->point.x);
-    perception_cache_.data.ball_y_m = static_cast<float>(message->point.y);
-    perception_cache_.data.ball_z_m = static_cast<float>(message->point.z);
-    perception_cache_.ball_time = this->now();
-    perception_cache_.ball_received = true;
-  }
-
   void SerialGateway_BlockCallback(const geometry_msgs::msg::PointStamped::SharedPtr message)
   {
     std::lock_guard<std::mutex> lock(perception_mutex_);
@@ -252,15 +236,6 @@ private:
         perception_data.block_x_m = 0.0F;
         perception_data.block_y_m = 0.0F;
         perception_data.block_z_m = 0.0F;
-      }
-
-      if (perception_cache_.ball_received && (now - perception_cache_.ball_time) < data_timeout)
-      {
-        perception_data.flags |= PERCEPTION_BALL_VALID;
-        if (perception_cache_.ball_time > latest_time)
-        {
-          latest_time = perception_cache_.ball_time;
-        }
       }
       perception_data.timestamp_ms = static_cast<uint32_t>(latest_time.nanoseconds() / 1000000LL);
     }
@@ -362,7 +337,6 @@ private:
   std::vector<uint8_t> receive_buffer_;
   rclcpp::Time last_controller_time_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr field_pose_sub_;
-  rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr ball_position_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr block_sub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr controller_connected_pub_;
   rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr controller_state_pub_;

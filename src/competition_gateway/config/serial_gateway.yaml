@@ -12,8 +12,6 @@ serial_gateway:
     # 超过此时间未收到有效下位机状态帧时，发布控制器离线状态。
     controller_timeout_ms: 500
     field_pose_topic: /competition/field_pose
-    # 金球位置话题 (由 ball_perception 包发布)
-    ball_position_topic: /perception/ball_position
     # 块位置话题(由 block_perception 发布,不区分颜色,只跟踪一个块)
     block_position_topic: /perception/block_position
     controller_connected_topic: /competition/serial/controller_connected

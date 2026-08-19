@@ -32,10 +32,7 @@ TEST(SerialProtocolTest, EncodePerceptionCreatesValidFrame)
   data.block_x_m = 1.5F;
   data.block_y_m = 2.0F;
   data.block_z_m = 0.3F;
-  data.ball_x_m = 3.0F;
-  data.ball_y_m = -2.0F;
-  data.ball_z_m = 0.1F;
-  data.flags = PERCEPTION_BLOCK_VALID | PERCEPTION_BALL_VALID;
+  data.flags = PERCEPTION_BLOCK_VALID;
   data.timestamp_ms = 123456U;
 
   const auto frame = SerialProtocol_EncodePerception(data, 7U);
@@ -49,10 +46,10 @@ TEST(SerialProtocolTest, EncodePerceptionCreatesValidFrame)
   EXPECT_EQ(frame[k_tx_frame_size - 2], k_frame_tail_0);
   EXPECT_EQ(frame[k_tx_frame_size - 1], k_frame_tail_1);
 
-  // CRC16 校验 (覆盖 type 到最后一个数据字节, 共 31 字节)
-  uint16_t expected_crc = SerialProtocol_CRC16(frame.data() + 2, 31);
+  // CRC16 校验 (覆盖 type 到最后一个数据字节, 共 19 字节)
+  uint16_t expected_crc = SerialProtocol_CRC16(frame.data() + 2, 19);
   uint16_t actual_crc = 0U;
-  std::memcpy(&actual_crc, frame.data() + 33, sizeof(actual_crc));
+  std::memcpy(&actual_crc, frame.data() + 21, sizeof(actual_crc));
   EXPECT_EQ(expected_crc, actual_crc);
 }
 

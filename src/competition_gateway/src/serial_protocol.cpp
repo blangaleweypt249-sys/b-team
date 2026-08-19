@@ -14,10 +14,10 @@ constexpr std::size_t k_flags_offset = 4;
 constexpr std::size_t k_timestamp_offset = 5;   // 4 bytes, uint32_t
 constexpr std::size_t k_payload_offset = 9;     // 数据紧跟 timestamp 之后
 
-// 感知帧 (37 字节) 偏移
-constexpr std::size_t k_perception_crc_offset = 33;   // 2 bytes CRC16
-constexpr std::size_t k_perception_tail_0_offset = 35;
-constexpr std::size_t k_perception_tail_1_offset = 36;
+// 感知帧 (25 字节) 偏移
+constexpr std::size_t k_perception_crc_offset = 21;   // 2 bytes CRC16
+constexpr std::size_t k_perception_tail_0_offset = 23;
+constexpr std::size_t k_perception_tail_1_offset = 24;
 
 // 位置帧 (29 字节) 偏移
 constexpr std::size_t k_position_crc_offset = 25;     // 2 bytes CRC16
@@ -90,13 +90,9 @@ std::array<uint8_t, k_tx_frame_size> SerialProtocol_EncodePerception(
   frame[k_flags_offset] = data.flags;
   SerialProtocol_WriteUInt32(frame.data(), k_timestamp_offset, data.timestamp_ms);
 
-  // 块在球前面
   SerialProtocol_WriteFloat(frame.data(), k_payload_offset, data.block_x_m);
   SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 4, data.block_y_m);
   SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 8, data.block_z_m);
-  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 12, data.ball_x_m);
-  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 16, data.ball_y_m);
-  SerialProtocol_WriteFloat(frame.data(), k_payload_offset + 20, data.ball_z_m);
 
   // CRC16 覆盖 type 到最后一个数据字节
   const uint16_t crc = SerialProtocol_CRC16(
