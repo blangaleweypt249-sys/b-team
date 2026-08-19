@@ -11,6 +11,8 @@
 #define PATH_SEGMENT_SETTLE_MS       65U
 
 #define PATH_REMOTE_PA4_MASK         (1U << 5U)
+#define PATH_FRONT_SENSOR_INDEX      SENSOR_LINK_L_B_INDEX
+#define PATH_LEFT_SENSOR_INDEX       SENSOR_LINK_F_INDEX
 #define PATH_LASER_STOP_CM           10U
 #define PATH_FRONT_ARRIVE_CM         68U
 #define PATH_LEFT_NEAR_CM            69U
@@ -233,8 +235,8 @@ static void PathMain_GetSegmentCommand(const path_dt35_t *front,
 
 static bool PathMain_Start(uint32_t now_ms)
 {
-    path_dt35_t front = PathMain_ReadDt35(SENSOR_LINK_F_INDEX);
-    path_dt35_t left = PathMain_ReadDt35(SENSOR_LINK_L_B_INDEX);
+    path_dt35_t front = PathMain_ReadDt35(PATH_FRONT_SENSOR_INDEX);
+    path_dt35_t left = PathMain_ReadDt35(PATH_LEFT_SENSOR_INDEX);
 
     if (!PathMain_ImuReady() ||
         (ImuMain_CaptureCurrentYaw() != HAL_OK))
@@ -264,8 +266,8 @@ static bool PathMain_Start(uint32_t now_ms)
 
 static void PathMain_RunControl(uint32_t now_ms)
 {
-    path_dt35_t front = PathMain_ReadDt35(SENSOR_LINK_F_INDEX);
-    path_dt35_t left = PathMain_ReadDt35(SENSOR_LINK_L_B_INDEX);
+    path_dt35_t front = PathMain_ReadDt35(PATH_FRONT_SENSOR_INDEX);
+    path_dt35_t left = PathMain_ReadDt35(PATH_LEFT_SENSOR_INDEX);
     int16_t vx;
     int16_t vy;
 
