@@ -1,5 +1,4 @@
 #include "remote_link.h"
-#include "spi.h"
 #include "usart.h"
 
 volatile uint32_t remote_link_uart_errors;
@@ -13,7 +12,7 @@ volatile uint32_t remote_link_control_frames;
 volatile uint32_t remote_link_switch_events;
 volatile uint32_t remote_link_aux_control_frames;
 volatile uint32_t remote_link_aux_crc_errors;
-volatile uint32_t remote_link_aux_spi_errors;
+volatile uint32_t remote_link_aux_uart_errors;
 
 static uint8_t remote_link_rx_byte;
 static uint8_t remote_link_forward_buffer[128U];
@@ -23,7 +22,7 @@ static uint8_t remote_link_rx_frame[10U];
 static uint8_t remote_link_rx_index;
 static uint8_t remote_link_previous_switches;
 static uint8_t remote_link_have_switch_state;
-static uint8_t remote_link_aux_frame[8U];
+static uint8_t remote_link_aux_rx_byte;
 static uint8_t remote_link_previous_aux_outputs;
 
 #define REMOTE_LINK_FORWARD_BUFFER_SIZE 128U
@@ -167,9 +166,8 @@ static void RemoteLink_AuxStreamDiscard(uint8_t count)
 }
 
 /*
- * SPI has no CS on this connection, so a reset can start in the middle of an
- * 8-byte transfer. Keep the received blocks as a byte stream and recover at
- * the next valid header/CRC instead of permanently preserving the offset.
+ * UART is a byte stream and either endpoint can reset mid-frame. Preserve
+ * received bytes and recover at the next valid header/CRC.
  */
 static void RemoteLink_ProcessAuxStream(void)
 {
@@ -232,24 +230,14 @@ static void RemoteLink_ProcessAuxStream(void)
     }
 }
 
-static void RemoteLink_QueueAuxBlock(void)
+static void RemoteLink_QueueAuxByte(uint8_t byte)
 {
-    uint8_t index;
-
-    if (remote_link_aux_stream_size >
-        (REMOTE_LINK_AUX_STREAM_BUFFER_SIZE - REMOTE_LINK_AUX_FRAME_SIZE))
+    if (remote_link_aux_stream_size >= REMOTE_LINK_AUX_STREAM_BUFFER_SIZE)
     {
-        RemoteLink_AuxStreamDiscard(
-            (uint8_t)(remote_link_aux_stream_size -
-                      (REMOTE_LINK_AUX_STREAM_BUFFER_SIZE -
-                       REMOTE_LINK_AUX_FRAME_SIZE)));
+        RemoteLink_AuxStreamDiscard(1U);
     }
 
-    for (index = 0U; index < REMOTE_LINK_AUX_FRAME_SIZE; index++)
-    {
-        remote_link_aux_stream[remote_link_aux_stream_size++] =
-            remote_link_aux_frame[index];
-    }
+    remote_link_aux_stream[remote_link_aux_stream_size++] = byte;
     RemoteLink_ProcessAuxStream();
 }
 
@@ -343,15 +331,13 @@ static void RemoteLink_ArmReceive(void)
 
 static void RemoteLink_ArmAuxReceive(void)
 {
-    if (HAL_SPI_GetState(&hspi1) == HAL_SPI_STATE_BUSY_RX)
+    if (huart2.RxState == HAL_UART_STATE_BUSY_RX)
     {
         return;
     }
-    if (HAL_SPI_Receive_IT(&hspi1,
-                          remote_link_aux_frame,
-                          REMOTE_LINK_AUX_FRAME_SIZE) != HAL_OK)
+    if (HAL_UART_Receive_IT(&huart2, &remote_link_aux_rx_byte, 1U) != HAL_OK)
     {
-        remote_link_aux_spi_errors++;
+        remote_link_aux_uart_errors++;
     }
 }
 
@@ -368,7 +354,7 @@ void RemoteLink_Init(void)
     remote_link_switch_events = 0U;
     remote_link_aux_control_frames = 0U;
     remote_link_aux_crc_errors = 0U;
-    remote_link_aux_spi_errors = 0U;
+    remote_link_aux_uart_errors = 0U;
     remote_link_forward_head = 0U;
     remote_link_forward_tail = 0U;
     remote_link_rx_index = 0U;
@@ -425,6 +411,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         RemoteLink_QueueByte(remote_link_rx_byte);
         RemoteLink_ArmReceive();
     }
+    else if (huart->Instance == USART2)
+    {
+        RemoteLink_QueueAuxByte(remote_link_aux_rx_byte);
+        RemoteLink_ArmAuxReceive();
+    }
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
@@ -435,22 +426,10 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
         remote_link_rx_index = 0U;
         RemoteLink_ArmReceive();
     }
-}
-
-void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi)
-{
-    if (hspi->Instance == SPI1)
+    else if (huart->Instance == USART2)
     {
-        RemoteLink_QueueAuxBlock();
-        RemoteLink_ArmAuxReceive();
-    }
-}
-
-void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
-{
-    if (hspi->Instance == SPI1)
-    {
-        remote_link_aux_spi_errors++;
+        remote_link_aux_uart_errors++;
+        remote_link_aux_stream_size = 0U;
         RemoteLink_ArmAuxReceive();
     }
 }
