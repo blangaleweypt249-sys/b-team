@@ -9,31 +9,26 @@
   1. fyt_pos (field_localizer + field_visualizer)
      — 配置: field.yaml (全局赛场坐标,两车统一,内部坐标系不变)
      — 依赖 /Odometry,发布 /competition/field_pose, /competition/current_zone
-  2. ball_perception (usb_camera_node + ball_distance_node)  ← 默认不启动
-     — 仅当 enable_ball:=true 时启动;总启动(common_launch.py)默认不跑金球
-     — 发布 /perception/ball_position, /perception/ball_overlay
-  3. block_perception (orbbec_camera_node + block_distance_node)
+  2. block_perception (orbbec_camera_node + block_distance_node)
      — 只在 block/special1/special2 区域内检测块
      — 发布 /perception/block_position, /perception/block_overlay
-  4. serial_gateway
+  3. serial_gateway
      — 按 team 参数加载 serial_gateway.yaml 或 serial_gateway_red.yaml
 
 启动顺序：
-  阶段 0s : Orbbec相机(块) [+ USB相机(球) 仅enable_ball=true]
-  阶段 2s : 块检测融合 [+ 球检测融合 仅enable_ball=true]
+  阶段 0s : Orbbec相机(块)
+  阶段 2s : 块检测融合
   阶段 3s : 场地定位节点
   阶段 4s : 串口网关
 
 独立启动命令(先启动雷达):
   ros2 launch common_launch_pkg lidar_driver.launch.py
-  ros2 launch common_launch_pkg perception_nodes.launch.py                  # 蓝方,X原样,默认不跑球
+  ros2 launch common_launch_pkg perception_nodes.launch.py                  # 蓝方,X原样
   ros2 launch common_launch_pkg perception_nodes.launch.py team:=red       # 红方,串口X取反
-  ros2 launch common_launch_pkg perception_nodes.launch.py enable_ball:=true  # 单独测球时打开
 """
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, RegisterEventHandler, TimerAction
-from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
@@ -42,14 +37,9 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     team = LaunchConfiguration('team')
-    enable_ball = LaunchConfiguration('enable_ball')
     declare_team_cmd = DeclareLaunchArgument(
         'team', default_value='blue',
         description='队伍 blue/red:只切换串口网关yaml,内部坐标系不变'
-    )
-    declare_enable_ball_cmd = DeclareLaunchArgument(
-        'enable_ball', default_value='false',
-        description='是否启动金球检测(USB相机+ball_distance_node)。总启动默认false不跑,单独测球时enable_ball:=true'
     )
 
     # 定位配置:两车统一使用 field.yaml (内部坐标系不变)
@@ -88,45 +78,6 @@ def generate_launch_description():
         name='field_visualizer',
         output='screen',
         parameters=[fyt_pos_config],
-    )
-
-    # ---- ball_perception: 金球检测 (一套,红蓝共用,enable_ball:=true才启动) ----
-    usb_camera_node = Node(
-        package='ball_perception',
-        executable='usb_camera_node',
-        name='usb_camera_node',
-        output='screen',
-        condition=IfCondition(enable_ball),
-        parameters=[{
-            'device_id': 2, 'width': 640, 'height': 480, 'fps': 30,
-        }],
-    )
-    ball_model_path = PathJoinSubstitution([
-        FindPackageShare('ball_perception'), 'models', 'best.pt',
-    ])
-    ball_distance_node = Node(
-        package='ball_perception',
-        executable='ball_distance_node',
-        name='ball_distance_node',
-        output='screen',
-        condition=IfCondition(enable_ball),
-        parameters=[{
-            'model_path': ball_model_path,
-            'conf_threshold': 0.5,
-            'extrinsic_x': -0.035,
-            'extrinsic_y': -0.173,
-            'extrinsic_z': 0.0,
-            'extrinsic_roll': 0.0,
-            'extrinsic_pitch': 0.0,
-            'extrinsic_yaw': -1.5707963267948966,  # -90°
-            'output_to_gripper': True,
-            'lidar_to_gripper_x': -0.174,
-            'lidar_to_gripper_y': 0.173,
-            'lidar_to_gripper_yaw_deg': -90.0,
-            'min_distance': 0.1,
-            'max_distance': 10.0,
-            'distance_alpha': 0.7,
-        }],
     )
 
     # ---- block_perception: 块检测 (一套,红蓝共用) ----
@@ -181,27 +132,19 @@ def generate_launch_description():
 
     ld = LaunchDescription()
     ld.add_action(declare_team_cmd)
-    ld.add_action(declare_enable_ball_cmd)
 
     ld.add_action(LogInfo(msg=[
         '[感知-启动] 队伍: ', team,
         ' (定位/相机/检测一套代码,仅串口网关yaml切换negate_x)',
-        ' | 金球检测: ', enable_ball,
     ]))
 
-    # 阶段 1: 相机 (USB相机仅enable_ball=true时启动)
+    # 阶段 1: 相机
     ld.add_action(LogInfo(msg='[感知] 启动 Orbbec RGB-D 相机(块检测)...'))
     ld.add_action(orbbec_camera_node)
     ld.add_action(make_exit_handler('orbbec_camera_node', '块检测无图像'))
-    ld.add_action(LogInfo(msg='[感知] USB相机(金球)按 enable_ball 条件启动(总启动默认不启动)'))
-    ld.add_action(usb_camera_node)
-    ld.add_action(make_exit_handler('usb_camera_node', '球检测无图像'))
 
-    # 阶段 2: 检测融合 (球检测按enable_ball条件)
+    # 阶段 2: 块检测融合
     ld.add_action(TimerAction(period=2.0, actions=[
-        LogInfo(msg='[感知] 启动金球检测+融合测距(若enable_ball=true)...'),
-        ball_distance_node,
-        make_exit_handler('ball_distance_node', '/perception/ball_position 停止发布'),
         LogInfo(msg='[感知] 启动块检测+测距 (仅block/special1/special2区)...'),
         block_distance_node,
         make_exit_handler('block_distance_node', '/perception/block_position 停止发布'),
