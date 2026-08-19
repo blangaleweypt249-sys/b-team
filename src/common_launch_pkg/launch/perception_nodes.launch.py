@@ -1,9 +1,7 @@
-"""通用感知节点模块启动文件(一车代码,红方只切串口yaml,X取反;蓝方X原样)。
+"""通用感知节点模块启动文件(一套代码,红蓝共用,内部坐标系不变)。
 
-内部坐标系(field_pose、区域判定、感知块/球)完全不变,统一使用 field.yaml,
-只有串口网关按队伍加载不同 yaml:
-  team:=blue → serial_gateway.yaml     (negate_x=false, X原样发送)
-  team:=red  → serial_gateway_red.yaml (negate_x=true,  只串口X取反)
+内部坐标系(field_pose、区域判定、感知块/球)完全不变,统一使用 field.yaml。
+串口网关由 common_launch.py 阶段3 或 serial_gateway(_red).launch.py 单独启动。
 
 启动内容：
   1. fyt_pos (field_localizer + field_visualizer)
@@ -12,56 +10,29 @@
   2. block_perception (orbbec_camera_node + block_distance_node)
      — 只在 block/special1/special2 区域内检测块
      — 发布 /perception/block_position, /perception/block_overlay
-  3. serial_gateway
-     — 按 team 参数加载 serial_gateway.yaml 或 serial_gateway_red.yaml
 
 启动顺序：
   阶段 0s : Orbbec相机(块)
   阶段 2s : 块检测融合
   阶段 3s : 场地定位节点
-  阶段 4s : 串口网关
 
 独立启动命令(先启动雷达):
   ros2 launch common_launch_pkg lidar_driver.launch.py
-  ros2 launch common_launch_pkg perception_nodes.launch.py                  # 蓝方,X原样
-  ros2 launch common_launch_pkg perception_nodes.launch.py team:=red       # 红方,串口X取反
+  ros2 launch common_launch_pkg perception_nodes.launch.py
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, LogInfo, RegisterEventHandler, TimerAction
+from launch.actions import LogInfo, RegisterEventHandler, TimerAction
 from launch.event_handlers import OnProcessExit
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.substitutions import PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    team = LaunchConfiguration('team')
-    declare_team_cmd = DeclareLaunchArgument(
-        'team', default_value='blue',
-        description='队伍 blue/red:只切换串口网关yaml,内部坐标系不变'
-    )
-
     # 定位配置:两车统一使用 field.yaml (内部坐标系不变)
     fyt_pos_config = PathJoinSubstitution([
         FindPackageShare('fyt_pos'), 'config', 'field.yaml',
-    ])
-    # 串口网关配置:两套独立 yaml
-    gateway_config = PythonExpression([
-        "'", FindPackageShare('competition_gateway'), "/config/serial_gateway",
-        "('_red.yaml' if '", team, "' == 'red' else '.yaml')",
-        "'"
-    ])
-    # 串口网关可执行文件:两套独立 cpp 源,蓝方 serial_gateway,红方 serial_gateway_red
-    gateway_exec = PythonExpression([
-        "'serial_gateway",
-        "('_red' if '", team, "' == 'red' else '')",
-        "'"
-    ])
-    gateway_node_name = PythonExpression([
-        "'serial_gateway",
-        "('_red' if '", team, "' == 'red' else '')",
-        "'"
     ])
 
     # ---- fyt_pos: 场地定位节点 ----
@@ -113,15 +84,6 @@ def generate_launch_description():
         }],
     )
 
-    # ---- 串口网关:按 team 选两套独立可执行文件(cpp写死X取反差异) ----
-    serial_gateway_node = Node(
-        package='competition_gateway',
-        executable=gateway_exec,
-        name=gateway_node_name,
-        output='screen',
-        parameters=[gateway_config],
-    )
-
     # ---- 错误处理 ----
     def make_exit_handler(node_name, impact):
         return RegisterEventHandler(
@@ -131,12 +93,10 @@ def generate_launch_description():
         )
 
     ld = LaunchDescription()
-    ld.add_action(declare_team_cmd)
 
-    ld.add_action(LogInfo(msg=[
-        '[感知-启动] 队伍: ', team,
-        ' (定位/相机/检测一套代码,仅串口网关yaml切换negate_x)',
-    ]))
+    ld.add_action(LogInfo(
+        msg='[感知-启动] 感知节点模块 (定位+块检测,串口网关由common_launch阶段3启动)'
+    ))
 
     # 阶段 1: 相机
     ld.add_action(LogInfo(msg='[感知] 启动 Orbbec RGB-D 相机(块检测)...'))
@@ -157,17 +117,6 @@ def generate_launch_description():
         field_visualizer,
         make_exit_handler('field_localizer', '/competition/field_pose 停止发布'),
         make_exit_handler('field_visualizer', 'RViz场地可视化停止'),
-    ]))
-
-    # 阶段 4: 串口网关(按队伍切 yaml)
-    ld.add_action(TimerAction(period=4.0, actions=[
-        LogInfo(msg=[
-            '[感知] 启动串口网关 (team=', team,
-            ', 仅当red时串口X取反,内部坐标系不变)...'
-        ]),
-        serial_gateway_node,
-        make_exit_handler('serial_gateway', 'STM32通信中断'),
-        LogInfo(msg='[感知] 所有节点启动完毕'),
     ]))
 
     return ld

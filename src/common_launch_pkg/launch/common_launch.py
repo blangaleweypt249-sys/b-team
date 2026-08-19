@@ -96,9 +96,9 @@ def generate_launch_description():
     )
     # 按队伍选择对应的串口网关launch文件(两套独立cpp,不用运行时切参数)
     gateway_launch_file = PythonExpression([
-        "'", common_launch_dir, "/serial_gateway",
-        "('_red.launch.py' if '", team, "' == 'red' else '.launch.py')",
-        "'"
+        "'", common_launch_dir, "/serial_gateway_red.launch.py' if '",
+        team, "' == 'red' else '",
+        common_launch_dir, "/serial_gateway.launch.py'"
     ])
     gateway_launch = PythonLaunchDescriptionSource(gateway_launch_file)
 
@@ -112,16 +112,12 @@ def generate_launch_description():
     )
 
     # ---- 阶段 2: 感知节点模块（延迟 6 秒，等待 FAST-LIO 里程计就绪）----
-    # enable_ball 默认 false → 总启动不跑金球;需测球时 enable_ball:=true
     stage2_perception = TimerAction(
         period=6.0,
         actions=[
             LogInfo(msg='========== [集成启动] 阶段 2/3: 启动感知节点模块 =========='),
             IncludeLaunchDescription(
                 perception_launch,
-                launch_arguments={
-                    'team': team,
-                }.items(),
             ),
         ],
     )
