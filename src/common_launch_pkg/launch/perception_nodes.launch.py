@@ -58,16 +58,20 @@ def generate_launch_description():
     ])
     # 串口网关配置:两套独立 yaml
     gateway_config = PythonExpression([
-        "'", FindPackageShare('competition_gateway'), "/config/",
-        "('serial_gateway_red.yaml' if '", team, "' == 'red' else 'serial_gateway.yaml')",
+        "'", FindPackageShare('competition_gateway'), "/config/serial_gateway",
+        "('_red.yaml' if '", team, "' == 'red' else '.yaml')",
         "'"
     ])
     # 串口网关可执行文件:两套独立 cpp 源,蓝方 serial_gateway,红方 serial_gateway_red
     gateway_exec = PythonExpression([
-        "'('serial_gateway_red' if '", team, "' == 'red' else 'serial_gateway')'"
+        "'serial_gateway",
+        "('_red' if '", team, "' == 'red' else '')",
+        "'"
     ])
     gateway_node_name = PythonExpression([
-        "'('serial_gateway_red' if '", team, "' == 'red' else 'serial_gateway')'"
+        "'serial_gateway",
+        "('_red' if '", team, "' == 'red' else '')",
+        "'"
     ])
 
     # ---- fyt_pos: 场地定位节点 ----

@@ -106,11 +106,12 @@ def generate_launch_description():
         PathJoinSubstitution([common_launch_dir, 'perception_nodes.launch.py'])
     )
     # 按队伍选择对应的串口网关launch文件(两套独立cpp,不用运行时切参数)
-    gateway_launch = PythonLaunchDescriptionSource(
-        PathJoinSubstitution([common_launch_dir, PythonExpression([
-            "'(serial_gateway_red.launch.py' if '", team, "' == 'red' else 'serial_gateway.launch.py)'"
-        ])])
-    )
+    gateway_launch_file = PythonExpression([
+        "'", common_launch_dir, "/serial_gateway",
+        "('_red.launch.py' if '", team, "' == 'red' else '.launch.py')",
+        "'"
+    ])
+    gateway_launch = PythonLaunchDescriptionSource(gateway_launch_file)
 
     # ---- 阶段 1: 雷达驱动模块（立即启动）----
     stage1_lidar = IncludeLaunchDescription(
