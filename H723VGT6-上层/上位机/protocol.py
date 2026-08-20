@@ -44,7 +44,7 @@ HANDSHAKE_MAGIC = b"H723"
 
 # PC_MSG_AUX_CONTROL payload: output state bits followed by a reserved byte.
 # The PC command enters H723 over UART4; H723 forwards the resulting state
-# frame to the F103 receiver over SPI3.
+# frame over UART5 to the F103 receiver's UART2.
 # bit0/1/2 are the arm, push-block and gripper cylinders; bit3 is the
 # receiver-board PB8/PB9 electronic-stop output.
 AUX_CONTROL_PAYLOAD_SIZE = 2

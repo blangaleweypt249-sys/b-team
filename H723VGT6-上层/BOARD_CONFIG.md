@@ -31,7 +31,7 @@
 | 普通 UART | PC7 RX / PC6 TX | H3.12 / H3.9 | USART6，115200 8N1，中断收发 |
 | 普通 UART | PE2 RX / PE3 TX | H2.8 / H2.5 | USART10，115200 8N1，中断收发 |
 | W25Q128 | PA4 / PA5 / PA6 / PA7 | NSS/SCK/MISO/MOSI | SPI1 Mode 0，25 MHz，RX/TX DMA |
-| 辅助输出转发 | PB3 SCK / PB4 MISO / PB5 MOSI | F103 SPI1 从机 | SPI3 主机 Mode 0，8 bit，MSB first，无 NSS，约 390 kHz |
+| 辅助输出转发 | PC12 UART5_TX | 抬升 H723 USART6_RX | 2 Mbps，8N1；经抬升端 115200 UART 转发到 F103 USART2_RX |
 | 状态灯 | PC13 | LED1 | 推挽输出，默认低 |
 | 蜂鸣器 | PC15 | Q3 驱动 | 推挽输出，默认低 |
 
@@ -62,12 +62,13 @@ M3508/C620（节点 1、2），FDCAN3 连接两台 M2006/C610（节点 1、2）�
 | --- | --- | --- |
 | 0 | UART5 RX | Circular |
 
-UART5 使用 `HAL_UARTEx_ReceiveToIdle_DMA()` 接收遥控字节流。其他普通 UART 使用
-`HAL_UARTEx_ReceiveToIdle_IT()` 和 TX 中断，不占用 DMA1；USART1/2 的 RS485 DMA 配置保持不变。
+UART5 使用 `HAL_UARTEx_ReceiveToIdle_DMA()` 接收遥控字节流，同时使用 TX 中断发送辅助输出帧。
+其他普通 UART 使用 `HAL_UARTEx_ReceiveToIdle_IT()` 和 TX 中断，不占用 DMA1；USART1/2 的
+RS485 DMA 配置保持不变。
 
-SPI3 辅助输出不使用 DMA。H723 收到上位机 `MSG_AUX_CONTROL (0x15)` 后，组装
-`A5 5A 01 02 01 seq output_bits crc8` 8 字节帧并通过 SPI3 发送到 F103 的 SPI1
-从机；UART5 仍只接收遥控器的 10 字节串口帧。
+H723 收到上位机 `MSG_AUX_CONTROL (0x15)` 后，组装
+`A5 5A 01 02 01 seq output_bits crc8` 固定 8 字节帧，通过 UART5 以 2 Mbps 发送到抬升 H723。
+抬升端保持帧内容不变，通过另一组 115200 UART 发送到 F103 USART2_RX。
 
 DMA、UART、SPI 和 FDCAN 中断优先级均为 5，可以调用 FreeRTOS 的 ISR 安全接口。
 FDCAN 使用片上 Message RAM，不使用 DMA1/2。
@@ -91,7 +92,6 @@ void CommRuntime_SetHandlers(comm_uart_handler_t uart_handler,
                              comm_can_handler_t can_handler,
                              void *user_data);
 
-void App_Periodic10ms(void);
 void App_Control1ms(void);
 ```
 
@@ -100,30 +100,25 @@ USB 虚拟串口，H723 不启用原生 USB CDC。除此之外，H1/H2/H3 排针
 USB-TTL 转换器连接电脑。帧格式、超时策略、电机拓扑和目标任务职责见
 [上层代码框架说明.md](../上层代码框架说明.md)。
 
-## UART5 第二主控遥控输入
+## UART5 抬升桥接链路
 
-F103 LoRa 接收板通过 USART2 原样转发遥控串口流，上层 H723 只解析目标 ID 为 `0x02` 的
-第二主控控制帧。接线如下：
+上层 H723 UART5 与抬升 H723 USART6 使用 `2000000 8N1` 全双工交叉连接；F103 USART2
+与抬升端另一组 UART 使用 `115200 8N1` 全双工交叉连接，所有控制板必须共地。抬升端在
+两组串口之间保持字节内容和顺序不变。
 
-| F103 接收板 | H723 上层板 | 说明 |
-| --- | --- | --- |
-| PA2 / USART2_TX | PD2 / UART5_RX / H3.24 | 2000000 8N1 数据 |
-| GND | GND | 必须共地 |
-
-当前链路仅需单向接收，H723 的 UART5_TX（PC12 / H3.19）可以不接。串口流中允许 ID=1
-和 ID=2 帧连续出现，解析器按帧头、长度和 CRC8 重组拆包/粘包，只接受：
+上层接收方向按 `A5 5A` 帧头和固定 10 字节长度重组拆包/粘包，帧格式为：
 
 ```text
-A5 5A 02 01 02 sequence key_bits switch_bits crc8
+A5 5A left_x left_y right_x right_y primary_keys primary_switch key_bits switch_bits
 ```
 
+- 遥控数据中的左侧按键字节保留在线路帧中，但上层控制不再解析或使用。
+- `primary_switch` bit0 对应 PE0，其他位忽略。
 - `key_bits` bit0..5 对应遥控器 PD13、PD12、PD11、PD8、PD9、PD10，bit6..7 被屏蔽。
 - `switch_bits` bit0、1、2、4、5 对应 PE4、PE3、PE1、PD6、PD5，其他位被屏蔽。
-- CRC8 多项式为 `0x07`、初值为 `0x00`，覆盖 `target_id` 至 payload，不包含帧头。
-- `UpperEntry_GetSecondaryRemoteControl()` 返回按键、开关、序号和在线状态；当前已关闭远控
-  超时看门狗，没有新 ID=2 帧时继续保留最后一次合法按键和开关状态。
-- `UpperEntry_GetSecondaryRemoteDiagnostics()` 可读取合法帧、忽略帧、CRC/格式错误、丢帧和
-  重复帧计数。解析层不预设按键到电机动作的映射。
+- `UpperEntry_GetSecondaryRemoteControl()` 返回两组按键、开关和在线状态；当前已关闭远控
+  超时看门狗，没有新帧时继续保留最后一次合法状态。
+- `UpperEntry_GetSecondaryRemoteDiagnostics()` 可读取合法帧、忽略帧和重同步统计。
 
 ## 电机启动与控制安全
 

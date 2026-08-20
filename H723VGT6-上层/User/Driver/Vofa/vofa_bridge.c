@@ -1078,9 +1078,8 @@ static void Vofa_SendAck(uint32_t sequence, int32_t status)
                       (long)status);
     if ((length > 0) && ((size_t)length < sizeof(response)))
     {
-        (void)CommRuntime_PcTransmitBlocking((const uint8_t *)response,
-                                             (uint16_t)length,
-                                             100U);
+        (void)CommRuntime_PcTransmitCopy((const uint8_t *)response,
+                                         (uint16_t)length);
     }
 }
 

@@ -19,8 +19,8 @@ static void Test_BuildFixedFrame(uint8_t frame[TEST_FRAME_SIZE],
                                  uint8_t left_y,
                                  uint8_t right_x,
                                  uint8_t right_y,
-                                 uint8_t local_buttons,
-                                 uint8_t local_switch,
+                                 uint8_t reserved_6,
+                                 uint8_t reserved_7,
                                  uint8_t secondary_keys,
                                  uint8_t secondary_switches)
 {
@@ -30,8 +30,8 @@ static void Test_BuildFixedFrame(uint8_t frame[TEST_FRAME_SIZE],
     frame[3] = left_y;
     frame[4] = right_x;
     frame[5] = right_y;
-    frame[6] = local_buttons;
-    frame[7] = local_switch;
+    frame[6] = reserved_6;
+    frame[7] = reserved_7;
     frame[8] = secondary_keys;
     frame[9] = secondary_switches;
 }
@@ -124,7 +124,7 @@ static void Test_PayloadMayContainHeaderBytes(void)
     Test_BuildFixedFrame(&stream[0], 0xA5U, 0x5AU, 0xA5U, 0x5AU,
                          0U, 0U, 0x03U, 0x04U);
     Test_BuildFixedFrame(&stream[TEST_FRAME_SIZE], 128U, 128U, 128U, 128U,
-                         0U, 0U, 0x05U, 0x06U);
+                         0xC7U, 0U, 0x05U, 0x06U);
     UpperRemoteLink_Init(&link);
     UpperRemoteLink_Push(&link, stream, sizeof(stream), 50U);
     assert(UpperRemoteLink_GetControl(&link, 50U, &control));

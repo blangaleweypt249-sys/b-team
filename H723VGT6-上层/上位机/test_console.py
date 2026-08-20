@@ -31,6 +31,10 @@ from main import (
     UpperConsole,
 )
 from protocol import (
+    AUX_OUTPUT_ARM_CYLINDER,
+    AUX_OUTPUT_ESTOP,
+    AUX_OUTPUT_GRIPPER_CYLINDER,
+    AUX_OUTPUT_PUSH_CYLINDER,
     COMMAND_J4310_STOP,
     ENABLE_CONVEYOR,
     ENABLE_GRIPPER,
@@ -40,6 +44,7 @@ from protocol import (
     HANDSHAKE_MAGIC,
     HEADER_SIZE,
     MSG_ACK,
+    MSG_AUX_CONTROL,
     MSG_ESTOP,
     MSG_HEARTBEAT,
     MOTOR_ACTION_J4310_SAVE_ZERO,
@@ -79,7 +84,11 @@ class UpperConsoleTest(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_j4310_defaults_use_online_tuning_baseline(self) -> None:
-        self.assertEqual(self.app._values()[:4], (0.0, 0.0, 30.0, 0.5))
+        self.assertEqual(self.app._values()[:4], (90.0, 0.0, 30.0, 0.95))
+        self.assertEqual(
+            (self.app.j_tau.get(), self.app.j_torque_limit.get()),
+            (0.0, 10.0),
+        )
 
     def test_numeric_input_validator_enforces_configured_range(self) -> None:
         self.assertTrue(UpperConsole._validate_numeric_edit("-10", "-10", "10"))
@@ -221,8 +230,8 @@ class UpperConsoleTest(unittest.TestCase):
     def test_remote_action_parameters_are_saved_and_restored(self) -> None:
         self.app.remote_action_angles["取地面块"]["m3508"].set(321.0)
         self.app.remote_action_angles["收块"]["j4310"].set(123.0)
+        self.app.remote_action_angles["收块"]["j4310_second"].set(234.0)
         self.app.remote_action_angles["闸门"]["angle_off"].set(45.0)
-        self.app.remote_action_angles["闸门"]["oscillation_high"].set(135.0)
 
         self.app.save_remote_action_parameters()
 
@@ -243,24 +252,24 @@ class UpperConsoleTest(unittest.TestCase):
                 123.0,
             )
             self.assertEqual(
-                other_app.remote_action_angles["闸门"]["angle_off"].get(),
-                45.0,
+                other_app.remote_action_angles["收块"]["j4310_second"].get(),
+                234.0,
             )
             self.assertEqual(
-                other_app.remote_action_angles["闸门"]["oscillation_high"].get(),
-                135.0,
+                other_app.remote_action_angles["闸门"]["angle_off"].get(),
+                45.0,
             )
         finally:
             other_app.close()
 
     def test_remote_action_defaults_match_physical_remote(self) -> None:
         expected = {
-            "取地面块": (500.0, 90.0, 1000.0, 90.0),
+            "取地面块": (500.0, 90.0, 1050.0, 90.0),
             "取台阶块": (0.0, 90.0, 850.0, 90.0),
-            "收块": (0.0, 180.0),
-            "翻转/存块": (0.0, 40.0, 0.0, -10.0),
-            "闸门": (180.0, 60.0, 130.0, 55.0),
-            "夹爪": (125.0, 45.0),
+            "收块": (0.0, 165.0, 0.0, 240.0),
+            "翻转/存块": (0.0, 40.0, 0.0, -20.0),
+            "闸门": (180.0, 55.0),
+            "夹爪": (45.0, 125.0),
         }
 
         for action, values in expected.items():
@@ -281,8 +290,6 @@ class UpperConsoleTest(unittest.TestCase):
                 "\u5f00\u5173\u95e8": {
                     "angle_on": 170.0,
                     "angle_off": 50.0,
-                    "oscillation_high": 120.0,
-                    "oscillation_low": 40.0,
                 },
             },
             "remote_actions_version": main.REMOTE_ACTION_PARAMETER_VERSION,
@@ -301,7 +308,7 @@ class UpperConsoleTest(unittest.TestCase):
                     variable.get()
                     for variable in other_app.remote_action_angles["闸门"].values()
                 ),
-                (170.0, 50.0, 120.0, 40.0),
+                (170.0, 50.0),
             )
         finally:
             other_app.close()
@@ -340,8 +347,11 @@ class UpperConsoleTest(unittest.TestCase):
                 180.0,
             )
             self.assertEqual(
-                other_app.remote_action_angles["闸门"]["oscillation_high"].get(),
-                130.0,
+                tuple(
+                    variable.get()
+                    for variable in other_app.remote_action_angles["闸门"].values()
+                ),
+                (180.0, 55.0),
             )
         finally:
             other_app.close()
@@ -380,14 +390,72 @@ class UpperConsoleTest(unittest.TestCase):
                     variable.get()
                     for variable in other_app.remote_action_angles["闸门"].values()
                 ),
-                (180.0, 60.0, 130.0, 55.0),
+                (180.0, 55.0),
+            )
+        finally:
+            other_app.close()
+
+    def test_version_seven_resets_pd11_to_two_stage_defaults(self) -> None:
+        previous = {
+            "remote_actions": {
+                "收块": {
+                    "m3508": 10.0,
+                    "j4310": 180.0,
+                },
+            },
+            "remote_actions_version": 7,
+        }
+        main.MOTOR_PARAMETER_PATH.write_text(
+            json.dumps(previous, ensure_ascii=False), encoding="utf-8"
+        )
+
+        other_root = tk.Toplevel(self.root)
+        other_root.withdraw()
+        with mock.patch.object(UpperConsole, "refresh_ports"):
+            other_app = UpperConsole(other_root)
+        try:
+            self.assertEqual(
+                tuple(
+                    variable.get()
+                    for variable in other_app.remote_action_angles["收块"].values()
+                ),
+                (0.0, 165.0, 0.0, 240.0),
+            )
+        finally:
+            other_app.close()
+
+    def test_version_eight_resets_gripper_action_order(self) -> None:
+        previous = {
+            "remote_actions": {
+                "夹爪": {
+                    "angle_on": 125.0,
+                    "angle_off": 45.0,
+                },
+            },
+            "remote_actions_version": 8,
+        }
+        main.MOTOR_PARAMETER_PATH.write_text(
+            json.dumps(previous, ensure_ascii=False), encoding="utf-8"
+        )
+
+        other_root = tk.Toplevel(self.root)
+        other_root.withdraw()
+        with mock.patch.object(UpperConsole, "refresh_ports"):
+            other_app = UpperConsole(other_root)
+        try:
+            self.assertEqual(
+                tuple(
+                    variable.get()
+                    for variable in other_app.remote_action_angles["夹爪"].values()
+                ),
+                (45.0, 125.0),
             )
         finally:
             other_app.close()
 
     def test_pd13_and_pd12_actions_are_synchronous(self) -> None:
         expected = {
-            "取地面块": ((500.0, 90.0), (1000.0, 90.0)),
+            "取地面块": ((500.0, 90.0), (1050.0, 90.0)),
             "取台阶块": ((0.0, 90.0), (850.0, 90.0)),
         }
         for action, targets in expected.items():
@@ -425,14 +493,15 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertEqual(send.call_args.kwargs["enable_mask"], ENABLE_M3508_ONLY)
         self.assertEqual(after.call_args.args[0], 500)
         self.assertEqual(after.call_args.args[2], "翻转/存块")
-        delayed_values = after.call_args.args[3]
+        self.assertEqual(after.call_args.args[3], "第一次动作")
+        delayed_values = after.call_args.args[4]
         self.assertEqual((delayed_values[4], delayed_values[0]), (0.0, 40.0))
 
         with mock.patch.object(
             self.app, "_send_position_values", return_value=True
         ) as delayed_send:
             self.app._complete_remote_arm_j4310_delay(
-                "翻转/存块", delayed_values
+                "翻转/存块", "第一次动作", delayed_values
             )
         self.assertEqual(
             delayed_send.call_args.kwargs["enable_mask"], ENABLE_J4310_ONLY
@@ -446,7 +515,7 @@ class UpperConsoleTest(unittest.TestCase):
         ):
             self.assertTrue(self.app.execute_remote_action("翻转/存块"))
         second = second_send.call_args.args[1]
-        self.assertEqual((second[4], second[5], second[0]), (0.0, 0.0, -10.0))
+        self.assertEqual((second[4], second[5], second[0]), (0.0, 0.0, -20.0))
         self.assertEqual(
             second_send.call_args.kwargs["enable_mask"],
             ENABLE_M3508_ONLY | ENABLE_J4310_ONLY,
@@ -466,7 +535,9 @@ class UpperConsoleTest(unittest.TestCase):
                     sent_values.append(args[1]) or True
                 ),
             ),
-            mock.patch.object(self.root, "after", return_value="pd8-first"),
+            mock.patch.object(
+                self.root, "after", return_value="pd8-first"
+            ) as after,
         ):
             self.assertTrue(self.app.execute_remote_action("翻转/存块"))
             self.assertTrue(self.app.remote_pd9_zero_pending)
@@ -477,11 +548,11 @@ class UpperConsoleTest(unittest.TestCase):
 
         self.assertEqual(
             [values[6] for values in sent_values[-3:]],
-            [0.0, 180.0, 60.0],
+            [0.0, 180.0, 55.0],
         )
         self.assertEqual(self.app.remote_action_states["闸门"], 0)
 
-    def test_pd8_second_primes_pd9_oscillation(self) -> None:
+    def test_pd8_second_resets_next_pd9_to_single_normal_action(self) -> None:
         sent_values = []
         self.app.remote_action_states["闸门"] = 1
         with (
@@ -492,20 +563,17 @@ class UpperConsoleTest(unittest.TestCase):
                     sent_values.append(args[1]) or True
                 ),
             ),
-            mock.patch.object(self.root, "after", return_value="pd8-first"),
+            mock.patch.object(
+                self.root, "after", return_value="pd8-first"
+            ) as after,
         ):
             self.assertTrue(self.app.execute_remote_action("翻转/存块"))
             self.assertTrue(self.app.execute_remote_action("翻转/存块"))
             self.assertFalse(self.app.remote_pd9_zero_pending)
-            self.assertTrue(self.app.remote_pd9_oscillation_pending)
             self.assertTrue(self.app.execute_remote_action("闸门"))
-            self.assertFalse(self.app.remote_pd9_oscillation_pending)
-            self.assertEqual(sent_values[-1][6], 130.0)
-            self.assertEqual(self.root.after.call_args.args[0], 500)
-            self.assertIs(self.root.after.call_args.args[2], False)
-            self.app._run_remote_pd9_gate_step(False)
 
-        self.assertEqual([values[6] for values in sent_values[-2:]], [130.0, 55.0])
+        self.assertEqual(sent_values[-1][6], 180.0)
+        self.assertEqual(after.call_count, 1)
 
     def test_pd9_zero_resets_existing_toggle_phase_to_180(self) -> None:
         self.app.remote_action_states["闸门"] = 1
@@ -526,7 +594,7 @@ class UpperConsoleTest(unittest.TestCase):
 
         self.assertEqual([values[6] for values in sent_values[-2:]], [0.0, 180.0])
 
-    def test_pd11_always_runs_the_single_collect_action(self) -> None:
+    def test_pd11_toggles_between_first_and_second_collect_actions(self) -> None:
         sent_values = []
         with (
             mock.patch.object(
@@ -550,10 +618,15 @@ class UpperConsoleTest(unittest.TestCase):
             self.assertEqual((values[4], values[5]), (0.0, 0.0))
             self.assertEqual(enable_mask, ENABLE_M3508_ONLY)
         self.assertEqual(after.call_count, 2)
-        for call in after.call_args_list:
+        expected = (
+            ("第一次动作", 165.0),
+            ("第二次动作", 240.0),
+        )
+        for call, (state_text, j4310_angle) in zip(after.call_args_list, expected):
             self.assertEqual(call.args[0], 500)
             self.assertEqual(call.args[2], "收块")
-            self.assertEqual((call.args[3][4], call.args[3][0]), (0.0, 180.0))
+            self.assertEqual(call.args[3], state_text)
+            self.assertEqual((call.args[4][4], call.args[4][0]), (0.0, j4310_angle))
         self.assertEqual(self.app.remote_action_states["收块"], 0)
         self.assertEqual(
             self.app.remote_action_buttons["收块"].cget("text"), "执行"
@@ -567,6 +640,28 @@ class UpperConsoleTest(unittest.TestCase):
         self.assertEqual(int(zero_grid["column"]), 7)
         for button in self.app.aux_buttons.values():
             self.assertEqual(button.cget("text"), "执行")
+
+    def test_aux_buttons_send_uart_bridge_output_state(self) -> None:
+        transport = mock.Mock()
+        transport.connected = True
+        transport.write.return_value = True
+        self.app.transport = transport
+        self.app.handshaken = True
+
+        self.assertEqual(self.app.aux_output_bits, AUX_OUTPUT_ARM_CYLINDER)
+        self.assertIn("全部关闭", self.app.aux_status_var.get())
+
+        expected_payloads = (
+            (AUX_OUTPUT_ARM_CYLINDER, 0x00),
+            (AUX_OUTPUT_PUSH_CYLINDER, 0x02),
+            (AUX_OUTPUT_GRIPPER_CYLINDER, 0x06),
+            (AUX_OUTPUT_ESTOP, 0x0E),
+        )
+        for output_bit, expected_bits in expected_payloads:
+            self.app.toggle_aux_output(output_bit)
+            frame = FrameParser().feed(transport.write.call_args.args[0])[0]
+            self.assertEqual(frame.msg_type, MSG_AUX_CONTROL)
+            self.assertEqual(frame.payload, bytes((expected_bits, 0x00)))
 
         self.app.aux_output_bits = next(iter(self.app.aux_buttons))
         self.app._update_aux_buttons()

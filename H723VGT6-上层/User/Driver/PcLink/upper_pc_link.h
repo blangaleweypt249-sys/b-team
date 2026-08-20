@@ -29,6 +29,9 @@
 #define UPPER_PC_ACTION_J4310_AUTO_RETURN 2U
 #define UPPER_PC_ACTION_J4310_ENABLE 3U
 
+typedef void (*upper_pc_aux_control_handler_t)(uint8_t output_bits,
+                                                void *user_data);
+
 typedef struct
 {
     float kp;
@@ -148,9 +151,6 @@ typedef void (*upper_pc_motor_action_handler_t)(uint8_t action,
                                                  uint8_t node_id,
                                                 uint8_t value,
                                                 void *user_data);
-typedef void (*upper_pc_aux_control_handler_t)(uint8_t output_bits,
-                                                void *user_data);
-
 typedef struct
 {
     pc_parser_t parser;
@@ -181,7 +181,7 @@ void UpperPcLink_Init(upper_pc_link_t *link,
                       upper_pc_estop_handler_t estop_handler,
                       upper_pc_motor_action_handler_t motor_action_handler,
                       void *user_data);
-/* 功能：注册气缸与电子急停控制回调；用途：把独立辅助输出命令交给 SPI3 转发层。 */
+/* 注册辅助控制命令回调；未注册时命令不会触发业务动作。 */
 void UpperPcLink_SetAuxControlHandler(upper_pc_link_t *link,
                                       upper_pc_aux_control_handler_t handler);
 /* 功能：向链路输入一段接收数据；用途：更新时间并驱动流式协议解析；完整消息会自动进入帧处理函数。 */

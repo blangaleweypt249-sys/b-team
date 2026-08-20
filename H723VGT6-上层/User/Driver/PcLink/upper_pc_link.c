@@ -410,7 +410,7 @@ void UpperPcLink_Init(upper_pc_link_t *link,
     link->user_data = user_data;
 }
 
-/* 功能：注册气缸与电子急停控制回调；用途：把独立辅助输出命令交给 SPI3 转发层。 */
+/* 注册辅助控制命令回调；未注册时命令不会触发业务动作。 */
 void UpperPcLink_SetAuxControlHandler(upper_pc_link_t *link,
                                       upper_pc_aux_control_handler_t handler)
 {

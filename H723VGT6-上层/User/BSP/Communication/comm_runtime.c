@@ -10,12 +10,12 @@
 #include "bsp_can.h"
 #include "fdcan.h"
 #include "fdcan_dlc.h"
-#include "spi.h"
 #include "usart.h"
 
 #define UART_DMA_RX_BUFFER_SIZE 256U
 #define UART_CHANNEL_COUNT      ((uint32_t)COMM_UART_CHANNEL_COUNT)
 #define UART_NON_RS485_COUNT    ((uint32_t)COMM_UART_RS485_1)
+#define UART_AUX_BRIDGE_INDEX   ((uint32_t)COMM_UART_UART5)
 #define FDCAN_CHANNEL_COUNT     3U
 #define DCACHE_LINE_SIZE        32U
 
@@ -75,6 +75,8 @@ static comm_uart_handler_t comm_uart_handler;
 static comm_can_handler_t comm_can_handler;
 static void *comm_handler_user_data;
 static volatile comm_uart_channel_t comm_pc_channel = COMM_UART_UART4;
+/* Copy asynchronous replies so stack-backed caller buffers remain valid. */
+__ALIGNED(DCACHE_LINE_SIZE) static uint8_t comm_pc_async_tx_buffer[256U];
 
 volatile uint32_t comm_uart_rx_bytes[UART_CHANNEL_COUNT];
 volatile uint32_t comm_uart_rx_isr_bytes[UART_CHANNEL_COUNT];
@@ -427,6 +429,23 @@ static HAL_StatusTypeDef CommRuntime_UartTransmitAsync(UartDmaChannel *channel,
   return HAL_UART_Transmit_IT(channel->handle, data, size);
 }
 
+/* 功能：通过 UART5 发送辅助控制帧；用途：把辅助输出状态送到抬升 H723；返回 true 表示发送已启动。 */
+bool CommRuntime_AuxUartTransmit(const uint8_t *data, uint16_t size)
+{
+  if ((data == NULL) || (size == 0U) ||
+      (huart5.gState != HAL_UART_STATE_READY))
+  {
+    return false;
+  }
+  return HAL_UART_Transmit_IT(&huart5, (uint8_t *)data, size) == HAL_OK;
+}
+
+/* 功能：检查 UART5 辅助发送通道是否空闲；用途：避免覆盖正在发送的帧。 */
+bool CommRuntime_AuxUartTxReady(void)
+{
+  return huart5.gState == HAL_UART_STATE_READY;
+}
+
 /* 功能：取得当前上位机控制 UART 通道；用途：统一控制链路的收发选择并提供默认回退；返回值为有效通道指针。 */
 static UartDmaChannel *GetPcUartChannel(void)
 {
@@ -462,65 +481,28 @@ bool CommRuntime_PcTransmit(const uint8_t *data, uint16_t size)
   return CommRuntime_UartTransmitAsync(GetPcUartChannel(), data, size) == HAL_OK;
 }
 
-/* 功能：在超时范围内等待并阻塞发送上位机数据；用途：启动阶段发送必须完成的消息；返回 true 表示发送成功。 */
-bool CommRuntime_PcTransmitBlocking(const uint8_t *data,
-                                    uint16_t size,
-                                    uint32_t timeout_ms)
+/* 功能：复制并异步发送启动或诊断消息；用途：支持栈上数据且不阻塞任务。 */
+bool CommRuntime_PcTransmitCopy(const uint8_t *data, uint16_t size)
 {
   UartDmaChannel *channel;
-  uint32_t start_tick;
 
-  if ((data == NULL) || (size == 0U) || (timeout_ms == 0U))
+  if ((data == NULL) || (size == 0U) ||
+      (size > sizeof(comm_pc_async_tx_buffer)))
   {
     return false;
   }
 
   channel = GetPcUartChannel();
-  start_tick = HAL_GetTick();
-  while ((HAL_GetTick() - start_tick) < timeout_ms)
-  {
-    uint32_t elapsed;
-    uint32_t remaining;
-
-    if (channel->handle->gState != HAL_UART_STATE_READY)
-    {
-      (void)osDelay(1U);
-      continue;
-    }
-
-    elapsed = HAL_GetTick() - start_tick;
-    remaining = timeout_ms - elapsed;
-    if (HAL_UART_Transmit(channel->handle,
-                          (const uint8_t *)data,
-                          size,
-                          remaining) == HAL_OK)
-    {
-      return true;
-    }
-    (void)osDelay(1U);
-  }
-
-  return false;
-}
-
-/* 功能：通过 SPI3 发送一帧；用途：向接收板转发气缸与电子急停状态。 */
-bool CommRuntime_Spi3Transmit(const uint8_t *data, uint16_t size)
-{
-  if ((data == NULL) || (size == 0U))
+  if (channel->handle->gState != HAL_UART_STATE_READY)
   {
     return false;
   }
-  if (HAL_SPI_GetState(&hspi3) != HAL_SPI_STATE_READY)
-  {
-    return false;
-  }
-  return HAL_SPI_Transmit(&hspi3, (uint8_t *)data, size, 2U) == HAL_OK;
-}
 
-/* 功能：检查 SPI3 发送通道是否空闲；用途：避免在 DMA 发送期间覆盖缓冲区；返回 true 表示可以提交新数据。 */
-bool CommRuntime_Spi3TxReady(void)
-{
-  return HAL_SPI_GetState(&hspi3) == HAL_SPI_STATE_READY;
+  (void)memcpy(comm_pc_async_tx_buffer, data, size);
+  DmaCache_PrepareTx(comm_pc_async_tx_buffer, size);
+  return HAL_UART_Transmit_DMA(channel->handle,
+                               comm_pc_async_tx_buffer,
+                               size) == HAL_OK;
 }
 
 /* 功能：设置上位机控制所用 UART；用途：选择协议收发通道；无返回值表示仅接受合法的 PC 通道枚举。 */
@@ -547,7 +529,7 @@ bool CommRuntime_TelemetryTxReady(void)
   control_index = (uint32_t)comm_pc_channel;
   for (index = 0U; index < UART_NON_RS485_COUNT; index++)
   {
-    if (index == control_index)
+    if ((index == control_index) || (index == UART_AUX_BRIDGE_INDEX))
     {
       continue;
     }
@@ -573,7 +555,7 @@ bool CommRuntime_TelemetryTransmit(const uint8_t *data, uint16_t size)
   control_index = (uint32_t)comm_pc_channel;
   for (index = 0U; index < UART_NON_RS485_COUNT; index++)
   {
-    if (index == control_index)
+    if ((index == control_index) || (index == UART_AUX_BRIDGE_INDEX))
     {
       continue;
     }
@@ -585,7 +567,7 @@ bool CommRuntime_TelemetryTransmit(const uint8_t *data, uint16_t size)
 
   for (index = 0U; index < UART_NON_RS485_COUNT; index++)
   {
-    if (index == control_index)
+    if ((index == control_index) || (index == UART_AUX_BRIDGE_INDEX))
     {
       continue;
     }

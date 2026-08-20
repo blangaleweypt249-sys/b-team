@@ -17,26 +17,18 @@ extern osThreadId_t commRxTaskHandle;
 
 volatile w25q_status_t w25q_init_status = W25Q_ERROR_NOT_INIT;
 
-/* 功能：运行上层应用周期任务；参数 argument 为 RTOS 任务入口参数；任务每 1 ms 执行控制并每 10 ms 执行周期处理。 */
+/* 功能：运行上层 1 ms 控制任务；参数 argument 为 RTOS 任务入口参数。 */
 void StartAppTask(void *argument)
 {
   uint32_t next_wake;
-  uint32_t period_10ms;
 
   (void)argument;
   next_wake = osKernelGetTickCount();
-  period_10ms = 0U;
 
   for (;;)
   {
     next_wake += 1U;
     App_Control1ms();
-    period_10ms++;
-    if (period_10ms >= 10U)
-    {
-      period_10ms = 0U;
-      App_Periodic10ms();
-    }
     (void)osDelayUntil(next_wake);
   }
 }

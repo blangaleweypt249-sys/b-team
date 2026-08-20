@@ -77,14 +77,12 @@ void CommRuntime_SetHandlers(comm_uart_handler_t uart_handler,
 bool CommRuntime_PcTxReady(void);
 /* 功能：通过当前控制 UART 异步发送数据；用途：发送协议响应和状态；返回 true 表示发送请求已被 HAL 接受。 */
 bool CommRuntime_PcTransmit(const uint8_t *data, uint16_t size);
-/* 功能：在超时范围内等待并阻塞发送上位机数据；用途：启动阶段发送必须完成的消息；返回 true 表示发送成功。 */
-bool CommRuntime_PcTransmitBlocking(const uint8_t *data,
-                                    uint16_t size,
-                                    uint32_t timeout_ms);
-/* 功能：通过 SPI3 发送一帧；用途：向接收板转发气缸与电子急停状态。 */
-bool CommRuntime_Spi3Transmit(const uint8_t *data, uint16_t size);
-/* 功能：检查 SPI3 发送通道是否空闲；用途：避免在 DMA 发送期间覆盖缓冲区；返回 true 表示可以提交新数据。 */
-bool CommRuntime_Spi3TxReady(void);
+/* 功能：复制并异步发送启动或诊断消息；用途：支持栈上数据且不阻塞任务。 */
+bool CommRuntime_PcTransmitCopy(const uint8_t *data, uint16_t size);
+/* 功能：通过 UART5 发送辅助控制帧；用途：向抬升 H723 转发辅助输出状态。 */
+bool CommRuntime_AuxUartTransmit(const uint8_t *data, uint16_t size);
+/* 功能：检查 UART5 辅助发送通道是否空闲；用途：避免覆盖正在发送的帧。 */
+bool CommRuntime_AuxUartTxReady(void);
 /* 功能：设置上位机控制所用 UART；用途：选择协议收发通道；无返回值表示仅接受合法的 PC 通道枚举。 */
 void CommRuntime_SetPcChannel(comm_uart_channel_t channel);
 /* 功能：查询当前上位机控制 UART；用途：供数据分发和诊断判断通道；返回值表示通道枚举。 */

@@ -104,9 +104,8 @@ void MX_FREERTOS_Init(void) {
   {
     static const uint8_t init_error[] = "FLASH BOOT ERROR UPPER_INIT\r\n";
 
-    (void)CommRuntime_PcTransmitBlocking(init_error,
-                                         sizeof(init_error) - 1U,
-                                         500U);
+    (void)CommRuntime_PcTransmitCopy(init_error,
+                                     sizeof(init_error) - 1U);
     Error_Handler();
   }
   /* USER CODE END Init */
@@ -170,10 +169,6 @@ __weak void StartAppTask(void *argument)
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
-__weak void App_Periodic10ms(void)
-{
-}
-
 __weak void App_Control1ms(void)
 {
 }

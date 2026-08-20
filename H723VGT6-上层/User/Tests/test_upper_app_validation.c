@@ -169,29 +169,34 @@ static void Test_M2006PositionBoundary(void)
 /* 功能：执行 RemoteActionTargets 场景测试；用途：验证对应输入下的行为和断言；无返回值表示由断言报告结果。 */
 static void Test_RemoteActionTargets(void)
 {
-    assert(UPPER_J4310_POSITION_KP == 20.0f);
+    assert(UPPER_J4310_POSITION_KP == 30.0f);
     assert(UPPER_J4310_POSITION_KD == 0.95f);
     assert(UPPER_REMOTE_PD13_FIRST_M3508_DEG == 500.0f);
     assert(UPPER_REMOTE_PD13_FIRST_J4310_DEG == 90.0f);
-    assert(UPPER_REMOTE_PD13_SECOND_M3508_DEG == 1000.0f);
+    assert(UPPER_REMOTE_PD13_SECOND_M3508_DEG == 1050.0f);
     assert(UPPER_REMOTE_PD13_SECOND_J4310_DEG == 90.0f);
     assert(UPPER_REMOTE_PD12_FIRST_M3508_DEG == 0.0f);
     assert(UPPER_REMOTE_PD12_FIRST_J4310_DEG == 90.0f);
     assert(UPPER_REMOTE_PD12_SECOND_M3508_DEG == 850.0f);
     assert(UPPER_REMOTE_PD12_SECOND_J4310_DEG == 90.0f);
     assert(UPPER_REMOTE_PD11_FIRST_M3508_DEG == 0.0f);
-    assert(UPPER_REMOTE_PD11_FIRST_J4310_DEG == 180.0f);
+    assert(UPPER_REMOTE_PD11_FIRST_J4310_DEG == 165.0f);
+    assert(UPPER_REMOTE_PD11_SECOND_M3508_DEG == 0.0f);
+    assert(UPPER_REMOTE_PD11_SECOND_J4310_DEG == 240.0f);
     assert(UPPER_REMOTE_PD8_FIRST_M3508_DEG == 0.0f);
     assert(UPPER_REMOTE_PD8_FIRST_J4310_DEG == 40.0f);
     assert(UPPER_REMOTE_PD8_SECOND_M3508_DEG == 0.0f);
-    assert(UPPER_REMOTE_PD8_SECOND_J4310_DEG == -10.0f);
+    assert(UPPER_REMOTE_PD8_SECOND_J4310_DEG == -20.0f);
     assert(UPPER_REMOTE_PD9_ZERO_GATE_DEG == 0.0f);
     assert(UPPER_REMOTE_PD9_FIRST_GATE_DEG == 180.0f);
-    assert(UPPER_REMOTE_PD9_SECOND_GATE_DEG == 60.0f);
-    assert(UPPER_REMOTE_PD9_OSCILLATION_HIGH_DEG == 130.0f);
-    assert(UPPER_REMOTE_PD9_OSCILLATION_LOW_DEG == 55.0f);
-    assert(UPPER_REMOTE_PD10_FIRST_GRIPPER_DEG == 125.0f);
-    assert(UPPER_REMOTE_PD10_SECOND_GRIPPER_DEG == 45.0f);
+    assert(UPPER_REMOTE_PD9_SECOND_GATE_DEG == 55.0f);
+    assert(UPPER_REMOTE_PD10_FIRST_GRIPPER_DEG == 45.0f);
+    assert(UPPER_REMOTE_PD10_SECOND_GRIPPER_DEG == 125.0f);
+    assert(UPPER_REMOTE_FINAL_J4310_DELAY_MS == 500U);
+    assert(UPPER_REMOTE_PD12_240_HOLD_MS == 2000U);
+    assert(UPPER_REMOTE_PD11_OPEN_DELAY_MS == 1200U);
+    assert(UPPER_REMOTE_PD11_J4310_DELAY_MS == 500U);
+    assert(UPPER_REMOTE_PD11_CLOSE_DELAY_MS == 1800U);
 }
 
 /* 功能：执行 M3508PositionBoundary 场景测试；用途：验证对应输入下的行为和断言；无返回值表示由断言报告结果。 */
