@@ -35,6 +35,9 @@ class FieldLocalizer(Node):
         self.declare_parameter('base_to_lidar_x_m', -0.205)
         self.declare_parameter('base_to_lidar_y_m', 0.16)
         self.declare_parameter('base_to_lidar_yaw_deg', 90.0)
+        # 车体尺寸：用于把车体中心初始位置校正到 (车宽/2, 车长/2)。
+        self.declare_parameter('base_length_m', 0.70)
+        self.declare_parameter('base_width_m', 0.56)
         self.declare_parameter('allowed_min_x', 0.0)
         self.declare_parameter('allowed_max_x', 11.0)
         self.declare_parameter('allowed_min_y', 0.0)
@@ -112,8 +115,8 @@ class FieldLocalizer(Node):
             field_position = start_corner_transform(
                 local_position,
                 str(self.get_parameter('start_corner').value),
-                0.0,
-                0.0,
+                float(self.get_parameter('base_length_m').value),
+                float(self.get_parameter('base_width_m').value),
             )
         except ValueError as error:
             self.get_logger().error(f'{error}，已按 bottom_left 处理。')

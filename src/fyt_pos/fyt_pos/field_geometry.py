@@ -45,19 +45,24 @@ def rotate_to_field(point: Point2D, origin: Point2D, yaw_rad: float) -> Point2D:
 def start_corner_transform(
     local_point: Point2D,
     start_corner: str,
-    field_length_m: float,
-    field_width_m: float,
+    base_length_m: float,
+    base_width_m: float,
 ) -> Point2D:
-    """将里程计局部坐标映射为以本方起点为原点的队伍相对坐标。
+    """将里程计局部坐标映射为以场地角落为原点的队伍相对坐标。
 
-    bottom_left:  蓝方，原点在左下角，X 向右增大（机器人右方 = +X）。
-    bottom_right: 红方，原点在右下角，X 向左增大（机器人左方 = +X），翻转 X 轴。
+    车体停在起点角落时，车体外侧贴着场地两条边，车体中心并不在 (0,0)，
+    而是在 (车宽/2, 车长/2)。因此输出的场地坐标需加上车体半宽半长偏移。
+
+    bottom_left:  蓝方，车贴左下角，X 向右增大，Y 向场内增大。
+    bottom_right: 红方，车贴右下角，X 向左增大（翻转 X 轴），Y 向场内增大。
     两种起点的前进方向均为 +Y。
     """
+    half_length = base_length_m / 2.0
+    half_width = base_width_m / 2.0
     if start_corner == 'bottom_left':
-        return local_point
+        return Point2D(local_point.x + half_width, local_point.y + half_length)
     elif start_corner == 'bottom_right':
-        return Point2D(-local_point.x, local_point.y)
+        return Point2D(-local_point.x + half_width, local_point.y + half_length)
     else:
         raise ValueError(f'未知起始角: {start_corner}')
 
