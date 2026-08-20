@@ -61,8 +61,8 @@ def generate_launch_description():
 
     # ---- 声明启动参数 ----
     declare_xfer_format_cmd = DeclareLaunchArgument(
-        'xfer_format', default_value='0',
-        description='点云格式: 0=PointCloud2, 1=CustomMsg'
+        'xfer_format', default_value='1',
+        description='点云格式: 0=PointCloud2, 1=CustomMsg(FAST-LIO原生,默认)'
     )
     declare_serial_cmd = DeclareLaunchArgument(
         'serial_device', default_value='/dev/ttyACM0',
