@@ -11,7 +11,7 @@
     — field_localizer        (场地定位, /competition/field_pose + /competition/current_zone, 统一使用field.yaml, 内部坐标系不变)  [延迟 3s]
 
   阶段 3 (12s): 信息发布模块（串口网关,两套独立可执行文件）
-    — team=blue: serial_gateway       (蓝方, /dev/ttyUSB0 → STM32, X 原样发送, 50Hz/类 100Hz)
+    — team=blue: serial_gateway       (蓝方, /dev/ttyACM0 → STM32, X 原样发送, 50Hz/类 100Hz)
     — team=red : serial_gateway_red   (红方, 写死位置帧 field_x_m 取反, 感知块/球坐标不变)
 
 通信连接建立顺序：
@@ -30,7 +30,7 @@
 
 可选参数：
   xfer_format:=0                雷达点云格式 0=PointCloud2, 1=CustomMsg（默认 0）
-  serial_device:=/dev/ttyUSB0   串口设备路径
+  serial_device:=/dev/ttyACM0   串口设备路径
   baudrate:=921600              串口波特率 (9600/57600/115200/460800/921600)
   team:=blue|red                队伍: blue=串口X原样; red=串口位置帧X取反(两套独立cpp executable)
 
@@ -65,7 +65,7 @@ def generate_launch_description():
         description='点云格式: 0=PointCloud2, 1=CustomMsg'
     )
     declare_serial_cmd = DeclareLaunchArgument(
-        'serial_device', default_value='/dev/ttyUSB0',
+        'serial_device', default_value='/dev/ttyACM0',
         description='串口设备路径'
     )
     declare_baudrate_cmd = DeclareLaunchArgument(

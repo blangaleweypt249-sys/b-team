@@ -5,7 +5,7 @@
 
 启动内容：
   competition_gateway / serial_gateway
-    — 独占 /dev/ttyUSB0 串口
+    — 独占 /dev/ttyACM0 串口
     — 订阅感知话题，封装为固定帧格式发送给 STM32（50Hz）
     — 接收 STM32 状态帧并发布连接状态
     — negate_x=true: 位置帧 field_x_m 取反后再打包发送给 STM32
@@ -25,7 +25,7 @@
   ros2 launch common_launch_pkg serial_gateway_red.launch.py
 
 可选参数：
-  serial_device:=/dev/ttyUSB0  指定串口设备路径
+  serial_device:=/dev/ttyACM0  指定串口设备路径
   baudrate:=921600             指定波特率
 """
 
@@ -43,7 +43,7 @@ def generate_launch_description():
     baudrate = LaunchConfiguration('baudrate')
 
     declare_serial_cmd = DeclareLaunchArgument(
-        'serial_device', default_value='/dev/ttyUSB0',
+        'serial_device', default_value='/dev/ttyACM0',
         description='串口设备路径'
     )
     declare_baudrate_cmd = DeclareLaunchArgument(

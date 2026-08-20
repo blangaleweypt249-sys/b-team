@@ -3,7 +3,7 @@ serial_gateway:
     # 蓝方:原样发送X。红方请使用 serial_gateway_red.yaml。
     negate_x: false
     # 该进程必须是此设备文件的唯一打开者。
-    serial_device: /dev/ttyUSB0
+    serial_device: /dev/ttyACM0
     baudrate: 921600
     # 感知帧和位置帧交替发送周期。10 ms → 共 100 Hz（每种帧 50 Hz）
     send_period_ms: 10
