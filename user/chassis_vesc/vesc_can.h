@@ -27,6 +27,7 @@ HAL_StatusTypeDef VescCan_Send(vesc_can_t *bus, uint8_t motor_id,
                                uint8_t length);
 HAL_StatusTypeDef VescCan_Read(vesc_can_t *bus, vesc_can_msg_t *msg);
 void VescCan_Recover(vesc_can_t *bus);
+HAL_StatusTypeDef VescCan_Restart(vesc_can_t *bus);
 void VescCan_Stop(vesc_can_t *bus);
 
 #endif

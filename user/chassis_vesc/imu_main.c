@@ -349,7 +349,10 @@ static void reset_yaw(void)
 static void set_error_state(void)
 {
     imu_init.step = IMU_INIT_ERROR;
+    imu_init.next_recovery_ms = HAL_GetTick() +
+                                imu_config.recovery_retry_ms;
     imu_data.state = IMU_STATE_ERROR;
+    imu_data.online = false;
     imu_data.gyro_valid = false;
     imu_data.yaw_valid = false;
     suspend_yaw_control();
@@ -564,12 +567,13 @@ static void update_health(uint32_t now_ms, const imu_raw_data_t *raw_data)
 
 static void recover_stale_streams(uint32_t now_ms)
 {
-    if (imu_init.step != IMU_INIT_COMPLETE)
+    if ((imu_init.step != IMU_INIT_COMPLETE) &&
+        (imu_init.step != IMU_INIT_ERROR))
     {
         return;
     }
 
-    if (imu_data.online)
+    if ((imu_init.step == IMU_INIT_COMPLETE) && imu_data.online)
     {
         imu_init.next_recovery_ms = now_ms +
                                     imu_config.recovery_timeout_ms;
@@ -582,6 +586,10 @@ static void recover_stale_streams(uint32_t now_ms)
     }
 
     Imu_RequestRestart();
+    imu_data.online = false;
+    imu_data.gyro_valid = false;
+    imu_data.yaw_valid = false;
+    reset_yaw();
     imu_init.config_index = 0U;
     imu_init.recovering = true;
     imu_init.step = IMU_INIT_SEND_CONFIG;

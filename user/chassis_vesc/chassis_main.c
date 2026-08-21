@@ -23,6 +23,8 @@
 #define CHASSIS_START_RAMP_MS      300U
 #define CHASSIS_STOP_RAMP_MS       200U
 #define CHASSIS_RX_DRAIN_MAX       32U
+#define CHASSIS_OFFLINE_RECOVERY_MS 1000U
+#define CHASSIS_RECOVERY_RETRY_MS   500U
 
 #define CHASSIS_ROTATION_SCALE     (3.5f + 3.30f)
 #define CHASSIS_LEGACY_TIMEOUT_MS  500U
@@ -87,6 +89,11 @@ static bool chassis_motion_was_rotation;
 static bool chassis_stop_was_rotation;
 static bool chassis_ready;
 static volatile bool chassis_emergency_stop;
+static volatile bool chassis_recovery_stop;
+static bool chassis_recovering;
+static bool chassis_was_online;
+static uint32_t chassis_all_offline_since_ms;
+static uint32_t chassis_next_recovery_ms;
 static chassis_command_t chassis_commands[CHASSIS_CMD_SOURCE_COUNT];
 static volatile int8_t chassis_active_source = -1;
 static volatile chassis_control_mode_t chassis_control_mode =
@@ -135,6 +142,100 @@ static void Chassis_ProcessFeedback(uint32_t now_ms)
     for (i = 0U; i < ARRAY_SIZE(chassis_motors); i++)
     {
         VescMotor_Update(&chassis_motors[i], now_ms);
+    }
+}
+
+static bool Chassis_AllMotorsOnline(void)
+{
+    uint8_t i;
+
+    for (i = 0U; i < ARRAY_SIZE(chassis_motors); i++)
+    {
+        if (!chassis_motors[i].status.online)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool Chassis_ImuReady(void)
+{
+    imu_data_t imu;
+
+    return ImuMain_GetData(&imu) &&
+           (imu.state == IMU_STATE_READY) && imu.online &&
+           imu.gyro_valid && imu.yaw_valid;
+}
+
+static void Chassis_ClearCommandsForRecovery(void)
+{
+    uint32_t primask;
+    uint8_t i;
+
+    primask = __get_PRIMASK();
+    __disable_irq();
+    chassis_target_vx = 0;
+    chassis_target_vy = 0;
+    chassis_target_z = 0;
+    chassis_active_source = -1;
+    for (i = 0U; i < CHASSIS_CMD_SOURCE_COUNT; i++)
+    {
+        chassis_commands[i].active = false;
+    }
+    chassis_recovery_stop = true;
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+
+    for (i = 0U; i < CHASSIS_WHEEL_COUNT; i++)
+    {
+        (void)VescMotor_SetRpm(&chassis_motors[i], 0);
+    }
+    chassis_motion_state = CHASSIS_MOTION_EMERGENCY_STOP;
+}
+
+static void Chassis_RecoverOfflineBus(uint32_t now_ms)
+{
+    if (Chassis_AllMotorsOnline())
+    {
+        chassis_was_online = true;
+        chassis_all_offline_since_ms = 0U;
+        chassis_recovering = false;
+        if (chassis_recovery_stop && Chassis_ImuReady())
+        {
+            chassis_recovery_stop = false;
+        }
+        return;
+    }
+
+    if (chassis_all_offline_since_ms == 0U)
+    {
+        chassis_all_offline_since_ms = now_ms;
+        if (chassis_was_online)
+        {
+            Chassis_ClearCommandsForRecovery();
+            chassis_recovering = true;
+        }
+        return;
+    }
+    if ((now_ms - chassis_all_offline_since_ms) <
+        CHASSIS_OFFLINE_RECOVERY_MS)
+    {
+        return;
+    }
+
+    if (!chassis_recovering)
+    {
+        Chassis_ClearCommandsForRecovery();
+        chassis_recovering = true;
+        chassis_next_recovery_ms = now_ms;
+    }
+    if ((int32_t)(now_ms - chassis_next_recovery_ms) >= 0)
+    {
+        (void)VescCan_Restart(&chassis_vesc_bus);
+        chassis_next_recovery_ms = now_ms + CHASSIS_RECOVERY_RETRY_MS;
     }
 }
 
@@ -335,6 +436,12 @@ HAL_StatusTypeDef Chassis_Init(void)
 
     chassis_motion_state = CHASSIS_MOTION_STOPPED;
     chassis_last_tx_ms = HAL_GetTick();
+    chassis_all_offline_since_ms = chassis_last_tx_ms;
+    chassis_next_recovery_ms = chassis_last_tx_ms +
+                               CHASSIS_OFFLINE_RECOVERY_MS;
+    chassis_recovering = false;
+    chassis_was_online = false;
+    chassis_recovery_stop = false;
     chassis_ready = true;
     Chassis_SendWheelRpm();
     return HAL_OK;
@@ -492,6 +599,7 @@ void Chassis_Run1ms(void)
 
     now_ms = HAL_GetTick();
     Chassis_ProcessFeedback(now_ms);
+    Chassis_RecoverOfflineBus(now_ms);
 
     primask = __get_PRIMASK();
     __disable_irq();
@@ -520,7 +628,7 @@ void Chassis_Run1ms(void)
     chassis_target_vx = vx;
     chassis_target_vy = vy;
     chassis_target_z = z;
-    emergency_stop = chassis_emergency_stop;
+    emergency_stop = chassis_emergency_stop || chassis_recovery_stop;
     if (primask == 0U)
     {
         __enable_irq();

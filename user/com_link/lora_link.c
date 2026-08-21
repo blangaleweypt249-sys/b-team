@@ -24,8 +24,10 @@
 #define REMOTE_AXIS_DEADZONE       4
 #define REMOTE_FAST_SPEED_MM_S     150
 #define REMOTE_FINE_SPEED_MM_S     75
+#define REMOTE_KEYBOARD_S_MM_S     75
 #define REMOTE_ROTATION_MRAD_S     10
 #define REMOTE_TIMEOUT_MS          1000U
+#define REMOTE_KEY1_BIT            (1U << 0U)
 #define REMOTE_LEFT_SHOULDER_BIT   (1U << 6U)
 #define REMOTE_RIGHT_SHOULDER_BIT  (1U << 7U)
 #define REMOTE_LOCAL_BUTTON_MASK    0x3FU
@@ -118,6 +120,10 @@ static void LoraLink_HandleLocalPayload(const uint8_t *payload)
     {
         LoraLink_MapStick(payload[2], payload[3], REMOTE_FINE_SPEED_MM_S,
                           &vx, &vy);
+    }
+    if ((buttons & REMOTE_KEY1_BIT) != 0U)
+    {
+        vy = -REMOTE_KEYBOARD_S_MM_S;
     }
 
     left_shoulder = (buttons & REMOTE_LEFT_SHOULDER_BIT) != 0U;

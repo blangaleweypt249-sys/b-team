@@ -216,6 +216,7 @@ __weak void StartChassisTask(void *argument)
 {
   /* USER CODE BEGIN StartChassisTask */
   uint32_t next_tick = osKernelGetTickCount();
+  uint32_t next_init_retry = next_tick;
   HAL_StatusTypeDef chassis_result;
   HAL_StatusTypeDef imu_result;
 
@@ -226,6 +227,24 @@ __weak void StartChassisTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
+    uint32_t now = osKernelGetTickCount();
+
+    if ((imu_result != HAL_OK) &&
+        ((int32_t)(now - next_init_retry) >= 0))
+    {
+      imu_result = ImuMain_Init();
+    }
+    if ((chassis_result != HAL_OK) &&
+        ((int32_t)(now - next_init_retry) >= 0))
+    {
+      chassis_result = Chassis_Init();
+    }
+    if (((imu_result != HAL_OK) || (chassis_result != HAL_OK)) &&
+        ((int32_t)(now - next_init_retry) >= 0))
+    {
+      next_init_retry = now + 2000U;
+    }
+
     if (imu_result == HAL_OK)
     {
       ImuMain_Run1ms();

@@ -15,7 +15,7 @@
 #define AUTO_PNP_DEBOUNCE_MS         100U
 #define AUTO_PNP_CLEAR_SETTLE_MS     150U
 #define AUTO_PNP_TOTAL_TIMEOUT_MS    5000U
-#define AUTO_PNP_WORLD_X_CMD         10
+#define AUTO_PNP_WORLD_X_CMD         13
 
 #define AUTO_FIELD_LINEAR_KP         150.0f
 #define AUTO_ALIGN_LINEAR_KP         300.0f

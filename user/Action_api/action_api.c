@@ -17,6 +17,8 @@
 #define ALIGN_TOLERANCE_DEG          3.0f
 #define ACTION_TIMEOUT_MS            5000U
 #define CHASSIS_YAW_STEP_DEG         90.0f
+#define REMOTE_PA2_BUTTON_BIT        (1U << 4U)
+#define REMOTE_DOUBLE_CLICK_MS       400U
 
 typedef enum { LEG_INITIAL, LEG_LIFTED, LEG_FLAT } leg_state_t;
 typedef enum {
@@ -270,23 +272,52 @@ void Action_UpdateRemoteButtons(uint8_t buttons, uint8_t online)
 {
     static const action_cmd_t button_actions[6] = {
         ACTION_CMD_NONE, ACTION_CMD_NONE,
-        ACTION_CMD_NONE, ACTION_CMD_CHASSIS_CW_90,
-        ACTION_CMD_CHASSIS_ZERO,
-        ACTION_CMD_CHASSIS_CCW_90
+        ACTION_CMD_NONE, ACTION_CMD_CHASSIS_CCW_90,
+        ACTION_CMD_NONE,
+        ACTION_CMD_CHASSIS_CW_90
     };
+    static bool pa2_click_pending;
+    static uint32_t pa2_first_click_ms;
+    uint32_t now_ms = HAL_GetTick();
     uint8_t pressed;
     uint8_t i;
 
     buttons &= 0x3FU;
-    if (online == 0U) { remote_buttons_initialized = false; return; }
+    if (online == 0U)
+    {
+        remote_buttons_initialized = false;
+        pa2_click_pending = false;
+        return;
+    }
     if (!remote_buttons_initialized)
     {
         remote_buttons_last = buttons;
         remote_buttons_initialized = true;
+        pa2_click_pending = false;
         return;
     }
     pressed = (uint8_t)(buttons & (uint8_t)~remote_buttons_last);
     remote_buttons_last = buttons;
+
+    if (pa2_click_pending &&
+        ((uint32_t)(now_ms - pa2_first_click_ms) > REMOTE_DOUBLE_CLICK_MS))
+    {
+        pa2_click_pending = false;
+    }
+    if ((pressed & REMOTE_PA2_BUTTON_BIT) != 0U)
+    {
+        if (pa2_click_pending)
+        {
+            pa2_click_pending = false;
+            (void)Action_Request(ACTION_CMD_ALIGN_BLOCK_PNP);
+        }
+        else
+        {
+            pa2_first_click_ms = now_ms;
+            pa2_click_pending = true;
+        }
+    }
+
     for (i = 0U; i < 6U; i++)
     {
         if (((pressed & (uint8_t)(1U << i)) != 0U) &&

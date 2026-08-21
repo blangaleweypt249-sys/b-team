@@ -178,6 +178,26 @@ void VescCan_Recover(vesc_can_t *bus)
     }
 }
 
+HAL_StatusTypeDef VescCan_Restart(vesc_can_t *bus)
+{
+    if ((bus == NULL) || !bus->ready || (bus->hfdcan == NULL))
+    {
+        return HAL_ERROR;
+    }
+
+    (void)HAL_FDCAN_Stop(bus->hfdcan);
+    if (HAL_FDCAN_Start(bus->hfdcan) != HAL_OK)
+    {
+        return HAL_ERROR;
+    }
+
+    if (__HAL_FDCAN_GET_FLAG(bus->hfdcan, FDCAN_FLAG_BUS_OFF) != 0U)
+    {
+        __HAL_FDCAN_CLEAR_FLAG(bus->hfdcan, FDCAN_FLAG_BUS_OFF);
+    }
+    return HAL_OK;
+}
+
 void VescCan_Stop(vesc_can_t *bus)
 {
     if ((bus == NULL) || !bus->ready || (bus->hfdcan == NULL))
