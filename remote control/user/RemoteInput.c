@@ -1,6 +1,7 @@
 #include "RemoteInput.h"
 #include "adc.h"
 #include "gpio.h"
+#include "tim.h"
 
 #define REMOTE_AXIS_MAX 255U        /* 摇杆输出最大值 */
 #define REMOTE_AXIS_CENTER 128U     /* 摇杆输出中心值 */
@@ -12,6 +13,16 @@
 #define REMOTE_DEBOUNCE_SAMPLES 10U /* 数字输入稳定 10 ms 后生效 */
 #define REMOTE_BEEP_MS 30U          /* 按键提示音时长(ms) */
 #define REMOTE_BEEP_GAP_MS 100U     /* 上电提示音间隔(ms) */
+
+#define REMOTE_STARTUP_BEEP_COUNT 3U
+
+typedef enum
+{
+    REMOTE_BEEP_IDLE = 0,
+    REMOTE_BEEP_KEY_ON,
+    REMOTE_BEEP_STARTUP_ON,
+    REMOTE_BEEP_STARTUP_GAP
+} remote_beep_state_t;
 
 typedef struct
 {
@@ -61,8 +72,9 @@ static uint8_t remote_sw_candidate[REMOTE_SWITCH_COUNT];
 static uint8_t remote_key_candidate[REMOTE_KEY_COUNT];
 static uint8_t remote_sw_count[REMOTE_SWITCH_COUNT];
 static uint8_t remote_key_count[REMOTE_KEY_COUNT];
-static uint32_t remote_beep_stop_ms;
-static uint8_t remote_beep_active;
+static uint16_t remote_beep_remaining_ms;
+static uint8_t remote_startup_beeps_remaining;
+static remote_beep_state_t remote_beep_state;
 
 /**
  * @brief 将输入数值线性映射到指定范围
@@ -241,18 +253,51 @@ static uint8_t Remote_Debounce(uint8_t raw, uint8_t *stable,
 
 static void Remote_StartBeep(void)
 {
+    if (remote_beep_state != REMOTE_BEEP_IDLE)
+    {
+        return;
+    }
+
     HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
-    remote_beep_stop_ms = HAL_GetTick() + REMOTE_BEEP_MS;
-    remote_beep_active = 1U;
+    remote_beep_remaining_ms = REMOTE_BEEP_MS;
+    remote_beep_state = REMOTE_BEEP_KEY_ON;
 }
 
-static void Remote_UpdateBeep(void)
+static void Remote_UpdateBeepTimer(void)
 {
-    if ((remote_beep_active != 0U) &&
-        ((int32_t)(HAL_GetTick() - remote_beep_stop_ms) >= 0))
+    if (remote_beep_state == REMOTE_BEEP_IDLE)
     {
-        HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);
-        remote_beep_active = 0U;
+        return;
+    }
+    if (remote_beep_remaining_ms > 0U)
+    {
+        remote_beep_remaining_ms--;
+        if (remote_beep_remaining_ms > 0U)
+        {
+            return;
+        }
+    }
+
+    if (remote_beep_state == REMOTE_BEEP_STARTUP_GAP)
+    {
+        HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
+        remote_beep_remaining_ms = REMOTE_BEEP_MS;
+        remote_beep_state = REMOTE_BEEP_STARTUP_ON;
+        return;
+    }
+
+    HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);
+    if ((remote_beep_state == REMOTE_BEEP_STARTUP_ON) &&
+        (remote_startup_beeps_remaining > 1U))
+    {
+        remote_startup_beeps_remaining--;
+        remote_beep_remaining_ms = REMOTE_BEEP_GAP_MS;
+        remote_beep_state = REMOTE_BEEP_STARTUP_GAP;
+    }
+    else
+    {
+        remote_startup_beeps_remaining = 0U;
+        remote_beep_state = REMOTE_BEEP_IDLE;
     }
 }
 
@@ -261,11 +306,12 @@ static void Remote_UpdateBeep(void)
  * @param ms 提示音时长(ms)
  * @retval None
  */
-static void Remote_Beep(uint32_t ms)
+static void Remote_StartStartupBeep(void)
 {
     HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
-    HAL_Delay(ms);
-    HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);
+    remote_beep_remaining_ms = REMOTE_BEEP_MS;
+    remote_startup_beeps_remaining = REMOTE_STARTUP_BEEP_COUNT;
+    remote_beep_state = REMOTE_BEEP_STARTUP_ON;
 }
 
 /**
@@ -291,32 +337,34 @@ void Remote_Init(void)
         remote_key_count[i] = 0U;
         remote_data.key_state[i] = remote_last_key[i];
     }
-    remote_beep_active = 0U;
+    Remote_StartStartupBeep();
 
     remote_adc_state = REMOTE_ADC_OK;
     if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)remote_shoulder_adc,
                           REMOTE_SHOULDER_NUM) != HAL_OK)
     {
         remote_adc_state = REMOTE_ADC1_ERROR;
-        return;
     }
     /* 任务直接读取循环 DMA 缓冲区，不使用高频完成中断。 */
-    __HAL_DMA_DISABLE_IT(hadc1.DMA_Handle, DMA_IT_HT | DMA_IT_TC);
+    if (remote_adc_state != REMOTE_ADC1_ERROR)
+    {
+        __HAL_DMA_DISABLE_IT(hadc1.DMA_Handle, DMA_IT_HT | DMA_IT_TC);
+    }
 
     if (HAL_ADC_Start_DMA(&hadc2, (uint32_t *)remote_axis_adc,
                           REMOTE_AXIS_NUM) != HAL_OK)
     {
         remote_adc_state = REMOTE_ADC2_ERROR;
-        return;
     }
-    __HAL_DMA_DISABLE_IT(hadc2.DMA_Handle, DMA_IT_HT | DMA_IT_TC);
+    if (remote_adc_state != REMOTE_ADC2_ERROR)
+    {
+        __HAL_DMA_DISABLE_IT(hadc2.DMA_Handle, DMA_IT_HT | DMA_IT_TC);
+    }
 
-    Remote_Beep(REMOTE_BEEP_MS);
-    HAL_Delay(REMOTE_BEEP_GAP_MS);
-    Remote_Beep(REMOTE_BEEP_MS);
-    HAL_Delay(REMOTE_BEEP_GAP_MS);
-    Remote_Beep(REMOTE_BEEP_MS);
-    HAL_Delay(REMOTE_BEEP_GAP_MS);
+    if (HAL_TIM_Base_Start_IT(&htim2) != HAL_OK)
+    {
+        Error_Handler();
+    }
 }
 
 /**
@@ -327,10 +375,6 @@ void Remote_Init(void)
 void Remote_Update(void)
 {
     uint8_t i;
-    uint8_t raw;
-    uint8_t changed = 0U;
-
-    Remote_UpdateBeep();
 
     if (remote_adc_state == REMOTE_ADC_OK)
     {
@@ -358,6 +402,15 @@ void Remote_Update(void)
         remote_data.right_x = Remote_ConvertAxis(2U, remote_axis_adc[2]);
         remote_data.right_y = Remote_ConvertAxis(3U, remote_axis_adc[3]);
     }
+}
+
+static void Remote_TimerScan(void)
+{
+    uint8_t i;
+    uint8_t raw;
+    uint8_t changed = 0U;
+
+    Remote_UpdateBeepTimer();
 
     for (i = 0U; i < REMOTE_SWITCH_COUNT; i++)
     {
@@ -382,5 +435,13 @@ void Remote_Update(void)
     if (changed != 0U)
     {
         Remote_StartBeep();
+    }
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM2)
+    {
+        Remote_TimerScan();
     }
 }

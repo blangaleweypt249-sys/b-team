@@ -4,43 +4,21 @@
 #include <stddef.h>
 #include <string.h>
 
-#define MCU_LINK_DMA_BUFFER_SIZE 1024U
-
 static UART_HandleTypeDef *mcu_uart;
-static uint8_t mcu_rx_buffer[MCU_LINK_DMA_BUFFER_SIZE];
 static uint8_t mcu_tx_buffer[MCU_LINK_TX_BUFFER_SIZE];
-static uint16_t mcu_rx_read_pos;
-static volatile bool mcu_restart_requested;
+static uint8_t mcu_pending_buffer[MCU_LINK_TX_BUFFER_SIZE];
+static volatile uint16_t mcu_pending_length;
+static volatile bool mcu_pending_valid;
 static volatile bool mcu_tx_busy;
 static bool mcu_initialized;
 
-volatile uint32_t mcu_link_rx_bytes;
 volatile uint32_t mcu_link_uart_error_count;
 volatile uint32_t mcu_link_tx_error_count;
 
-static HAL_StatusTypeDef McuLink_StartReceive(void)
-{
-    HAL_StatusTypeDef status;
-
-    mcu_rx_read_pos = 0U;
-    __HAL_UART_CLEAR_FLAG(mcu_uart,
-                          UART_CLEAR_OREF | UART_CLEAR_NEF |
-                          UART_CLEAR_PEF | UART_CLEAR_FEF);
-    __HAL_UART_SEND_REQ(mcu_uart, UART_RXDATA_FLUSH_REQUEST);
-    status = HAL_UART_Receive_DMA(mcu_uart, mcu_rx_buffer,
-                                  MCU_LINK_DMA_BUFFER_SIZE);
-    if (status == HAL_OK)
-    {
-        __HAL_DMA_DISABLE_IT(mcu_uart->hdmarx, DMA_IT_HT | DMA_IT_TC);
-    }
-    return status;
-}
-
-HAL_StatusTypeDef McuLink_Init(UART_HandleTypeDef *uart)
+HAL_StatusTypeDef McuLink_InitTx(UART_HandleTypeDef *uart)
 {
     if ((uart == NULL) || (uart->Instance != USART6) ||
-        (uart->hdmarx == NULL) || (uart->hdmatx == NULL) ||
-        (uart->hdmarx->Init.Mode != DMA_CIRCULAR))
+        (uart->hdmatx == NULL))
     {
         return HAL_ERROR;
     }
@@ -50,71 +28,15 @@ HAL_StatusTypeDef McuLink_Init(UART_HandleTypeDef *uart)
     }
 
     mcu_uart = uart;
-    (void)memset(mcu_rx_buffer, 0, sizeof(mcu_rx_buffer));
     (void)memset(mcu_tx_buffer, 0, sizeof(mcu_tx_buffer));
-    mcu_restart_requested = false;
+    (void)memset(mcu_pending_buffer, 0, sizeof(mcu_pending_buffer));
+    mcu_pending_length = 0U;
+    mcu_pending_valid = false;
     mcu_tx_busy = false;
-    mcu_link_rx_bytes = 0U;
     mcu_link_uart_error_count = 0U;
     mcu_link_tx_error_count = 0U;
-
-    if (McuLink_StartReceive() != HAL_OK)
-    {
-        mcu_uart = NULL;
-        return HAL_ERROR;
-    }
-
     mcu_initialized = true;
     return HAL_OK;
-}
-
-void McuLink_Run(void)
-{
-    if (!mcu_initialized || !mcu_restart_requested)
-    {
-        return;
-    }
-
-    mcu_restart_requested = false;
-    (void)HAL_UART_AbortReceive(mcu_uart);
-    (void)HAL_UART_AbortTransmit(mcu_uart);
-    mcu_tx_busy = false;
-    if (McuLink_StartReceive() != HAL_OK)
-    {
-        mcu_restart_requested = true;
-    }
-}
-
-uint16_t McuLink_Read(uint8_t *data, uint16_t max_length)
-{
-    uint16_t count = 0U;
-    uint16_t write_pos;
-
-    if (!mcu_initialized || (data == NULL) || (max_length == 0U))
-    {
-        return 0U;
-    }
-
-    write_pos = (uint16_t)(MCU_LINK_DMA_BUFFER_SIZE -
-                           __HAL_DMA_GET_COUNTER(mcu_uart->hdmarx));
-    if (write_pos >= MCU_LINK_DMA_BUFFER_SIZE)
-    {
-        write_pos = 0U;
-    }
-    __DMB();
-    while ((count < max_length) && (mcu_rx_read_pos != write_pos))
-    {
-        data[count] = mcu_rx_buffer[mcu_rx_read_pos];
-        count++;
-        mcu_rx_read_pos++;
-        if (mcu_rx_read_pos >= MCU_LINK_DMA_BUFFER_SIZE)
-        {
-            mcu_rx_read_pos = 0U;
-        }
-    }
-
-    mcu_link_rx_bytes += count;
-    return count;
 }
 
 HAL_StatusTypeDef McuLink_Send(const uint8_t *data, uint16_t length)
@@ -126,9 +48,14 @@ HAL_StatusTypeDef McuLink_Send(const uint8_t *data, uint16_t length)
     {
         return HAL_ERROR;
     }
-    if (mcu_tx_busy)
+    if (mcu_tx_busy || mcu_pending_valid)
     {
-        return HAL_BUSY;
+        /* The remote control is a periodic state stream. Keep only its newest
+         * frame so a slow UART cannot block reception or build a stale queue. */
+        (void)memcpy(mcu_pending_buffer, data, length);
+        mcu_pending_length = length;
+        mcu_pending_valid = true;
+        return HAL_OK;
     }
 
     (void)memcpy(mcu_tx_buffer, data, length);
@@ -140,6 +67,35 @@ HAL_StatusTypeDef McuLink_Send(const uint8_t *data, uint16_t length)
         mcu_link_tx_error_count++;
     }
     return status;
+}
+
+void McuLink_Run(void)
+{
+    uint16_t length;
+
+    if (!mcu_initialized || mcu_tx_busy || !mcu_pending_valid)
+    {
+        return;
+    }
+
+    __disable_irq();
+    if (mcu_tx_busy || !mcu_pending_valid)
+    {
+        __enable_irq();
+        return;
+    }
+    length = mcu_pending_length;
+    (void)memcpy(mcu_tx_buffer, mcu_pending_buffer, length);
+    mcu_pending_valid = false;
+    mcu_pending_length = 0U;
+    mcu_tx_busy = true;
+    __enable_irq();
+
+    if (HAL_UART_Transmit_DMA(mcu_uart, mcu_tx_buffer, length) != HAL_OK)
+    {
+        mcu_tx_busy = false;
+        mcu_link_tx_error_count++;
+    }
 }
 
 void McuLink_HandleTxCplt(UART_HandleTypeDef *uart)
@@ -158,5 +114,5 @@ void McuLink_HandleUartError(UART_HandleTypeDef *uart)
     }
 
     mcu_link_uart_error_count++;
-    mcu_restart_requested = true;
+    mcu_tx_busy = false;
 }

@@ -4,15 +4,15 @@
 #include "chassis_main.h"
 #include "dt35_pnp_link.h"
 #include "imu_main.h"
+#include "road.h"
 
 #define PATH_CONTROL_PERIOD_MS       10U
 #define PATH_COMMAND_TIMEOUT_MS      50U
 #define PATH_DT35_TIMEOUT_MS         500U
 #define PATH_SEGMENT_SETTLE_MS       65U
 
-#define PATH_REMOTE_PA4_MASK         (1U << 5U)
-#define PATH_FRONT_SENSOR_INDEX      SENSOR_LINK_L_B_INDEX
-#define PATH_LEFT_SENSOR_INDEX       SENSOR_LINK_F_INDEX
+#define PATH_FRONT_SENSOR_INDEX      DT35_LINK_FRONT_INDEX
+#define PATH_LEFT_SENSOR_INDEX       DT35_LINK_LEFT_INDEX
 #define PATH_LASER_STOP_CM           10U
 #define PATH_FRONT_ARRIVE_CM         68U
 #define PATH_LEFT_NEAR_CM            69U
@@ -24,7 +24,7 @@
 #define PATH_SPEED_MIN               45.0f
 #define PATH_PID_KP                  2.6f
 #define PATH_PID_KI                  1.2f
-#define PATH_PID_KD                  0.05f
+#define PATH_PID_KD                  0.15f
 #define PATH_PID_I_LIMIT             30.0f
 #define PATH_PID_DT_S                0.01f
 
@@ -42,8 +42,6 @@ typedef struct
     bool started;
 } path_pid_t;
 
-static uint8_t path_pa4_previous;
-static bool path_pa4_initialized;
 static uint32_t path_last_control_ms;
 static uint32_t path_segment_change_ms;
 static path_pid_t path_pid;
@@ -186,7 +184,7 @@ static void PathMain_GetSegmentCommand(const path_dt35_t *front,
     case 2U:
         remaining_cm = (float)front->distance_cm -
                        (float)PATH_FRONT_ARRIVE_CM;
-        *vy = PathMain_RunPid(remaining_cm);
+        *vy = (int16_t)-PathMain_RunPid(remaining_cm);
         break;
 
     case 1U:
@@ -194,13 +192,13 @@ static void PathMain_GetSegmentCommand(const path_dt35_t *front,
         {
             remaining_cm = (float)left->distance_cm -
                            (float)PATH_LEFT_NEAR_CM;
-            *vx = (int16_t)-PathMain_RunPid(remaining_cm);
+            *vx = PathMain_RunPid(remaining_cm);
         }
         else
         {
             remaining_cm = (float)PATH_LEFT_FAR_CM -
                            (float)left->distance_cm;
-            *vx = PathMain_RunPid(remaining_cm);
+            *vx = (int16_t)-PathMain_RunPid(remaining_cm);
         }
         break;
 
@@ -209,13 +207,13 @@ static void PathMain_GetSegmentCommand(const path_dt35_t *front,
         {
             remaining_cm = (float)PATH_LEFT_FAR_CM -
                            (float)left->distance_cm;
-            *vx = PathMain_RunPid(remaining_cm);
+            *vx = (int16_t)-PathMain_RunPid(remaining_cm);
         }
         else
         {
             remaining_cm = (float)left->distance_cm -
                            (float)PATH_LEFT_NEAR_CM;
-            *vx = (int16_t)-PathMain_RunPid(remaining_cm);
+            *vx = PathMain_RunPid(remaining_cm);
         }
         break;
 
@@ -223,11 +221,11 @@ static void PathMain_GetSegmentCommand(const path_dt35_t *front,
         break;
     }
 
-    if ((front->distance_cm < PATH_LASER_STOP_CM) && (*vy > 0))
+    if ((front->distance_cm < PATH_LASER_STOP_CM) && (*vy < 0))
     {
         *vy = 0;
     }
-    if ((left->distance_cm < PATH_LASER_STOP_CM) && (*vx < 0))
+    if ((left->distance_cm < PATH_LASER_STOP_CM) && (*vx > 0))
     {
         *vx = 0;
     }
@@ -316,10 +314,9 @@ static void PathMain_RunControl(uint32_t now_ms)
 
 void PathMain_Init(void)
 {
+    Road_Init();
     path_segment_index = 0U;
     path_mirrored = false;
-    path_pa4_previous = 0U;
-    path_pa4_initialized = false;
     path_last_control_ms = HAL_GetTick();
     path_segment_change_ms = path_last_control_ms;
     PathMain_ResetPid();
@@ -329,13 +326,12 @@ void PathMain_Init(void)
 void PathMain_Run(uint8_t remote_buttons, uint8_t remote_online)
 {
     uint32_t now_ms = HAL_GetTick();
-    uint8_t pa4 = ((remote_buttons & PATH_REMOTE_PA4_MASK) != 0U) ?
-                  1U : 0U;
+    (void)remote_buttons;
+
+    Road_Run();
 
     if (remote_online == 0U)
     {
-        path_pa4_initialized = false;
-        path_pa4_previous = 0U;
         if (path_state == PATH_STATE_RUNNING)
         {
             PathMain_LeaveAutomatic(PATH_STATE_FAULT,
@@ -343,24 +339,6 @@ void PathMain_Run(uint8_t remote_buttons, uint8_t remote_online)
         }
         return;
     }
-
-    if (!path_pa4_initialized)
-    {
-        path_pa4_previous = pa4;
-        path_pa4_initialized = true;
-    }
-    else if ((pa4 != 0U) && (path_pa4_previous == 0U))
-    {
-        if (path_state == PATH_STATE_RUNNING)
-        {
-            PathMain_LeaveAutomatic(PATH_STATE_IDLE, PATH_ERROR_NONE);
-        }
-        else
-        {
-            (void)PathMain_Start(now_ms);
-        }
-    }
-    path_pa4_previous = pa4;
 
     if (path_state != PATH_STATE_RUNNING)
     {

@@ -41,14 +41,14 @@ HAL_StatusTypeDef Chassis_Init(void);
 
 /**
  * @brief 解算并设置四个车轮的目标转速
- * @param vx X 方向目标速度，正方向向右
- * @param vy Y 方向目标速度，正方向向前
+ * @param vx 世界坐标 X 方向目标速度，正方向向左
+ * @param vy 世界坐标 Y 方向目标速度，正方向向后
  * @param z Z 轴目标旋转速度，正方向为逆时针
  * @retval HAL 状态
  */
 HAL_StatusTypeDef Chassis_SetVelocity(int16_t vx, int16_t vy, int16_t z);
 
-/** Submit a velocity command with automatic expiry. Higher enum values win. */
+/** Submit a world-frame velocity command. Higher enum values win. */
 HAL_StatusTypeDef Chassis_RequestVelocity(chassis_cmd_source_t source,
                                           int16_t vx, int16_t vy, int16_t z,
                                           uint32_t timeout_ms);

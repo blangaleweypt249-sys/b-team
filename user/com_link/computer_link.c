@@ -4,6 +4,8 @@
 #include "chassis_main.h"
 #include "dt35_pnp_link.h"
 #include "imu_main.h"
+#include "road.h"
+#include "sc_link.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -14,10 +16,16 @@
 #define COMPUTER_FRAME_HEADER_0   0xA5U
 #define COMPUTER_VELOCITY_HEADER  0x5AU
 #define COMPUTER_ACTION_HEADER    0x5BU
+#define COMPUTER_ROAD_HEADER      0x5DU
+#define COMPUTER_ROAD_RESET_HEADER 0x5EU
 #define COMPUTER_VELOCITY_LENGTH  9U
 #define COMPUTER_ACTION_LENGTH    3U
+#define COMPUTER_ROAD_RESET_LENGTH 3U
 #define COMPUTER_MAX_FRAME_LENGTH 9U
 #define COMPUTER_LINK_TIMEOUT_MS  500U
+#define COMPUTER_ROAD_TX_PERIOD_MS 50U
+#define COMPUTER_ROAD_FRAME_LENGTH 16U
+#define COMPUTER_SC_FRAME_BUFFER_SIZE SC_LINK_MAX_FRAME_SIZE
 
 typedef enum
 {
@@ -44,9 +52,14 @@ static volatile uint8_t pending_action;
 static volatile uint32_t last_rx_ms;
 static volatile bool cmd_pending;
 static volatile bool action_frame_pending;
+static volatile bool road_reset_pending;
 static volatile bool link_online;
 static volatile bool restart_requested;
 static bool computer_link_initialized;
+static uint32_t sc_forwarded_frame_counter;
+static uint8_t sc_forward_tx_buffer[COMPUTER_SC_FRAME_BUFFER_SIZE];
+static volatile bool sc_forward_tx_busy;
+static uint32_t road_last_tx_ms;
 
 static void reset_parser(void)
 {
@@ -74,6 +87,39 @@ static int16_t read_le_i16(const uint8_t *data)
 
     value = (uint16_t)data[0] | ((uint16_t)data[1] << 8);
     return (int16_t)value;
+}
+
+static void write_le_i32(uint8_t *data, int32_t value)
+{
+    data[0] = (uint8_t)((uint32_t)value & 0xFFU);
+    data[1] = (uint8_t)(((uint32_t)value >> 8) & 0xFFU);
+    data[2] = (uint8_t)(((uint32_t)value >> 16) & 0xFFU);
+    data[3] = (uint8_t)(((uint32_t)value >> 24) & 0xFFU);
+}
+
+static void send_road_data(void)
+{
+    road_data_t road;
+    uint8_t frame[COMPUTER_ROAD_FRAME_LENGTH];
+    uint32_t now_ms = HAL_GetTick();
+
+    if ((now_ms - road_last_tx_ms) < COMPUTER_ROAD_TX_PERIOD_MS ||
+        !Road_GetData(&road))
+    {
+        return;
+    }
+
+    frame[0] = COMPUTER_FRAME_HEADER_0;
+    frame[1] = COMPUTER_ROAD_HEADER;
+    frame[2] = road.valid ? 1U : 0U;
+    write_le_i32(&frame[3], (int32_t)(road.x_m * 1000.0f));
+    write_le_i32(&frame[7], (int32_t)(road.y_m * 1000.0f));
+    write_le_i32(&frame[11], (int32_t)(road.distance_m * 1000.0f));
+    frame[15] = calculate_checksum(&frame[2], 13U);
+    if (HAL_UART_Transmit(computer_uart, frame, sizeof(frame), 2U) == HAL_OK)
+    {
+        road_last_tx_ms = now_ms;
+    }
 }
 
 static void store_command(void)
@@ -111,13 +157,16 @@ static void parse_byte(uint8_t data)
 
     case COMPUTER_RX_HEADER_1:
         if ((data == COMPUTER_VELOCITY_HEADER) ||
-            (data == COMPUTER_ACTION_HEADER))
+            (data == COMPUTER_ACTION_HEADER) ||
+            (data == COMPUTER_ROAD_RESET_HEADER))
         {
             rx_frame[1] = data;
             rx_index = 2U;
             rx_length = (data == COMPUTER_VELOCITY_HEADER)
                             ? COMPUTER_VELOCITY_LENGTH
-                            : COMPUTER_ACTION_LENGTH;    //速度帧9字节，动作帧3字节
+                            : ((data == COMPUTER_ACTION_HEADER)
+                                   ? COMPUTER_ACTION_LENGTH
+                                   : COMPUTER_ROAD_RESET_LENGTH);
             rx_state = COMPUTER_RX_FRAME;
         }
         else if (data != COMPUTER_FRAME_HEADER_0)   // 不是 0xA5 也不是有效帧头，重置
@@ -139,6 +188,11 @@ static void parse_byte(uint8_t data)
             else if (rx_frame[1] == COMPUTER_ACTION_HEADER)
             {
                 store_action();
+            }
+            else if ((rx_frame[1] == COMPUTER_ROAD_RESET_HEADER) &&
+                     (rx_frame[2] == 1U))
+            {
+                road_reset_pending = true;
             }
             reset_parser();
         }
@@ -193,10 +247,15 @@ HAL_StatusTypeDef ComputerLink_Init(UART_HandleTypeDef *uart)
     last_rx_ms = 0U;
     cmd_pending = false;
     action_frame_pending = false;
+    road_reset_pending = false;
     link_online = false;
     restart_requested = false;
     reset_parser();
     computer_link_initialized = true;
+    sc_forwarded_frame_counter = 0U;
+    sc_forward_tx_busy = false;
+    road_last_tx_ms = 0U;
+    (void)memset(sc_forward_tx_buffer, 0, sizeof(sc_forward_tx_buffer));
 
     status = start_receive();
     if (status != HAL_OK)
@@ -211,10 +270,13 @@ void ComputerLink_Run(void)
 {
     computer_cmd_t cmd;
     uint8_t action = ACTION_CMD_NONE;
+    uint16_t sc_frame_length;
+    uint32_t sc_frame_counter;
     uint32_t now_ms;
     uint32_t primask;
     bool has_command = false;
     bool has_action = false;
+    bool reset_road = false;
 
     if (computer_uart == NULL)
     {
@@ -243,6 +305,11 @@ void ComputerLink_Run(void)
         action_frame_pending = false;
         has_action = true;
     }
+    if (road_reset_pending)
+    {
+        road_reset_pending = false;
+        reset_road = true;
+    }
     if (primask == 0U)
     {
         __enable_irq();
@@ -258,9 +325,34 @@ void ComputerLink_Run(void)
     {
         (void)Action_Request((action_cmd_t)action);
     }
+    if (reset_road)
+    {
+        Road_Reset();
+    }
 
     (void)ImuMain_SendYaw(computer_uart);
     DT35PnpLink_Send(computer_uart);
+    send_road_data();
+
+    if (!sc_forward_tx_busy &&
+        ScLink_GetLatestFrame(sc_forward_tx_buffer,
+                              sizeof(sc_forward_tx_buffer),
+                              &sc_frame_length,
+                              &sc_frame_counter) &&
+        (sc_frame_counter != sc_forwarded_frame_counter))
+    {
+        sc_forward_tx_busy = true;
+        if (HAL_UART_Transmit_DMA(computer_uart,
+                                  sc_forward_tx_buffer,
+                                  sc_frame_length) == HAL_OK)
+        {
+            sc_forwarded_frame_counter = sc_frame_counter;
+        }
+        else
+        {
+            sc_forward_tx_busy = false;
+        }
+    }
 
     now_ms = HAL_GetTick();
     if (link_online && ((now_ms - last_rx_ms) > COMPUTER_LINK_TIMEOUT_MS))
@@ -291,5 +383,14 @@ void ComputerLink_Error(UART_HandleTypeDef *uart)
         return;
     }
 
+    sc_forward_tx_busy = false;
     restart_requested = true;
+}
+
+void ComputerLink_TxCplt(UART_HandleTypeDef *uart)
+{
+    if ((computer_uart != NULL) && (uart == computer_uart))
+    {
+        sc_forward_tx_busy = false;
+    }
 }

@@ -1,6 +1,8 @@
 #include "auto_chassis.h"
 
 #include "chassis_main.h"
+#include "dt35_pnp_link.h"
+#include "imu_main.h"
 #include "sc_link.h"
 
 #include <math.h>
@@ -9,6 +11,11 @@
 #define AUTO_CONTROL_PERIOD_MS       10U
 #define AUTO_COMMAND_TIMEOUT_MS      50U
 #define AUTO_INPUT_TIMEOUT_MS        250U
+#define AUTO_PNP_INPUT_TIMEOUT_MS    300U
+#define AUTO_PNP_DEBOUNCE_MS         200U
+#define AUTO_PNP_CLEAR_SETTLE_MS     150U
+#define AUTO_PNP_TOTAL_TIMEOUT_MS    2500U
+#define AUTO_PNP_WORLD_X_CMD         15
 
 #define AUTO_FIELD_LINEAR_KP         150.0f
 #define AUTO_ALIGN_LINEAR_KP         300.0f
@@ -36,6 +43,9 @@ typedef struct
 
 static auto_chassis_target_t auto_target;
 static uint32_t auto_last_run_ms;
+static uint32_t auto_pnp_begin_ms;
+static uint32_t auto_pnp_pattern_since_ms;
+static uint8_t auto_pnp_pattern;
 
 volatile auto_chassis_state_t auto_chassis_state = AUTO_CHASSIS_IDLE;
 volatile auto_chassis_error_t auto_chassis_error = AUTO_CHASSIS_ERROR_NONE;
@@ -104,6 +114,12 @@ static void AutoChassis_Fault(auto_chassis_error_t error)
     AutoChassis_SetState(AUTO_CHASSIS_FAULT, error);
 }
 
+static void AutoChassis_PnpFault(auto_chassis_error_t error)
+{
+    AutoChassis_Fault(error);
+    Chassis_SetControlMode(CHASSIS_CONTROL_MANUAL);
+}
+
 static HAL_StatusTypeDef AutoChassis_Request(float right_cmd,
                                              float forward_cmd,
                                              float yaw_cmd)
@@ -112,8 +128,8 @@ static HAL_StatusTypeDef AutoChassis_Request(float right_cmd,
 
     result = Chassis_RequestVelocity(
         CHASSIS_CMD_SOURCE_AUTONOMOUS,
-        AutoChassis_ToCommand(right_cmd),
-        AutoChassis_ToCommand(forward_cmd),
+        AutoChassis_ToCommand(-right_cmd),
+        AutoChassis_ToCommand(-forward_cmd),
         AutoChassis_ToCommand(yaw_cmd),
         AUTO_COMMAND_TIMEOUT_MS);
     if ((result != HAL_OK) &&
@@ -122,6 +138,108 @@ static HAL_StatusTypeDef AutoChassis_Request(float right_cmd,
         AutoChassis_Fault(AUTO_CHASSIS_ERROR_CHASSIS);
     }
     return result;
+}
+
+static bool AutoChassis_ReadPnp(pnp_link_t *left, pnp_link_t *right)
+{
+    uint32_t primask;
+
+    if ((left == NULL) || (right == NULL))
+    {
+        return false;
+    }
+    primask = __get_PRIMASK();
+    __disable_irq();
+    *left = pnp_link[PNP_LINK_LEFT_INDEX];
+    *right = pnp_link[PNP_LINK_RIGHT_INDEX];
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+    return true;
+}
+
+static HAL_StatusTypeDef AutoChassis_RequestWorldX(int16_t world_x_cmd)
+{
+    HAL_StatusTypeDef result = Chassis_RequestVelocity(
+        CHASSIS_CMD_SOURCE_AUTONOMOUS, world_x_cmd, 0, 0,
+        AUTO_COMMAND_TIMEOUT_MS);
+
+    if ((result != HAL_OK) &&
+        (Chassis_GetControlMode() == CHASSIS_CONTROL_AUTONOMOUS))
+    {
+        AutoChassis_PnpFault(AUTO_CHASSIS_ERROR_CHASSIS);
+    }
+    return result;
+}
+
+static void AutoChassis_RunPnpAlignment(uint32_t now_ms)
+{
+    pnp_link_t left;
+    pnp_link_t right;
+    uint8_t pattern;
+    uint32_t stable_ms;
+
+    if (!AutoChassis_ReadPnp(&left, &right) ||
+        (left.online == 0U) || (right.online == 0U) ||
+        ((uint32_t)(now_ms - left.last_rx_ms) >
+         AUTO_PNP_INPUT_TIMEOUT_MS) ||
+        ((uint32_t)(now_ms - right.last_rx_ms) >
+         AUTO_PNP_INPUT_TIMEOUT_MS))
+    {
+        AutoChassis_PnpFault(AUTO_CHASSIS_ERROR_PNP_INVALID);
+        return;
+    }
+    if ((uint32_t)(now_ms - auto_pnp_begin_ms) >
+        AUTO_PNP_TOTAL_TIMEOUT_MS)
+    {
+        AutoChassis_PnpFault(AUTO_CHASSIS_ERROR_PNP_TIMEOUT);
+        return;
+    }
+
+    pattern = ((left.trigger != 0U) ? 1U : 0U) |
+              ((right.trigger != 0U) ? 2U : 0U);
+    if (pattern != auto_pnp_pattern)
+    {
+        auto_pnp_pattern = pattern;
+        auto_pnp_pattern_since_ms = now_ms;
+        Chassis_ReleaseVelocity(CHASSIS_CMD_SOURCE_AUTONOMOUS);
+        return;
+    }
+    stable_ms = now_ms - auto_pnp_pattern_since_ms;
+
+    if (pattern == 0U)
+    {
+        Chassis_ReleaseVelocity(CHASSIS_CMD_SOURCE_AUTONOMOUS);
+        if (stable_ms >= AUTO_PNP_CLEAR_SETTLE_MS)
+        {
+            Chassis_SetControlMode(CHASSIS_CONTROL_MANUAL);
+            AutoChassis_SetState(AUTO_CHASSIS_ARRIVED,
+                                 AUTO_CHASSIS_ERROR_NONE);
+        }
+        return;
+    }
+    if (stable_ms < AUTO_PNP_DEBOUNCE_MS)
+    {
+        Chassis_ReleaseVelocity(CHASSIS_CMD_SOURCE_AUTONOMOUS);
+        return;
+    }
+
+    if (pattern == 1U)
+    {
+        /* Left B triggered: move left along world +X. */
+        (void)AutoChassis_RequestWorldX(AUTO_PNP_WORLD_X_CMD);
+    }
+    else if (pattern == 2U)
+    {
+        /* Right F triggered: move right along world -X. */
+        (void)AutoChassis_RequestWorldX(-AUTO_PNP_WORLD_X_CMD);
+    }
+    else
+    {
+        /* Both beams mean the chassis is skewed; lateral motion cannot fix it. */
+        AutoChassis_PnpFault(AUTO_CHASSIS_ERROR_PNP_BOTH_TRIGGERED);
+    }
 }
 
 static void AutoChassis_RunField(uint32_t now_ms)
@@ -308,6 +426,10 @@ void AutoChassis_Run(void)
     {
         AutoChassis_RunAlignment(now_ms, state);
     }
+    else if (state == AUTO_CHASSIS_ALIGN_BLOCK_PNP)
+    {
+        AutoChassis_RunPnpAlignment(now_ms);
+    }
     else if (state != AUTO_CHASSIS_MANUAL)
     {
         Chassis_ReleaseVelocity(CHASSIS_CMD_SOURCE_AUTONOMOUS);
@@ -380,6 +502,29 @@ HAL_StatusTypeDef AutoChassis_AlignBall(float stop_distance_m)
 {
     return AutoChassis_SetAlignment(AUTO_CHASSIS_ALIGN_BALL,
                                     stop_distance_m);
+}
+
+HAL_StatusTypeDef AutoChassis_AlignBlockPnp(void)
+{
+    uint32_t now_ms;
+
+    if (ImuMain_CaptureCurrentYaw() != HAL_OK)
+    {
+        AutoChassis_SetState(AUTO_CHASSIS_FAULT,
+                             AUTO_CHASSIS_ERROR_POSE_INVALID);
+        return HAL_ERROR;
+    }
+
+    now_ms = HAL_GetTick();
+    auto_pnp_begin_ms = now_ms;
+    auto_pnp_pattern_since_ms = now_ms;
+    auto_pnp_pattern = 0xFFU;
+    ImuMain_EnableYawHold(true);
+    Chassis_ReleaseVelocity(CHASSIS_CMD_SOURCE_AUTONOMOUS);
+    Chassis_SetControlMode(CHASSIS_CONTROL_AUTONOMOUS);
+    AutoChassis_SetState(AUTO_CHASSIS_ALIGN_BLOCK_PNP,
+                         AUTO_CHASSIS_ERROR_NONE);
+    return HAL_OK;
 }
 
 void AutoChassis_Stop(void)

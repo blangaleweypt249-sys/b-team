@@ -37,6 +37,8 @@ b-up/action_api.o: ..\user\Action_api\action_api.c \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim_ex.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
-  ..\user\motor\up_main.h ..\user\motor\rs_app.h ..\user\motor\rs00.h \
-  ..\user\motor\rs_bus.h ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
-  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h
+  ..\user\chassis_vesc\auto_chassis.h ..\user\chassis_vesc\imu_main.h \
+  D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
+  ..\user\path\path_main.h ..\user\motor\up_main.h \
+  ..\user\motor\rs_app.h ..\user\motor\rs00.h ..\user\motor\rs_bus.h \
+  ..\Core\Inc\fdcan.h ..\Core\Inc\main.h

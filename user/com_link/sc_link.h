@@ -9,6 +9,7 @@
 #define SC_LINK_BAUDRATE             921600U
 #define SC_LINK_RX_BUFFER_SIZE       256U
 #define SC_LINK_TX_BUFFER_SIZE       32U
+#define SC_LINK_MAX_FRAME_SIZE       37U
 #define SC_LINK_DATA_TIMEOUT_MS      500U
 #define SC_LINK_STATUS_PERIOD_MS     100U
 
@@ -62,6 +63,12 @@ bool ScLink_GetPerception(sc_link_perception_t *perception);
 
 /** Copy the newest field-pose frame. */
 bool ScLink_GetPose(sc_link_pose_t *pose);
+
+/** Copy the newest valid frame received from the small computer. */
+bool ScLink_GetLatestFrame(uint8_t *frame,
+                           uint16_t capacity,
+                           uint16_t *length,
+                           uint32_t *frame_counter);
 
 /** Set the state and error bytes returned in controller status frames. */
 void ScLink_SetStatus(uint8_t state, uint8_t error);

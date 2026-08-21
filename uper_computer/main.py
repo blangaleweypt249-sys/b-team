@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import sys
+import os
 
 from PyQt6.QtWidgets import QApplication
 
 from app_window import MainWindow
-
 
 def main() -> int:
     app = QApplication(sys.argv)
@@ -14,6 +14,7 @@ def main() -> int:
     window = MainWindow()
     window.show()
     return app.exec()
+
 
 
 if __name__ == "__main__":

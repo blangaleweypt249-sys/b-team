@@ -42,4 +42,5 @@ b-up/computer_link.o: ..\user\com_link\computer_link.c \
   ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
   ..\user\com_link\dt35_pnp_link.h ..\user\chassis_vesc\imu_main.h \
+  ..\user\path\road.h ..\user\com_link\sc_link.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\string.h

@@ -1398,6 +1398,16 @@
               <FilePath>..\user\path\path_main.h</FilePath>
             </File>
             <File>
+              <FileName>road.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\path\road.c</FilePath>
+            </File>
+            <File>
+              <FileName>road.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\path\road.h</FilePath>
+            </File>
+            <File>
               <FileName>imu_main.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\user\chassis_vesc\imu_main.c</FilePath>
@@ -1531,6 +1541,16 @@
               <FileName>mcu_link.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\user\com_link\mcu_link.h</FilePath>
+            </File>
+            <File>
+              <FileName>raw_uart_bridge.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\com_link\raw_uart_bridge.c</FilePath>
+            </File>
+            <File>
+              <FileName>raw_uart_bridge.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\com_link\raw_uart_bridge.h</FilePath>
             </File>
             <File>
               <FileName>sc_link.c</FileName>

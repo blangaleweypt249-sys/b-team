@@ -36,9 +36,14 @@ from robot_protocol import (
     PNP_ADDR_B,
     Dt35FrameParser,
     PnpFrameParser,
+    RoadFrame,
+    RoadFrameParser,
+    ScVisionFrame,
+    ScVisionFrameParser,
     VelocityCommand,
     YawFrameParser,
     build_action_frame,
+    build_road_reset_frame,
     build_velocity_frame,
 )
 
@@ -836,6 +841,10 @@ class MainWindow(QMainWindow):
         self._yaw_parser = YawFrameParser()
         self._dt35_parser = Dt35FrameParser()
         self._pnp_parser = PnpFrameParser()
+        self._road_parser = RoadFrameParser()
+        self._vision_parser = ScVisionFrameParser()
+        self._vision_last_frame: ScVisionFrame | None = None
+        self._vision_last_rx_time = 0.0
 
         self._filter_tx = True
         self._filter_rx = True
@@ -879,6 +888,7 @@ class MainWindow(QMainWindow):
         self._send_timer = QTimer(self)
         self._send_timer.setInterval(SEND_PERIOD_MS)
         self._send_timer.timeout.connect(self._send_active_command)
+        self._send_timer.timeout.connect(self._refresh_vision_status)
         self._send_timer.start()
 
         self._auto_path_stop_timer = QTimer(self)
@@ -950,7 +960,7 @@ class MainWindow(QMainWindow):
         tab_layout.setSpacing(0)
 
         self._tab_buttons = []
-        tab_names = ["调试", "自动路径", "串口", "定位"]
+        tab_names = ["调试", "视觉通信", "串口", "定位"]
         for i, name in enumerate(tab_names):
             btn = TabButton(name)
             btn.clicked.connect(lambda idx=i: self._switch_tab(idx))
@@ -964,7 +974,7 @@ class MainWindow(QMainWindow):
         root.addWidget(self._stack, 1)
 
         self._build_debug_page()
-        self._build_auto_path_page()
+        self._build_vision_page()
         self._build_serial_page()
         self._build_location_page()
 
@@ -1115,8 +1125,8 @@ class MainWindow(QMainWindow):
         self.vy_label = QLabel()
         self.wz_label = QLabel()
         self.yaw_label = QLabel("Yaw  --.-- deg")
-        self.dt35_41_label = QLabel("DT35_L  -- cm")
-        self.dt35_40_label = QLabel("DT35_F  -- cm")
+        self.dt35_41_label = QLabel("DT35_F  -- cm")
+        self.dt35_40_label = QLabel("DT35_L  -- cm")
         self.pnp_f_label = QLabel("PNP_F  0")
         self.pnp_b_label = QLabel("PNP_B  0")
         telemetry_layout = QGridLayout()
@@ -1139,6 +1149,42 @@ class MainWindow(QMainWindow):
 
         cmd_layout.addLayout(telemetry_layout)
 
+        cmd_layout.addWidget(self._divider())
+        road_header = QHBoxLayout()
+        road_title = QLabel("相对里程计")
+        road_title.setObjectName("CardTitle")
+        road_header.addWidget(road_title)
+        road_header.addStretch(1)
+        self.road_reset_button = QPushButton("里程清零")
+        self.road_reset_button.setEnabled(False)
+        self.road_reset_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload)
+        )
+        self.road_reset_button.clicked.connect(self._reset_road)
+        road_header.addWidget(self.road_reset_button)
+        cmd_layout.addLayout(road_header)
+
+        self.road_state_label = QLabel("状态  --")
+        self.road_x_label = QLabel("X 左  -- m")
+        self.road_y_label = QLabel("Y 后  -- m")
+        self.road_displacement_label = QLabel("位移  -- m")
+        self.road_distance_label = QLabel("累计  -- m")
+        road_layout = QGridLayout()
+        road_layout.setHorizontalSpacing(18)
+        road_layout.setVerticalSpacing(8)
+        for index, label in enumerate((
+            self.road_state_label,
+            self.road_x_label,
+            self.road_y_label,
+            self.road_displacement_label,
+            self.road_distance_label,
+        )):
+            label.setObjectName("CommandValueLarge")
+            label.setMinimumHeight(36)
+            label.setMinimumWidth(150)
+            road_layout.addWidget(label, index // 3, index % 3)
+        cmd_layout.addLayout(road_layout)
+
         right_panel.addWidget(cmd_card)
 
         self.action_control = ActionControlPanel()
@@ -1147,6 +1193,142 @@ class MainWindow(QMainWindow):
         right_panel.addStretch(1)
 
         page_layout.addLayout(right_panel, 1)
+        self._stack.addWidget(page)
+
+    def _build_vision_page(self) -> None:
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(14)
+
+        overview = QFrame()
+        overview.setObjectName("CardPanel")
+        overview_layout = QGridLayout(overview)
+        overview_layout.setContentsMargins(20, 16, 20, 16)
+        overview_layout.setHorizontalSpacing(24)
+        overview_layout.setVerticalSpacing(8)
+
+        title = QLabel("视觉通信")
+        title.setObjectName("CardTitle")
+        overview_layout.addWidget(title, 0, 0)
+        self.vision_status_label = QLabel("未收到")
+        self.vision_status_label.setObjectName("VisionStatus")
+        overview_layout.addWidget(self.vision_status_label, 0, 1)
+        self.vision_type_label = QLabel("类型  --")
+        self.vision_sequence_label = QLabel("序号  --")
+        self.vision_flags_label = QLabel("标志  --")
+        self.vision_timestamp_label = QLabel("时间戳  -- ms")
+        self.vision_age_label = QLabel("延迟  --")
+        self.vision_valid_count_label = QLabel("有效  0")
+        self.vision_invalid_count_label = QLabel("异常  0")
+        for column, label in enumerate((
+            self.vision_type_label,
+            self.vision_sequence_label,
+            self.vision_flags_label,
+            self.vision_timestamp_label,
+            self.vision_age_label,
+            self.vision_valid_count_label,
+            self.vision_invalid_count_label,
+        ), start=2):
+            label.setObjectName("VisionMetric")
+            overview_layout.addWidget(label, 0, column)
+        page_layout.addWidget(overview)
+
+        def target_card(title_text: str):
+            card = QFrame()
+            card.setObjectName("CardPanel")
+            card_layout = QGridLayout(card)
+            card_layout.setContentsMargins(18, 14, 18, 16)
+            card_layout.setHorizontalSpacing(16)
+            card_layout.setVerticalSpacing(8)
+            card_title = QLabel(title_text)
+            card_title.setObjectName("CardTitle")
+            card_layout.addWidget(card_title, 0, 0, 1, 2)
+
+            values = []
+            for row, (name, suffix) in enumerate((
+                ("状态", ""),
+                ("X", " m"),
+                ("Y", " m"),
+                ("Z", " m"),
+            ), start=1):
+                name_label = QLabel(name)
+                name_label.setObjectName("FieldLabel")
+                value_label = QLabel("--" if not suffix else "--" + suffix)
+                value_label.setObjectName("VisionValue")
+                card_layout.addWidget(name_label, row, 0)
+                card_layout.addWidget(value_label, row, 1)
+                values.append(value_label)
+            card_layout.setColumnStretch(1, 1)
+            return card, values
+
+        self.vision_block_card, block_values = target_card("障碍物")
+        self.vision_block_valid_label, self.vision_block_x_label, \
+            self.vision_block_y_label, self.vision_block_z_label = block_values
+        self.vision_ball_card, ball_values = target_card("球")
+        self.vision_ball_valid_label, self.vision_ball_x_label, \
+            self.vision_ball_y_label, self.vision_ball_z_label = ball_values
+
+        pose_card = QFrame()
+        pose_card.setObjectName("CardPanel")
+        pose_layout = QGridLayout(pose_card)
+        pose_layout.setContentsMargins(18, 14, 18, 16)
+        pose_layout.setHorizontalSpacing(16)
+        pose_layout.setVerticalSpacing(8)
+        pose_title = QLabel("场地位姿")
+        pose_title.setObjectName("CardTitle")
+        pose_layout.addWidget(pose_title, 0, 0, 1, 2)
+        pose_values = []
+        for row, (name, suffix) in enumerate((
+            ("状态", ""),
+            ("X", " m"),
+            ("Y", " m"),
+            ("Z", " m"),
+            ("Yaw", " deg"),
+        ), start=1):
+            name_label = QLabel(name)
+            name_label.setObjectName("FieldLabel")
+            value_label = QLabel("--" if not suffix else "--" + suffix)
+            value_label.setObjectName("VisionValue")
+            pose_layout.addWidget(name_label, row, 0)
+            pose_layout.addWidget(value_label, row, 1)
+            pose_values.append(value_label)
+        pose_layout.setColumnStretch(1, 1)
+        (self.vision_pose_valid_label,
+         self.vision_pose_x_label,
+         self.vision_pose_y_label,
+         self.vision_pose_z_label,
+         self.vision_pose_yaw_label) = pose_values
+
+        target_layout = QHBoxLayout()
+        target_layout.setSpacing(14)
+        target_layout.addWidget(self.vision_block_card, 1)
+        target_layout.addWidget(self.vision_ball_card, 1)
+        target_layout.addWidget(pose_card, 1)
+        page_layout.addLayout(target_layout)
+
+        raw_card = QFrame()
+        raw_card.setObjectName("CardPanel")
+        raw_layout = QVBoxLayout(raw_card)
+        raw_layout.setContentsMargins(18, 14, 18, 16)
+        raw_layout.setSpacing(8)
+        raw_header = QHBoxLayout()
+        raw_title = QLabel("最近收到的视觉帧")
+        raw_title.setObjectName("CardTitle")
+        raw_header.addWidget(raw_title)
+        raw_header.addStretch(1)
+        raw_hint = QLabel("AA 55 ... CRC16 ... 0D 0A")
+        raw_hint.setObjectName("Subtle")
+        raw_header.addWidget(raw_hint)
+        raw_layout.addLayout(raw_header)
+        self.vision_raw_text = QPlainTextEdit()
+        self.vision_raw_text.setObjectName("VisionRaw")
+        self.vision_raw_text.setReadOnly(True)
+        self.vision_raw_text.setMinimumHeight(110)
+        self.vision_raw_text.setMaximumBlockCount(4)
+        raw_layout.addWidget(self.vision_raw_text, 1)
+        page_layout.addWidget(raw_card, 1)
+
         self._stack.addWidget(page)
 
     def _build_auto_path_page(self) -> None:
@@ -1592,6 +1774,21 @@ class MainWindow(QMainWindow):
                 color: #1d1d1f;
                 letter-spacing: -0.2px;
             }
+            QLabel#VisionStatus {
+                color: #34c759;
+                font-size: 14px;
+                font-weight: 600;
+            }
+            QLabel#VisionMetric {
+                color: #86868b;
+                font-size: 12px;
+                font-family: "SF Mono", Menlo, Consolas, monospace;
+            }
+            QLabel#VisionValue {
+                color: #1d1d1f;
+                font-size: 13px;
+                font-family: "SF Mono", Menlo, Consolas, monospace;
+            }
             QLabel#FieldLabel {
                 font-size: 12px;
                 font-weight: 500;
@@ -2023,6 +2220,15 @@ class MainWindow(QMainWindow):
                 background: #1d1d1f;
                 border-radius: 8px;
             }
+            QPlainTextEdit#VisionRaw {
+                background: #1d1d1f;
+                color: #d1d5db;
+                border: none;
+                border-radius: 6px;
+                padding: 10px;
+                font-family: "SF Mono", Menlo, Consolas, monospace;
+                font-size: 12px;
+            }
 
             /* ========== 分隔线 ========== */
             QFrame#Divider {
@@ -2169,6 +2375,7 @@ class MainWindow(QMainWindow):
         self.port_combo.setEnabled(not connected)
         self.baud_combo.setEnabled(not connected)
         self.refresh_button.setEnabled(not connected)
+        self.road_reset_button.setEnabled(connected)
 
         self.connect_button.setEnabled(connected or self.port_combo.currentData() is not None)
         self.connect_button.setText("断开" if connected else "连接")
@@ -2187,11 +2394,21 @@ class MainWindow(QMainWindow):
             self._yaw_parser.reset()
             self.yaw_label.setText("Yaw  --.-- deg")
             self._dt35_parser.reset()
-            self.dt35_41_label.setText("DT35_L  -- cm")
-            self.dt35_40_label.setText("DT35_F  -- cm")
+            self.dt35_41_label.setText("DT35_F  -- cm")
+            self.dt35_40_label.setText("DT35_L  -- cm")
             self._pnp_parser.reset()
             self.pnp_f_label.setText("PNP_F  0")
             self.pnp_b_label.setText("PNP_B  0")
+            self._road_parser.reset()
+            self.road_state_label.setText("状态  --")
+            self.road_x_label.setText("X 左  -- m")
+            self.road_y_label.setText("Y 后  -- m")
+            self.road_displacement_label.setText("位移  -- m")
+            self.road_distance_label.setText("累计  -- m")
+            self._vision_parser.reset()
+            self._vision_last_frame = None
+            self._vision_last_rx_time = 0.0
+            self._reset_vision_view()
 
         self.connect_button.setIcon(self.style().standardIcon(icon))
         self.debug_connect_btn.setIcon(self.style().standardIcon(icon))
@@ -2271,6 +2488,12 @@ class MainWindow(QMainWindow):
 
         self.send_requested.emit(build_action_frame(action))
         self._append_log("SYS", f"已发送{name}指令", "#86868b")
+
+    def _reset_road(self) -> None:
+        if not self._connected:
+            return
+        self.send_requested.emit(build_road_reset_frame())
+        self._append_log("SYS", "已发送里程清零指令", "#86868b")
 
     def _send_active_command(self) -> None:
         if self._auto_path_active:
@@ -2447,6 +2670,107 @@ class MainWindow(QMainWindow):
         )
         self.log_text.appendHtml(html)
 
+    def _reset_vision_view(self) -> None:
+        self.vision_status_label.setText("未收到")
+        self.vision_status_label.setStyleSheet("color: #86868b;")
+        self.vision_type_label.setText("类型  --")
+        self.vision_sequence_label.setText("序号  --")
+        self.vision_flags_label.setText("标志  --")
+        self.vision_timestamp_label.setText("时间戳  -- ms")
+        self.vision_age_label.setText("延迟  --")
+        self.vision_valid_count_label.setText("有效  0")
+        self.vision_invalid_count_label.setText("异常  0")
+        for label, suffix in (
+            (self.vision_block_valid_label, ""),
+            (self.vision_block_x_label, " m"),
+            (self.vision_block_y_label, " m"),
+            (self.vision_block_z_label, " m"),
+            (self.vision_ball_valid_label, ""),
+            (self.vision_ball_x_label, " m"),
+            (self.vision_ball_y_label, " m"),
+            (self.vision_ball_z_label, " m"),
+            (self.vision_pose_valid_label, ""),
+            (self.vision_pose_x_label, " m"),
+            (self.vision_pose_y_label, " m"),
+            (self.vision_pose_z_label, " m"),
+            (self.vision_pose_yaw_label, " deg"),
+        ):
+            label.setText("--" if not suffix else "--" + suffix)
+        self.vision_raw_text.clear()
+
+    @staticmethod
+    def _set_xyz_labels(labels, values: tuple[float, float, float] | None) -> None:
+        if values is None:
+            for label in labels:
+                label.setText("无效")
+            return
+        for label, value in zip(labels, values):
+            label.setText(f"{value:+.3f} m")
+
+    def _update_vision_frame(self, frame: ScVisionFrame) -> None:
+        self._vision_last_frame = frame
+        self._vision_last_rx_time = time.monotonic()
+        self.vision_status_label.setText("已收到")
+        self.vision_status_label.setStyleSheet("color: #34c759;")
+        self.vision_type_label.setText(f"类型  {frame.frame_type}")
+        self.vision_sequence_label.setText(f"序号  {frame.sequence}")
+        self.vision_flags_label.setText(f"标志  0x{frame.flags:02X}")
+        self.vision_timestamp_label.setText(f"时间戳  {frame.timestamp_ms} ms")
+        self.vision_valid_count_label.setText(
+            f"有效  {self._vision_parser.valid_count}"
+        )
+        self.vision_invalid_count_label.setText(
+            f"异常  {self._vision_parser.invalid_count}"
+        )
+
+        if frame.frame_type == "perception":
+            self.vision_block_valid_label.setText(
+                "有效" if frame.block_xyz_m is not None else "无效"
+            )
+            self.vision_ball_valid_label.setText(
+                "有效" if frame.ball_xyz_m is not None else "无效"
+            )
+            self._set_xyz_labels(
+                (self.vision_block_x_label,
+                 self.vision_block_y_label,
+                 self.vision_block_z_label),
+                frame.block_xyz_m,
+            )
+            self._set_xyz_labels(
+                (self.vision_ball_x_label,
+                 self.vision_ball_y_label,
+                 self.vision_ball_z_label),
+                frame.ball_xyz_m,
+            )
+        elif frame.pose_xyzyaw is None:
+            self.vision_pose_valid_label.setText("无效")
+            self.vision_pose_x_label.setText("无效")
+            self.vision_pose_y_label.setText("无效")
+            self.vision_pose_z_label.setText("无效")
+            self.vision_pose_yaw_label.setText("无效")
+        else:
+            self.vision_pose_valid_label.setText("有效")
+            pose_x, pose_y, pose_z, pose_yaw = frame.pose_xyzyaw
+            self.vision_pose_x_label.setText(f"{pose_x:+.3f} m")
+            self.vision_pose_y_label.setText(f"{pose_y:+.3f} m")
+            self.vision_pose_z_label.setText(f"{pose_z:+.3f} m")
+            self.vision_pose_yaw_label.setText(f"{pose_yaw:+.2f} deg")
+        self.vision_raw_text.setPlainText(
+            " ".join(f"{byte:02X}" for byte in frame.raw)
+        )
+
+    def _refresh_vision_status(self) -> None:
+        if self._vision_last_frame is None:
+            return
+        age_ms = round((time.monotonic() - self._vision_last_rx_time) * 1000.0)
+        self.vision_age_label.setText(f"延迟  {age_ms} ms")
+        if age_ms > 500:
+            self.vision_status_label.setText("超时")
+            self.vision_status_label.setStyleSheet("color: #ff3b30;")
+        else:
+            self.vision_status_label.setText("已收到")
+            self.vision_status_label.setStyleSheet("color: #34c759;")
+
     def _append_log(self, tag: str, message: str, color: str = "#f5f5f7") -> None:
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         data = message.encode("utf-8", errors="replace")
@@ -2484,16 +2808,38 @@ class MainWindow(QMainWindow):
                 cursor.movePosition(QTextCursor.MoveOperation.End)
                 self.log_text.setTextCursor(cursor)
 
+    def _update_road_frame(self, frame: RoadFrame) -> None:
+        self.road_state_label.setText("状态  正常" if frame.valid else "状态  等待传感器")
+        self.road_x_label.setText(f"X 左  {frame.x_m:+.3f} m")
+        self.road_y_label.setText(f"Y 后  {frame.y_m:+.3f} m")
+        displacement = math.hypot(frame.x_m, frame.y_m)
+        self.road_displacement_label.setText(f"位移  {displacement:.3f} m")
+        self.road_distance_label.setText(f"累计  {frame.distance_m:.3f} m")
+
     def _on_rx_bytes(self, payload: bytes) -> None:
+        vision_frames = self._vision_parser.feed(payload)
+        for vision_frame in vision_frames:
+            self._update_vision_frame(vision_frame)
+        self.vision_valid_count_label.setText(
+            f"有效  {self._vision_parser.valid_count}"
+        )
+        self.vision_invalid_count_label.setText(
+            f"异常  {self._vision_parser.invalid_count}"
+        )
+
         yaw_values = self._yaw_parser.feed(payload)
         if yaw_values:
             self.yaw_label.setText(f"Yaw  {yaw_values[-1]:+.2f} deg")
 
+        road_frames = self._road_parser.feed(payload)
+        if road_frames:
+            self._update_road_frame(road_frames[-1])
+
         for address, distance_cm in self._dt35_parser.feed(payload):
             if address == DT35_ADDR_L:
-                self.dt35_41_label.setText(f"DT35_L  {distance_cm} cm")
+                self.dt35_40_label.setText(f"DT35_L  {distance_cm} cm")
             elif address == DT35_ADDR_F:
-                self.dt35_40_label.setText(f"DT35_F  {distance_cm} cm")
+                self.dt35_41_label.setText(f"DT35_F  {distance_cm} cm")
 
         for address, trigger in self._pnp_parser.feed(payload):
             if address == PNP_ADDR_F:

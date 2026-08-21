@@ -3,14 +3,18 @@
 
 #include "stm32h7xx_hal.h"
 
-/* DT35 使用 F/L 命名，PNP 使用 F/B 命名；两者地址保持一致。 */
-#define SENSOR_LINK_ADDR_F     0x40U  /* 前方传感器地址 */
-#define SENSOR_LINK_ADDR_L     0x41U  /* 左侧传感器地址 */
-#define PNP_LINK_ADDR_F        SENSOR_LINK_ADDR_F
-#define PNP_LINK_ADDR_B        SENSOR_LINK_ADDR_L
-#define SENSOR_LINK_F_INDEX    0U     /* DT35_F / PNP_F 数组下标 */
-#define SENSOR_LINK_L_B_INDEX  1U     /* DT35_L / PNP_B 数组下标 */
-#define SENSOR_LINK_COUNT      2U     /* 每类传感器数量 */
+/* DT35 on I2C2: front=1000001, left=1000000. */
+#define DT35_LINK_ADDR_LEFT     0x40U
+#define DT35_LINK_ADDR_FRONT    0x41U
+#define DT35_LINK_LEFT_INDEX    0U
+#define DT35_LINK_FRONT_INDEX   1U
+
+/* PNP upper-computer names: left=B/1000001, right=F/1000000. */
+#define PNP_LINK_ADDR_RIGHT_F   0x40U
+#define PNP_LINK_ADDR_LEFT_B    0x41U
+#define PNP_LINK_RIGHT_INDEX    0U
+#define PNP_LINK_LEFT_INDEX     1U
+#define SENSOR_LINK_COUNT       2U
 
 /*
  * DT35 frame: AA, address, distance_cm low, high, XOR checksum.
@@ -36,39 +40,15 @@ typedef struct
 extern volatile dt35_link_t dt35_link[SENSOR_LINK_COUNT];
 extern volatile pnp_link_t pnp_link[SENSOR_LINK_COUNT];
 
-/**
- * @brief 初始化 DT35 和 PNP 串口链路
- * @param uart 传感器串口
- * @retval HAL 状态
- */
+/** Initialize the DT35/PNP UART link. */
 HAL_StatusTypeDef DT35PnpLink_Init(UART_HandleTypeDef *uart);
-
-/**
- * @brief 处理串口重启和传感器离线状态
- * @param None
- * @retval None
- */
+/** Recover UART reception and expire stale sensor data. */
 void DT35PnpLink_Run(void);
-
-/**
- * @brief 将有变化的 DT35 和 PNP 数据发送到上位机
- * @param uart 上位机串口
- * @retval None
- */
+/** Forward pending DT35/PNP telemetry to the upper computer. */
 void DT35PnpLink_Send(UART_HandleTypeDef *uart);
-
-/**
- * @brief 处理传感器串口单字节接收完成
- * @param uart 触发回调的串口
- * @retval None
- */
+/** Handle completion of one sensor-UART byte. */
 void DT35PnpLink_RxCplt(UART_HandleTypeDef *uart);
-
-/**
- * @brief 记录传感器串口错误并请求重启接收
- * @param uart 触发回调的串口
- * @retval None
- */
+/** Request UART reception recovery after an error. */
 void DT35PnpLink_Error(UART_HandleTypeDef *uart);
 
 #endif

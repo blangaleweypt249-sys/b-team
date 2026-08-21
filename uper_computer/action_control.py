@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 )
 
 from robot_protocol import (
+    ACTION_ALIGN_BLOCK_PNP,
     ACTION_FRONT_DOWN,
     ACTION_FRONT_FLAT,
     ACTION_LIFT,
@@ -98,6 +99,29 @@ class ActionControlPanel(QFrame):
                 self.action_buttons.append(button)
 
             layout.addLayout(row_layout)
+
+        align_row = QHBoxLayout()
+        align_row.setSpacing(8)
+        align_label = QLabel("底盘")
+        align_label.setObjectName("FieldLabel")
+        align_label.setMinimumWidth(58)
+        align_row.addWidget(align_label)
+
+        align_button = QPushButton("对块")
+        align_button.setObjectName("GhostButton")
+        align_button.setMinimumHeight(38)
+        align_button.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        align_button.clicked.connect(
+            lambda checked=False: self.action_requested.emit(
+                ACTION_ALIGN_BLOCK_PNP, "对块"
+            )
+        )
+        align_row.addWidget(align_button, 1)
+        self.action_buttons.append(align_button)
+        layout.addLayout(align_row)
 
         self.action_buttons[0].setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp)

@@ -3,6 +3,7 @@
 #include "fdcan.h"
 #include "imu_main.h"
 
+#include <math.h>
 #include <stddef.h>
 
 #define ARRAY_SIZE(array) ((uint8_t)(sizeof(array) / sizeof((array)[0])))
@@ -14,7 +15,7 @@
 #define CHASSIS_MOTOR_RR_ID       59U
 #define CHASSIS_MOTOR_POLE_PAIRS  21U
 #define CHASSIS_MAX_RPM           4000
-#define CHASSIS_MIN_RPM           0
+#define CHASSIS_MIN_RPM           10
 #define CHASSIS_BRAKE_CURRENT_A   10.0f
 
 /* 底盘控制周期和斜坡时间。 */
@@ -82,6 +83,8 @@ static vesc_motor_t chassis_motors[ARRAY_SIZE(chassis_motor_cfg)];
 static uint32_t chassis_last_tx_ms;
 static uint32_t chassis_ramp_begin_ms;
 static int32_t chassis_stop_start_rpm[CHASSIS_WHEEL_COUNT];
+static bool chassis_motion_was_rotation;
+static bool chassis_stop_was_rotation;
 static bool chassis_ready;
 static volatile bool chassis_emergency_stop;
 static chassis_command_t chassis_commands[CHASSIS_CMD_SOURCE_COUNT];
@@ -257,6 +260,36 @@ static HAL_StatusTypeDef Chassis_ApplyMotion(int16_t vx, int16_t vy,
     int32_t wheel_rpm[CHASSIS_WHEEL_COUNT];
     uint8_t i;
 
+    /* 世界坐标 X 向左、Y 向后，转换到车体 X 向右、Y 向前。 */
+    {
+        imu_data_t imu;
+        float yaw_rad;
+        float yaw_cos;
+        float yaw_sin;
+        float body_vx;
+        float body_vy;
+
+        if (!ImuMain_GetData(&imu) || !imu.yaw_valid || !imu.online ||
+            (imu.state != IMU_STATE_READY))
+        {
+            vx = 0;
+            vy = 0;
+        }
+        else
+        {
+            /* imu_main exposes the opposite sign of the physical CCW yaw. */
+            yaw_rad = -imu.yaw_deg * 0.01745329251994329577f;
+            yaw_cos = cosf(yaw_rad);
+            yaw_sin = sinf(yaw_rad);
+            body_vx = -yaw_cos * (float)vx - yaw_sin * (float)vy;
+            body_vy = yaw_sin * (float)vx - yaw_cos * (float)vy;
+            vx = (int16_t)((body_vx >= 0.0f) ? (body_vx + 0.5f) :
+                                                          (body_vx - 0.5f));
+            vy = (int16_t)((body_vy >= 0.0f) ? (body_vy + 0.5f) :
+                                                          (body_vy - 0.5f));
+        }
+    }
+
     // 机器人坐标系：X 向右、Y 向前、Z 逆时针为正。
     rotation = (int32_t)((float)z * CHASSIS_ROTATION_SCALE);
     wheel_rpm[CHASSIS_WHEEL_LF] = vx + vy + rotation;
@@ -309,8 +342,8 @@ HAL_StatusTypeDef Chassis_Init(void)
 
 /**
  * @brief 更新底盘三轴目标速度
- * @param vx X 方向目标速度，正方向向右
- * @param vy Y 方向目标速度，正方向向前
+ * @param vx 世界坐标 X 方向目标速度，正方向向左
+ * @param vy 世界坐标 Y 方向目标速度，正方向向后
  * @param z Z 轴目标旋转速度，正方向为逆时针
  * @retval HAL 状态
  */
@@ -438,6 +471,7 @@ chassis_control_mode_t Chassis_GetControlMode(void)
 void Chassis_Run1ms(void)
 {
     int32_t wheel_rpm[CHASSIS_WHEEL_COUNT];
+    int32_t rotation;
     uint32_t now_ms;
     uint32_t elapsed_ms;
     uint32_t remaining_ms;
@@ -492,6 +526,10 @@ void Chassis_Run1ms(void)
         __enable_irq();
     }
     motion_requested = (vx != 0) || (vy != 0) || (z != 0);
+    if (motion_requested)
+    {
+        chassis_motion_was_rotation = (z != 0);
+    }
 
     if (emergency_stop)
     {
@@ -528,6 +566,7 @@ void Chassis_Run1ms(void)
             if (!motion_requested)
             {
                 chassis_ramp_begin_ms = now_ms;
+                chassis_stop_was_rotation = chassis_motion_was_rotation;
                 for (i = 0U; i < CHASSIS_WHEEL_COUNT; i++)
                 {
                     chassis_stop_start_rpm[i] =
@@ -551,6 +590,7 @@ void Chassis_Run1ms(void)
             if (!motion_requested)
             {
                 chassis_ramp_begin_ms = now_ms;
+                chassis_stop_was_rotation = chassis_motion_was_rotation;
                 for (i = 0U; i < CHASSIS_WHEEL_COUNT; i++)
                 {
                     chassis_stop_start_rpm[i] =
@@ -580,9 +620,12 @@ void Chassis_Run1ms(void)
             if (elapsed_ms >= CHASSIS_STOP_RAMP_MS)
             {
                 remaining_ms = 0U;
-                /* 锁定减速结束时的航向，避免闭环回追松手瞬间的旧目标。 */
-                (void)ImuMain_CaptureCurrentYaw();
                 chassis_motion_state = CHASSIS_MOTION_STOPPED;
+                if (chassis_stop_was_rotation)
+                {
+                    /* 旋转惯性结束后锁定最终姿态，避免松杆时反向回拽。 */
+                    (void)ImuMain_CaptureCurrentYaw();
+                }
             }
             else
             {
@@ -593,6 +636,17 @@ void Chassis_Run1ms(void)
                 wheel_rpm[i] = Chassis_ScaleRpm(
                     chassis_stop_start_rpm[i], remaining_ms,
                     CHASSIS_STOP_RAMP_MS);
+            }
+            if (!chassis_stop_was_rotation)
+            {
+                /* 平移缓停和静止阶段连续保持航向。 */
+                z = ImuMain_CalcOmega(0, 0, 0);
+                rotation = (int32_t)((float)z * CHASSIS_ROTATION_SCALE);
+                wheel_rpm[CHASSIS_WHEEL_LF] += rotation;
+                wheel_rpm[CHASSIS_WHEEL_RF] += rotation;
+                wheel_rpm[CHASSIS_WHEEL_LR] -= rotation;
+                wheel_rpm[CHASSIS_WHEEL_RR] -= rotation;
+                Chassis_LimitWheelRpm(wheel_rpm);
             }
             (void)Chassis_SetWheelRpm(wheel_rpm);
             break;

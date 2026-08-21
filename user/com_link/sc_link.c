@@ -15,7 +15,7 @@
 #define SC_LINK_PERCEPTION_LENGTH     37U
 #define SC_LINK_POSE_LENGTH            29U
 #define SC_LINK_STATUS_LENGTH           9U
-#define SC_LINK_MAX_FRAME_LENGTH      SC_LINK_PERCEPTION_LENGTH
+#define SC_LINK_MAX_FRAME_LENGTH      SC_LINK_MAX_FRAME_SIZE
 #define SC_LINK_READ_CHUNK_SIZE       64U
 
 typedef enum
@@ -42,6 +42,9 @@ static uint8_t sc_status_error;
 static bool sc_status_override;
 static sc_link_perception_t sc_perception;
 static sc_link_pose_t sc_pose;
+static uint8_t sc_last_frame[SC_LINK_MAX_FRAME_LENGTH];
+static uint16_t sc_last_frame_length;
+static uint32_t sc_last_frame_counter;
 static uint32_t sc_block_last_update_ms;
 static uint32_t sc_ball_last_update_ms;
 static uint32_t sc_pose_last_update_ms;
@@ -238,6 +241,9 @@ static void ScLink_HandleFrame(void)
         sc_link_invalid_frame_count++;
         return;
     }
+    (void)memcpy(sc_last_frame, sc_frame, sc_frame_length);
+    sc_last_frame_length = sc_frame_length;
+    sc_last_frame_counter++;
     sc_link_valid_frame_count++;
 }
 
@@ -400,6 +406,7 @@ HAL_StatusTypeDef ScLink_Init(UART_HandleTypeDef *uart)
     (void)memset(sc_tx_buffer, 0, sizeof(sc_tx_buffer));
     (void)memset(&sc_perception, 0, sizeof(sc_perception));
     (void)memset(&sc_pose, 0, sizeof(sc_pose));
+    (void)memset(sc_last_frame, 0, sizeof(sc_last_frame));
     sc_link_rx_bytes = 0U;
     sc_link_uart_error_count = 0U;
     sc_link_tx_error_count = 0U;
@@ -411,6 +418,8 @@ HAL_StatusTypeDef ScLink_Init(UART_HandleTypeDef *uart)
     sc_block_last_update_ms = 0U;
     sc_ball_last_update_ms = 0U;
     sc_pose_last_update_ms = 0U;
+    sc_last_frame_length = 0U;
+    sc_last_frame_counter = 0U;
     sc_last_status_ms = HAL_GetTick();
     sc_restart_requested = false;
     sc_tx_busy = false;
@@ -526,6 +535,31 @@ bool ScLink_GetPose(sc_link_pose_t *pose)
     primask = __get_PRIMASK();
     __disable_irq();
     (void)memcpy(pose, &sc_pose, sizeof(*pose));
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+    return true;
+}
+
+bool ScLink_GetLatestFrame(uint8_t *frame,
+                           uint16_t capacity,
+                           uint16_t *length,
+                           uint32_t *frame_counter)
+{
+    uint32_t primask;
+
+    if (!sc_initialized || (frame == NULL) || (length == NULL) ||
+        (frame_counter == NULL) || (capacity < sc_last_frame_length) ||
+        (sc_last_frame_length == 0U))
+    {
+        return false;
+    }
+    primask = __get_PRIMASK();
+    __disable_irq();
+    (void)memcpy(frame, sc_last_frame, sc_last_frame_length);
+    *length = sc_last_frame_length;
+    *frame_counter = sc_last_frame_counter;
     if (primask == 0U)
     {
         __enable_irq();

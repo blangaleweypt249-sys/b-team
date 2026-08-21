@@ -13,7 +13,8 @@ typedef enum
     AUTO_CHASSIS_ALIGN_BLOCK = 3U,
     AUTO_CHASSIS_ALIGN_BALL = 4U,
     AUTO_CHASSIS_ARRIVED = 5U,
-    AUTO_CHASSIS_FAULT = 6U
+    AUTO_CHASSIS_FAULT = 6U,
+    AUTO_CHASSIS_ALIGN_BLOCK_PNP = 7U
 } auto_chassis_state_t;
 
 typedef enum
@@ -23,7 +24,10 @@ typedef enum
     AUTO_CHASSIS_ERROR_BLOCK_INVALID = 2U,
     AUTO_CHASSIS_ERROR_BALL_INVALID = 3U,
     AUTO_CHASSIS_ERROR_CHASSIS = 4U,
-    AUTO_CHASSIS_ERROR_BAD_TARGET = 5U
+    AUTO_CHASSIS_ERROR_BAD_TARGET = 5U,
+    AUTO_CHASSIS_ERROR_PNP_INVALID = 6U,
+    AUTO_CHASSIS_ERROR_PNP_TIMEOUT = 7U,
+    AUTO_CHASSIS_ERROR_PNP_BOTH_TRIGGERED = 8U
 } auto_chassis_error_t;
 
 extern volatile auto_chassis_state_t auto_chassis_state;
@@ -40,6 +44,7 @@ HAL_StatusTypeDef AutoChassis_SetFieldTarget(float field_x_m,
 /* Perception X points forward and Y points left in the robot frame. */
 HAL_StatusTypeDef AutoChassis_AlignBlock(float stop_distance_m);
 HAL_StatusTypeDef AutoChassis_AlignBall(float stop_distance_m);
+HAL_StatusTypeDef AutoChassis_AlignBlockPnp(void);
 
 void AutoChassis_Stop(void);
 auto_chassis_state_t AutoChassis_GetState(void);

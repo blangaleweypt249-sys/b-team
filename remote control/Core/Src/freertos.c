@@ -127,14 +127,18 @@ void MX_FREERTOS_Init(void) {
 void StartRemoteTask(void *argument)
 {
   /* USER CODE BEGIN StartRemoteTask */
+  uint32_t nextWakeTick;
+
   (void)argument;
+  nextWakeTick = osKernelGetTickCount();
 
   /* Infinite loop */
   for(;;)
   {
     Remote_Update();
     Remote_Send();
-    osDelay(1);
+    nextWakeTick += 1U;
+    (void)osDelayUntil(nextWakeTick);
   }
   /* USER CODE END StartRemoteTask */
 }
@@ -149,13 +153,17 @@ void StartRemoteTask(void *argument)
 void StartDebugTask(void *argument)
 {
   /* USER CODE BEGIN StartDebugTask */
+  uint32_t nextWakeTick;
+
   (void)argument;
+  nextWakeTick = osKernelGetTickCount();
 
   /* Infinite loop */
   for(;;)
   {
     MyMain_Debug();
-    osDelay(50);
+    nextWakeTick += 50U;
+    (void)osDelayUntil(nextWakeTick);
   }
   /* USER CODE END StartDebugTask */
 }

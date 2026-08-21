@@ -54,6 +54,7 @@ HAL_StatusTypeDef RsBus_Init(rs_bus_t *bus, FDCAN_HandleTypeDef *device,
     if (status != HAL_OK)
     {
         (void)HAL_FDCAN_Stop(device);
+
         return status;
     }
 

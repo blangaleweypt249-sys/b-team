@@ -56,8 +56,8 @@ static void Link_ResetParser(void)
  */
 static uint8_t Link_GetIndex(uint8_t address)
 {
-    return (address == SENSOR_LINK_ADDR_F) ?
-           SENSOR_LINK_F_INDEX : SENSOR_LINK_L_B_INDEX;
+    return (address == DT35_LINK_ADDR_LEFT) ?
+           DT35_LINK_LEFT_INDEX : DT35_LINK_FRONT_INDEX;
 }
 
 /**
@@ -69,8 +69,8 @@ static uint8_t Link_FrameIsValid(void)
 {
     uint16_t value;
 
-    if ((sensor_parser.frame[1] != SENSOR_LINK_ADDR_F) &&
-        (sensor_parser.frame[1] != SENSOR_LINK_ADDR_L))
+    if ((sensor_parser.frame[1] != DT35_LINK_ADDR_LEFT) &&
+        (sensor_parser.frame[1] != DT35_LINK_ADDR_FRONT))
     {
         return 0U;
     }
@@ -179,8 +179,9 @@ static HAL_StatusTypeDef Link_StartReceive(void)
  * @param value 传感器数值
  * @retval None
  */
-static void Link_SendFrame(UART_HandleTypeDef *uart, uint8_t header,
-                           uint8_t address, uint16_t value)
+static HAL_StatusTypeDef Link_SendFrame(UART_HandleTypeDef *uart,
+                                        uint8_t header, uint8_t address,
+                                        uint16_t value)
 {
     uint8_t frame[SENSOR_FRAME_LENGTH];
 
@@ -189,8 +190,44 @@ static void Link_SendFrame(UART_HandleTypeDef *uart, uint8_t header,
     frame[2] = (uint8_t)value;
     frame[3] = (uint8_t)(value >> 8U);
     frame[4] = Link_Checksum(frame, SENSOR_FRAME_LENGTH - 1U);
-    (void)HAL_UART_Transmit(uart, frame, sizeof(frame),
-                            SENSOR_TX_TIMEOUT_MS);
+    return HAL_UART_Transmit(uart, frame, sizeof(frame),
+                             SENSOR_TX_TIMEOUT_MS);
+}
+
+static void Link_ClearDt35Pending(uint8_t index,
+                                  const dt35_link_t *sent)
+{
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
+    if ((dt35_link[index].last_rx_ms == sent->last_rx_ms) &&
+        (dt35_link[index].distance_cm == sent->distance_cm) &&
+        (dt35_link[index].online == sent->online))
+    {
+        dt35_link[index].frame_pending = 0U;
+    }
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+}
+
+static void Link_ClearPnpPending(uint8_t index,
+                                 const pnp_link_t *sent)
+{
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
+    if ((pnp_link[index].last_rx_ms == sent->last_rx_ms) &&
+        (pnp_link[index].trigger == sent->trigger) &&
+        (pnp_link[index].online == sent->online))
+    {
+        pnp_link[index].frame_pending = 0U;
+    }
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
 }
 
 /**
@@ -306,33 +343,47 @@ void DT35PnpLink_Send(UART_HandleTypeDef *uart)
     {
         dt35_tx[i] = dt35_link[i];
         pnp_tx[i] = pnp_link[i];
-        dt35_link[i].frame_pending = 0U;
-        pnp_link[i].frame_pending = 0U;
     }
     if (primask == 0U)
     {
         __enable_irq();
     }
 
-    if (dt35_tx[SENSOR_LINK_L_B_INDEX].frame_pending != 0U)
+    if (dt35_tx[DT35_LINK_LEFT_INDEX].frame_pending != 0U)
     {
-        Link_SendFrame(uart, DT35_FRAME_HEADER, SENSOR_LINK_ADDR_L,
-                       dt35_tx[SENSOR_LINK_L_B_INDEX].distance_cm);
+        if (Link_SendFrame(uart, DT35_FRAME_HEADER, DT35_LINK_ADDR_LEFT,
+                           dt35_tx[DT35_LINK_LEFT_INDEX].distance_cm) == HAL_OK)
+        {
+            Link_ClearDt35Pending(DT35_LINK_LEFT_INDEX,
+                                  &dt35_tx[DT35_LINK_LEFT_INDEX]);
+        }
     }
-    if (dt35_tx[SENSOR_LINK_F_INDEX].frame_pending != 0U)
+    if (dt35_tx[DT35_LINK_FRONT_INDEX].frame_pending != 0U)
     {
-        Link_SendFrame(uart, DT35_FRAME_HEADER, SENSOR_LINK_ADDR_F,
-                       dt35_tx[SENSOR_LINK_F_INDEX].distance_cm);
+        if (Link_SendFrame(uart, DT35_FRAME_HEADER, DT35_LINK_ADDR_FRONT,
+                           dt35_tx[DT35_LINK_FRONT_INDEX].distance_cm) == HAL_OK)
+        {
+            Link_ClearDt35Pending(DT35_LINK_FRONT_INDEX,
+                                  &dt35_tx[DT35_LINK_FRONT_INDEX]);
+        }
     }
-    if (pnp_tx[SENSOR_LINK_L_B_INDEX].frame_pending != 0U)
+    if (pnp_tx[PNP_LINK_LEFT_INDEX].frame_pending != 0U)
     {
-        Link_SendFrame(uart, PNP_FRAME_HEADER, PNP_LINK_ADDR_B,
-                       pnp_tx[SENSOR_LINK_L_B_INDEX].trigger);
+        if (Link_SendFrame(uart, PNP_FRAME_HEADER, PNP_LINK_ADDR_LEFT_B,
+                           pnp_tx[PNP_LINK_LEFT_INDEX].trigger) == HAL_OK)
+        {
+            Link_ClearPnpPending(PNP_LINK_LEFT_INDEX,
+                                 &pnp_tx[PNP_LINK_LEFT_INDEX]);
+        }
     }
-    if (pnp_tx[SENSOR_LINK_F_INDEX].frame_pending != 0U)
+    if (pnp_tx[PNP_LINK_RIGHT_INDEX].frame_pending != 0U)
     {
-        Link_SendFrame(uart, PNP_FRAME_HEADER, PNP_LINK_ADDR_F,
-                       pnp_tx[SENSOR_LINK_F_INDEX].trigger);
+        if (Link_SendFrame(uart, PNP_FRAME_HEADER, PNP_LINK_ADDR_RIGHT_F,
+                           pnp_tx[PNP_LINK_RIGHT_INDEX].trigger) == HAL_OK)
+        {
+            Link_ClearPnpPending(PNP_LINK_RIGHT_INDEX,
+                                 &pnp_tx[PNP_LINK_RIGHT_INDEX]);
+        }
     }
 }
 

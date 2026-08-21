@@ -40,4 +40,5 @@ b-up/path_main.o: ..\user\path\path_main.c ..\user\path\path_main.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
   ..\user\chassis_vesc\chassis_main.h ..\user\chassis_vesc\vesc_motor.h \
   ..\user\chassis_vesc\vesc_can.h ..\Core\Inc\fdcan.h ..\Core\Inc\main.h \
-  ..\user\com_link\dt35_pnp_link.h ..\user\chassis_vesc\imu_main.h
+  ..\user\com_link\dt35_pnp_link.h ..\user\chassis_vesc\imu_main.h \
+  ..\user\path\road.h

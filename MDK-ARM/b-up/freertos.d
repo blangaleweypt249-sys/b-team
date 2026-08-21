@@ -53,6 +53,6 @@ b-up/freertos.o: ..\Core\Src\freertos.c \
   ..\user\com_link\computer_link.h ..\user\com_link\dt35_pnp_link.h \
   ..\user\chassis_vesc\imu_main.h ..\user\com_link\lora_link.h \
   ..\user\com_link\mcu_link.h ..\user\path\path_main.h \
-  ..\user\com_link\sc_link.h ..\user\motor\up_main.h \
-  ..\user\motor\rs_app.h ..\user\motor\rs00.h ..\user\motor\rs_bus.h \
-  ..\Core\Inc\usart.h ..\Core\Inc\gpio.h
+  ..\user\com_link\raw_uart_bridge.h ..\user\com_link\sc_link.h \
+  ..\user\motor\up_main.h ..\user\motor\rs_app.h ..\user\motor\rs00.h \
+  ..\user\motor\rs_bus.h ..\Core\Inc\usart.h ..\Core\Inc\gpio.h

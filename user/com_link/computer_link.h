@@ -30,4 +30,7 @@ void ComputerLink_RxCplt(UART_HandleTypeDef *uart);
  */
 void ComputerLink_Error(UART_HandleTypeDef *uart);
 
+/** Handle completion of a non-blocking telemetry transmission. */
+void ComputerLink_TxCplt(UART_HandleTypeDef *uart);
+
 #endif

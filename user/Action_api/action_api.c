@@ -1,5 +1,8 @@
 #include "action_api.h"
 
+#include "auto_chassis.h"
+#include "imu_main.h"
+#include "path_main.h"
 #include "up_main.h"
 
 #define SECOND_ZERO_COMPENSATION_DEG 17.0f
@@ -13,6 +16,7 @@
 #define ALIGN_TRAVEL_DEG             45.0f
 #define ALIGN_TOLERANCE_DEG          3.0f
 #define ACTION_TIMEOUT_MS            5000U
+#define CHASSIS_YAW_STEP_DEG         90.0f
 
 typedef enum { LEG_INITIAL, LEG_LIFTED, LEG_FLAT } leg_state_t;
 typedef enum {
@@ -43,8 +47,8 @@ static uint8_t remote_buttons_last;
 static uint32_t action_due_ms;
 
 volatile action_cmd_t action_pending = ACTION_CMD_NONE;
-volatile uint8_t action_pnp_f_trigger;
-volatile uint8_t action_pnp_b_trigger;
+volatile uint8_t action_pnp_left_trigger;
+volatile uint8_t action_pnp_right_trigger;
 HAL_StatusTypeDef action_last_result = HAL_OK;
 
 static bool time_reached(uint32_t now_ms, uint32_t due_ms)
@@ -69,6 +73,30 @@ static void fail_action(HAL_StatusTypeDef status)
     action_last_result = status;
     action_step = ACTION_IDLE;
     Up_StopAll();
+}
+
+static HAL_StatusTypeDef request_chassis_yaw(action_cmd_t action)
+{
+    imu_data_t imu;
+    float target_yaw;
+
+    if (!ImuMain_GetData(&imu) || !imu.online || !imu.yaw_valid ||
+        (imu.state != IMU_STATE_READY))
+    {
+        return HAL_ERROR;
+    }
+    if (action == ACTION_CMD_CHASSIS_ZERO)
+    {
+        target_yaw = 0.0f;
+    }
+    else
+    {
+        target_yaw = imu.yaw_hold_active ? imu.target_yaw_deg : imu.yaw_deg;
+        target_yaw += (action == ACTION_CMD_CHASSIS_CCW_90) ?
+                      CHASSIS_YAW_STEP_DEG : -CHASSIS_YAW_STEP_DEG;
+    }
+    ImuMain_EnableYawHold(true);
+    return ImuMain_SetTargetYaw(target_yaw);
 }
 
 static bool align_targets_at_zero(void)
@@ -196,10 +224,10 @@ static action_cmd_t take_pending_action(void)
     return action;
 }
 
-void Action_UpdatePnp(uint8_t trigger_f, uint8_t trigger_b)
+void Action_UpdatePnp(uint8_t trigger_left, uint8_t trigger_right)
 {
-    action_pnp_f_trigger = (trigger_f != 0U) ? 1U : 0U;
-    action_pnp_b_trigger = (trigger_b != 0U) ? 1U : 0U;
+    action_pnp_left_trigger = (trigger_left != 0U) ? 1U : 0U;
+    action_pnp_right_trigger = (trigger_right != 0U) ? 1U : 0U;
 }
 
 void Action_UpdateAlignSwitch(uint8_t switch_state, uint8_t online)
@@ -241,8 +269,10 @@ void Action_UpdateLiftSwitch(uint8_t switch_state, uint8_t online)
 void Action_UpdateRemoteButtons(uint8_t buttons, uint8_t online)
 {
     static const action_cmd_t button_actions[6] = {
-        ACTION_CMD_FRONT_FLAT, ACTION_CMD_FRONT_DOWN,
-        ACTION_CMD_NONE, ACTION_CMD_NONE, ACTION_CMD_NONE, ACTION_CMD_NONE
+        ACTION_CMD_NONE, ACTION_CMD_NONE,
+        ACTION_CMD_NONE, ACTION_CMD_CHASSIS_CW_90,
+        ACTION_CMD_CHASSIS_ZERO,
+        ACTION_CMD_CHASSIS_CCW_90
     };
     uint8_t pressed;
     uint8_t i;
@@ -270,13 +300,34 @@ void Action_UpdateRemoteButtons(uint8_t buttons, uint8_t online)
 
 HAL_StatusTypeDef Action_Request(action_cmd_t action)
 {
+    HAL_StatusTypeDef chassis_result;
+
     if ((action > ACTION_CMD_MAX) ||
         ((action != ACTION_CMD_LOWER) && (action != ACTION_CMD_LIFT) &&
          (action != ACTION_CMD_FRONT_FLAT) &&
          (action != ACTION_CMD_FRONT_DOWN) &&
-         (action != ACTION_CMD_ALIGN)))
+         (action != ACTION_CMD_ALIGN) &&
+         (action != ACTION_CMD_CHASSIS_ZERO) &&
+         (action != ACTION_CMD_CHASSIS_CCW_90) &&
+         (action != ACTION_CMD_CHASSIS_CW_90) &&
+         (action != ACTION_CMD_ALIGN_BLOCK_PNP)))
     {
         return HAL_ERROR;
+    }
+    if ((action == ACTION_CMD_CHASSIS_ZERO) ||
+        (action == ACTION_CMD_CHASSIS_CCW_90) ||
+        (action == ACTION_CMD_CHASSIS_CW_90))
+    {
+        chassis_result = request_chassis_yaw(action);
+        action_last_result = chassis_result;
+        return chassis_result;
+    }
+    if (action == ACTION_CMD_ALIGN_BLOCK_PNP)
+    {
+        PathMain_Stop();
+        chassis_result = AutoChassis_AlignBlockPnp();
+        action_last_result = chassis_result;
+        return chassis_result;
     }
     if (action == ACTION_CMD_ALIGN) align_target_active = !align_target_active;
     action_pending = action;

@@ -49,4 +49,4 @@ b-up/main.o: ..\Core\Src\main.c ..\Core\Inc\main.h \
   ..\user\chassis_vesc\imu_main.h \
   D:\keil5\core\ARM\ARMCLANG\Bin\..\include\stdbool.h \
   ..\user\com_link\lora_link.h ..\user\com_link\mcu_link.h \
-  ..\user\com_link\sc_link.h
+  ..\user\com_link\raw_uart_bridge.h ..\user\com_link\sc_link.h

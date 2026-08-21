@@ -16,6 +16,12 @@
 /* 偏航保持控制器参数。 */
 #define IMU_ANGLE_HALF_RANGE_DEG 180.0f
 #define IMU_ANGLE_RANGE_DEG      360.0f
+#define IMU_STOP_YAW_ENTER_DEG     0.30f
+#define IMU_STOP_YAW_EXIT_DEG      0.15f
+#define IMU_STOP_MIN_OUTPUT         2.0f
+#define IMU_GYRO_BIAS_TRACK_LIMIT   0.15f
+#define IMU_GYRO_BIAS_TRACK_RATE     0.002f
+#define IMU_YAW_STATIC_GYRO_LIMIT    0.03f
 
 enum
 {
@@ -36,14 +42,15 @@ static const imu_config_t imu_config = {
     .recovery_retry_ms = 2000U,
     .yaw_tx_period_ms = 50U,
     .yaw_control_period_ms = 5U,
-    .yaw_cmd_threshold = 3,
-    .yaw_linear_threshold = 2,
+    .yaw_cmd_threshold = 1,
+    .yaw_linear_threshold = 1,
     .kalman_q = 0.02f,
     .kalman_r = 3.0f,
+
     .gyro_filter_q = 0.1f,
     .gyro_filter_r = 2.0f,
     .yaw_tx_scale = 100.0f,
-    .yaw_deadzone_deg = 0.10f,
+    .yaw_deadzone_deg = 2.0f,
     .yaw_i_active_deg = 10.0f,
     .yaw_i_decay = 0.90f,
     .yaw_gyro_k = 5.0f
@@ -120,6 +127,7 @@ typedef struct
     uint32_t last_update_ms;
     bool update_time_valid;
     bool target_valid;
+    bool stop_correcting;
 } imu_yaw_control_t;
 
 enum
@@ -174,8 +182,8 @@ static imu_yaw_control_t yaw_control = {
             .i_max = 8.0f, .out_max = 800.0f, .first_run = true
         },
         {
-            .kp = 0.8f, .ki = 0.0f, .kd = 0.0f,
-            .i_max = 12.0f, .out_max = 100.0f, .first_run = true
+            .kp = 0.6f, .ki = 0.0f, .kd = 0.0f,
+            .i_max = 8.0f, .out_max = 60.0f, .first_run = true
         }
     }
 };
@@ -233,6 +241,7 @@ static void reset_control_dynamics(void)
     memset(&yaw_control.gyro_filter, 0, sizeof(yaw_control.gyro_filter));
     yaw_control.last_update_ms = 0U;
     yaw_control.update_time_valid = false;
+    yaw_control.stop_correcting = false;
 }
 
 static void suspend_yaw_control(void)
@@ -268,7 +277,7 @@ static float filter_gyro(float gyro_deg_s)   //一维卡尔曼滤波(角速度)
         yaw_control.gyro_filter.covariance *= 1.0f - gain;
     }
 
-    return roundf(yaw_control.gyro_filter.estimate * 10.0f) / 10.0f;
+    return roundf(yaw_control.gyro_filter.estimate * 100.0f) / 100.0f;
 }
 
 static float calculate_yaw_pid(imu_yaw_pid_t *pid, float error_deg)
@@ -456,7 +465,7 @@ static void process_gyro(const imu_raw_data_t *raw_data)
 
     if (imu_init.step == IMU_INIT_SAMPLE_BIAS)
     {
-        // 延续旧工程做法，静止采集 200 帧 Z 轴角速度作为软件零偏
+        // 静止采集 200 帧 Z 轴角速度作为软件零偏
         imu_init.gyro_bias_sum_deg_s += raw_data->gyro_z_deg_s;
         imu_init.gyro_bias_sample_count++;
         if (imu_init.gyro_bias_sample_count >= imu_config.gyro_bias_samples)
@@ -477,6 +486,15 @@ static void process_gyro(const imu_raw_data_t *raw_data)
 
     if (imu_init.step == IMU_INIT_COMPLETE)
     {
+        float gyro_delta_deg_s = raw_data->gyro_z_deg_s -
+                                 imu_data.gyro_bias_deg_s;
+
+        /* 静止时缓慢跟踪温漂，旋转时不改动零偏。 */
+        if (fabsf(gyro_delta_deg_s) <= IMU_GYRO_BIAS_TRACK_LIMIT)
+        {
+            imu_data.gyro_bias_deg_s += gyro_delta_deg_s *
+                                        IMU_GYRO_BIAS_TRACK_RATE;
+        }
         imu_data.gyro_z_deg_s = -(raw_data->gyro_z_deg_s -
                                   imu_data.gyro_bias_deg_s);
         imu_data.gyro_valid = true;
@@ -506,6 +524,12 @@ static void process_yaw(const imu_raw_data_t *raw_data)
     }
 
     zeroed_yaw_deg = normalize_angle(signed_yaw_deg - yaw_zero_ref_deg);
+    /* 达妙 Euler yaw 在静止时可能以 0.01 度量化漂移，静止时保持上一姿态。 */
+    if (imu_data.gyro_valid &&
+        (fabsf(imu_data.gyro_z_deg_s) < IMU_YAW_STATIC_GYRO_LIMIT))
+    {
+        zeroed_yaw_deg = imu_data.yaw_deg;
+    }
     imu_data.yaw_deg = filter_yaw(zeroed_yaw_deg);
     imu_data.yaw_valid = true;
 }
@@ -703,6 +727,7 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
         memset(&yaw_control.gyro_filter, 0,
                sizeof(yaw_control.gyro_filter));
         yaw_control.update_time_valid = false;
+        yaw_control.stop_correcting = false;
         yaw_control.mode = hold_mode;
     }
 
@@ -722,7 +747,32 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
     imu_data.yaw_error_deg = normalize_angle(imu_data.target_yaw_deg -
                                              imu_data.yaw_deg);
     imu_data.yaw_hold_active = true;
-    if (fabsf(imu_data.yaw_error_deg) <= imu_config.yaw_deadzone_deg)
+    if (stopped)
+    {
+        if (yaw_control.stop_correcting)
+        {
+            if ((fabsf(imu_data.yaw_error_deg) <= IMU_STOP_YAW_EXIT_DEG) ||
+                (!active_pid->first_run &&
+                 (active_pid->last_error * imu_data.yaw_error_deg <= 0.0f)))
+            {
+                yaw_control.stop_correcting = false;
+                reset_yaw_pid(active_pid);
+                imu_data.omega_output = 0;
+                return 0;
+            }
+        }
+        else if (fabsf(imu_data.yaw_error_deg) < IMU_STOP_YAW_ENTER_DEG)
+        {
+            reset_yaw_pid(active_pid);
+            imu_data.omega_output = 0;
+            return 0;
+        }
+        else
+        {
+            yaw_control.stop_correcting = true;
+        }
+    }
+    else if (fabsf(imu_data.yaw_error_deg) <= imu_config.yaw_deadzone_deg)
     {
         reset_yaw_pid(active_pid);
         imu_data.omega_output = 0;
@@ -733,7 +783,20 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
              filtered_gyro_deg_s * imu_config.yaw_gyro_k;
     output = limit_float(output, -active_pid->out_max,
                          active_pid->out_max);
-    imu_data.omega_output = (int16_t)output;
+    if (stopped && (fabsf(output) < IMU_STOP_MIN_OUTPUT))
+    {
+        if ((output * imu_data.yaw_error_deg) > 0.0f)
+        {
+            output = (output >= 0.0f) ? IMU_STOP_MIN_OUTPUT :
+                                        -IMU_STOP_MIN_OUTPUT;
+        }
+        else
+        {
+            output = 0.0f;
+        }
+    }
+    imu_data.omega_output = (int16_t)(output +
+        ((output >= 0.0f) ? 0.5f : -0.5f));
     return imu_data.omega_output;
 }
 

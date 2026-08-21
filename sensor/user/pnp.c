@@ -12,7 +12,7 @@
 #define INA226_DIE_MASK         0xFFF0U
 #define PNP_I2C_TIMEOUT_MS      20U
 #define INA226_BUS_LSB_UV       1250U
-#define PNP_TRIGGER_THRESHOLD_MV 23000U
+#define PNP_TRIGGER_THRESHOLD_MV 12000U
 
 static I2C_HandleTypeDef *pnp_i2c;
 static uint8_t pnp_ready_f;

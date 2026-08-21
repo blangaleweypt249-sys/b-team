@@ -5,15 +5,10 @@
 
 #include <stdint.h>
 
-#define LORA_LINK_TX_BUFFER_SIZE 256U
-
 extern volatile uint32_t lora_link_rx_bytes;
 extern volatile uint32_t lora_link_uart_error_count;
-extern volatile uint32_t lora_link_tx_error_count;
 extern volatile uint32_t lora_link_valid_frame_count;
 extern volatile uint32_t lora_link_forward_error_count;
-extern volatile uint32_t lora_link_return_error_count;
-extern volatile uint32_t lora_link_returned_bytes;
 extern volatile uint8_t lora_remote_buttons;
 extern volatile uint8_t lora_remote_pe0_switch;
 extern volatile uint8_t lora_remote_pd6_switch;
@@ -40,15 +35,6 @@ void LoraLink_Run(void);
  */
 uint16_t LoraLink_Read(uint8_t *data, uint16_t max_length);
 
-/**
- * @brief 通过 UART7 DMA 发送数据
- * @param data 待发送数据
- * @param length 数据长度，不得超过 LORA_LINK_TX_BUFFER_SIZE
- * @retval HAL 状态
- */
-HAL_StatusTypeDef LoraLink_Send(const uint8_t *data, uint16_t length);
-
-void LoraLink_HandleTxCplt(UART_HandleTypeDef *uart);
 void LoraLink_HandleUartError(UART_HandleTypeDef *uart);
 
 #endif
