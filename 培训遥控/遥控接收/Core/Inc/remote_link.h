@@ -15,7 +15,6 @@ extern volatile uint32_t remote_link_switch_events;
 extern volatile uint32_t remote_link_aux_control_frames;
 extern volatile uint32_t remote_link_aux_crc_errors;
 extern volatile uint32_t remote_link_aux_uart_errors;
-
 void RemoteLink_Init(void);
 void RemoteLink_ForwardRawData(void);
 

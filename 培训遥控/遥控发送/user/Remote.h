@@ -16,7 +16,7 @@ typedef struct
     uint8_t left_y;                         /* 左摇杆 Y，0 到 255 */
     uint8_t right_x;                        /* 右摇杆 X，0 到 255 */
     uint8_t right_y;                        /* 右摇杆 Y，0 到 255 */
-    uint8_t switch_state[REMOTE_SWITCH_COUNT]; /* 六个开关状态 */
+    uint8_t switch_state[REMOTE_SWITCH_COUNT]; /* PE4 为闭合状态，其余为 GPIO 电平 */
     uint8_t key_state[REMOTE_KEY_COUNT];        /* 十二个按键状态 */
 } remote_data_t;
 

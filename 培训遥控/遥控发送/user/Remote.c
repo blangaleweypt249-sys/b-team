@@ -13,6 +13,8 @@
 #define REMOTE_TX_PERIOD_MS         50U
 #define REMOTE_SHOULDER_RELEASE_THRESHOLD 550U
 #define REMOTE_PE0_SWITCH_INDEX     3U
+#define REMOTE_PD6_SWITCH_INDEX     4U
+#define REMOTE_PD6_MODE_MIRROR_SHIFT 1U
 
 /* 遥控器输入数据，供后续下位机通信模块读取 */
 volatile remote_data_t remote_data;
@@ -98,8 +100,10 @@ void Remote_Send(void)
     remote_tx_buffer[4] = remote_data.right_x;
     remote_tx_buffer[5] = remote_data.right_y;
     remote_tx_buffer[6] = local_buttons;
-    remote_tx_buffer[7] =
-        (uint8_t)(remote_data.switch_state[REMOTE_PE0_SWITCH_INDEX] & 1U);
+    remote_tx_buffer[7] = (uint8_t)(
+        (remote_data.switch_state[REMOTE_PE0_SWITCH_INDEX] & 1U) |
+        ((remote_data.switch_state[REMOTE_PD6_SWITCH_INDEX] & 1U) <<
+         REMOTE_PD6_MODE_MIRROR_SHIFT));
     remote_tx_buffer[8] = second_keys;
     remote_tx_buffer[9] = second_switches;
 

@@ -18,7 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "spi.h"
+#include "dma.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -89,6 +89,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
@@ -104,7 +105,6 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     RemoteLink_ForwardRawData();
-    HAL_Delay(1U);
   }
   /* USER CODE END 3 */
 }

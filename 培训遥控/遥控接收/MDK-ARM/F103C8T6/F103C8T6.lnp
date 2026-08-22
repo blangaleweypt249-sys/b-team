@@ -2,6 +2,7 @@
 "f103c8t6\startup_stm32f103xb.o"
 "f103c8t6\remote_link.o"
 "f103c8t6\main.o"
+"f103c8t6\dma.o"
 "f103c8t6\gpio.o"
 "f103c8t6\spi.o"
 "f103c8t6\usart.o"

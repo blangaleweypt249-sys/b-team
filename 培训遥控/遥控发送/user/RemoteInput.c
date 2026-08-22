@@ -12,6 +12,7 @@
 #define REMOTE_DEBOUNCE_SAMPLES 10U /* 数字输入稳定 10 ms 后生效 */
 #define REMOTE_BEEP_MS 30U          /* 按键提示音时长(ms) */
 #define REMOTE_BEEP_GAP_MS 100U     /* 上电提示音间隔(ms) */
+#define REMOTE_PE4_SWITCH_INDEX 0U  /* PE4 低电平表示闭合 */
 
 typedef struct
 {
@@ -200,7 +201,7 @@ static uint8_t Remote_ConvertAxis(uint8_t axis, uint16_t raw)
 }
 
 /**
- * @brief 读取一个低电平有效的按键或开关
+ * @brief 读取一个低电平有效的数字输入
  * @param port GPIO 端口
  * @param pin GPIO 引脚
  * @retval 1 表示按下或闭合，0 表示松开或断开
@@ -208,6 +209,23 @@ static uint8_t Remote_ConvertAxis(uint8_t axis, uint16_t raw)
 static uint8_t Remote_ReadLow(GPIO_TypeDef *port, uint16_t pin)
 {
     return (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET) ? 1U : 0U;
+}
+
+/**
+ * @brief 按各拨动开关的协议极性读取状态
+ * @param index 开关在 remote_sw_ports/remote_sw_pins 中的索引
+ * @retval PE4 为低电平闭合状态，其余拨动开关直接返回 GPIO 电平
+ */
+static uint8_t Remote_ReadSwitch(uint8_t index)
+{
+    GPIO_PinState state = HAL_GPIO_ReadPin(remote_sw_ports[index],
+                                           remote_sw_pins[index]);
+
+    if (index == REMOTE_PE4_SWITCH_INDEX)
+    {
+        return (state == GPIO_PIN_RESET) ? 1U : 0U;
+    }
+    return (state == GPIO_PIN_SET) ? 1U : 0U;
 }
 
 static uint8_t Remote_Debounce(uint8_t raw, uint8_t *stable,
@@ -279,7 +297,7 @@ void Remote_Init(void)
 
     for (i = 0U; i < REMOTE_SWITCH_COUNT; i++)
     {
-        remote_last_sw[i] = Remote_ReadLow(remote_sw_ports[i], remote_sw_pins[i]);
+        remote_last_sw[i] = Remote_ReadSwitch(i);
         remote_sw_candidate[i] = remote_last_sw[i];
         remote_sw_count[i] = 0U;
         remote_data.switch_state[i] = remote_last_sw[i];
@@ -361,7 +379,7 @@ void Remote_Update(void)
 
     for (i = 0U; i < REMOTE_SWITCH_COUNT; i++)
     {
-        raw = Remote_ReadLow(remote_sw_ports[i], remote_sw_pins[i]);
+        raw = Remote_ReadSwitch(i);
         if (Remote_Debounce(raw, &remote_last_sw[i],
                             &remote_sw_candidate[i], &remote_sw_count[i]) != 0U)
         {

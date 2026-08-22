@@ -27,7 +27,7 @@ f103c8t6\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash_ex.h
 f103c8t6\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h
 f103c8t6\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_spi.h
 f103c8t6\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h
-f103c8t6\main.o: ../Core/Inc/spi.h
+f103c8t6\main.o: ../Core/Inc/dma.h
 f103c8t6\main.o: ../Core/Inc/usart.h
 f103c8t6\main.o: ../Core/Inc/gpio.h
 f103c8t6\main.o: ../Core/Inc/remote_link.h
