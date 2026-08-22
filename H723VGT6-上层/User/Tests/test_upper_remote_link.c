@@ -19,8 +19,8 @@ static void Test_BuildFixedFrame(uint8_t frame[TEST_FRAME_SIZE],
                                  uint8_t left_y,
                                  uint8_t right_x,
                                  uint8_t right_y,
-                                 uint8_t reserved_6,
-                                 uint8_t reserved_7,
+                                 uint8_t primary_keys,
+                                 uint8_t primary_switch,
                                  uint8_t secondary_keys,
                                  uint8_t secondary_switches)
 {
@@ -30,8 +30,8 @@ static void Test_BuildFixedFrame(uint8_t frame[TEST_FRAME_SIZE],
     frame[3] = left_y;
     frame[4] = right_x;
     frame[5] = right_y;
-    frame[6] = reserved_6;
-    frame[7] = reserved_7;
+    frame[6] = primary_keys;
+    frame[7] = primary_switch;
     frame[8] = secondary_keys;
     frame[9] = secondary_switches;
 }
@@ -44,13 +44,15 @@ static void Test_SplitFrame(void)
     upper_remote_control_t control;
 
     Test_BuildFixedFrame(frame, 128U, 128U, 128U, 128U,
-                         0U, 0U, 0x15U, 0x21U);
+                         0U, 0xFFU, 0x15U, 0x21U);
     UpperRemoteLink_Init(&link);
     UpperRemoteLink_Push(&link, frame, 3U, 10U);
     assert(!UpperRemoteLink_GetControl(&link, 10U, &control));
     UpperRemoteLink_Push(&link, &frame[3], sizeof(frame) - 3U, 11U);
     assert(UpperRemoteLink_GetControl(&link, 11U, &control));
     assert(control.online);
+    assert(control.primary_key_bits == 0U);
+    assert(control.primary_switch == UPPER_REMOTE_PRIMARY_SWITCH_MASK);
     assert(control.key_bits == 0x15U);
     assert(control.switch_bits == (0x21U & UPPER_REMOTE_SWITCH_MASK));
     assert(control.sequence == 0U);
@@ -68,10 +70,13 @@ static void Test_ConcatenatedFramesAndMasks(void)
     Test_BuildFixedFrame(&stream[0], 128U, 128U, 128U, 128U,
                          0U, 0U, 0U, 0U);
     Test_BuildFixedFrame(&stream[TEST_FRAME_SIZE], 128U, 128U, 128U, 128U,
-                         0U, 0U, 0xFFU, 0xFFU);
+                         0xFFU, 0xFFU, 0xFFU, 0xFFU);
     UpperRemoteLink_Init(&link);
     UpperRemoteLink_Push(&link, stream, sizeof(stream), 25U);
     assert(UpperRemoteLink_GetControl(&link, 25U, &control));
+    assert(control.primary_key_bits ==
+           (UPPER_REMOTE_PRIMARY_KEY_PC0 | UPPER_REMOTE_PRIMARY_KEY_PC1));
+    assert(control.primary_switch == UPPER_REMOTE_PRIMARY_SWITCH_MASK);
     assert(control.key_bits == UPPER_REMOTE_KEY_MASK);
     assert(control.switch_bits == UPPER_REMOTE_SWITCH_MASK);
     assert(link.diagnostics.valid_frame_count == 2U);
@@ -86,11 +91,15 @@ static void Test_NoiseAndHeaderResynchronization(void)
     upper_remote_control_t control;
 
     Test_BuildFixedFrame(frame, 1U, 2U, 6U, 9U,
-                         0U, 0U, 0x01U, 0x10U);
+                         UPPER_REMOTE_PRIMARY_KEY_PC0,
+                         UPPER_REMOTE_PRIMARY_SWITCH_PD6,
+                         0x01U, 0x10U);
     UpperRemoteLink_Init(&link);
     UpperRemoteLink_Push(&link, prefix, sizeof(prefix), 30U);
     UpperRemoteLink_Push(&link, frame, sizeof(frame), 31U);
     assert(UpperRemoteLink_GetControl(&link, 31U, &control));
+    assert(control.primary_key_bits == UPPER_REMOTE_PRIMARY_KEY_PC0);
+    assert(control.primary_switch == UPPER_REMOTE_PRIMARY_SWITCH_PD6);
     assert(control.key_bits == 0x01U);
     assert(control.switch_bits == 0x10U);
     assert(link.diagnostics.valid_frame_count == 1U);
@@ -128,6 +137,8 @@ static void Test_PayloadMayContainHeaderBytes(void)
     UpperRemoteLink_Init(&link);
     UpperRemoteLink_Push(&link, stream, sizeof(stream), 50U);
     assert(UpperRemoteLink_GetControl(&link, 50U, &control));
+    assert(control.primary_key_bits ==
+           (UPPER_REMOTE_PRIMARY_KEY_PC0 | UPPER_REMOTE_PRIMARY_KEY_PC1));
     assert(control.key_bits == 0x05U);
     assert(control.switch_bits == 0x06U);
     assert(link.diagnostics.valid_frame_count == 2U);

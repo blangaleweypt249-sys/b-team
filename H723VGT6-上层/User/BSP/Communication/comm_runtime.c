@@ -75,7 +75,7 @@ static comm_uart_handler_t comm_uart_handler;
 static comm_can_handler_t comm_can_handler;
 static void *comm_handler_user_data;
 static volatile comm_uart_channel_t comm_pc_channel = COMM_UART_UART4;
-/* Copy asynchronous replies so stack-backed caller buffers remain valid. */
+/* 复制异步回复，避免调用方的栈缓冲区失效后影响发送。 */
 __ALIGNED(DCACHE_LINE_SIZE) static uint8_t comm_pc_async_tx_buffer[256U];
 
 volatile uint32_t comm_uart_rx_bytes[UART_CHANNEL_COUNT];

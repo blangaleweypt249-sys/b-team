@@ -180,7 +180,7 @@ w25q_status_t W25Q_ReadDeviceId(w25q_handle_t *dev, uint16_t *device_id)
 
 /**
  * @brief 拉低 W25Qxx 片选引脚
- * @retval None
+ * @retval 无
  */
 static void W25Q_CsSelect(void)
 {
@@ -189,7 +189,7 @@ static void W25Q_CsSelect(void)
 
 /**
  * @brief 拉高 W25Qxx 片选引脚
- * @retval None
+ * @retval 无
  */
 static void W25Q_CsDeselect(void)
 {
@@ -219,7 +219,7 @@ static bool W25Q_SpiTransfer(const uint8_t *tx_data,
 /**
  * @brief 根据 W25Q_DELAY_MODE 选择毫秒延时函数
  * @param delay_ms 延时时间(ms)
- * @retval None
+ * @retval 无
  */
 static void W25Q_DelayMs(uint32_t delay_ms)
 {
@@ -623,7 +623,7 @@ static w25q_status_t W25Q_Lock(w25q_handle_t *dev)
 /**
  * @brief 释放可选的 SPI 总线锁
  * @param dev W25Qxx 设备句柄
- * @retval None
+ * @retval 无
  */
 static void W25Q_Unlock(w25q_handle_t *dev)
 {

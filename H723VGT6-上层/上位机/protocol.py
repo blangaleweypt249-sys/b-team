@@ -42,7 +42,7 @@ MOTOR_ACTION_J4310_ENABLE = 3
 # accidentally turn a newly opened serial port into a ready control link.
 HANDSHAKE_MAGIC = b"H723"
 
-# PC_MSG_AUX_CONTROL payload: output state bits followed by a reserved byte.
+# PC_MSG_AUX_CONTROL payload: output state bits followed by an update mask.
 # The PC command enters H723 over UART4; H723 forwards the resulting state
 # frame over UART5 to the F103 receiver's UART2.
 # bit0/1/2 are the arm, push-block and gripper cylinders; bit3 is the
@@ -97,12 +97,14 @@ def build_handshake_frame(sequence: int) -> bytes:
     return encode_frame(MSG_HANDSHAKE, sequence, HANDSHAKE_MAGIC)
 
 
-def build_aux_control_payload(output_bits: int) -> bytes:
-    """Build the two-byte cylinder/electronic-stop command payload."""
+def build_aux_control_payload(output_bits: int, update_mask: int = 0x0F) -> bytes:
+    """Build a masked cylinder/electronic-stop state command."""
 
     if not 0 <= output_bits <= 0x0F:
         raise ValueError("auxiliary output bits must fit in the low nibble")
-    return struct.pack("<BB", output_bits, 0)
+    if not 0 <= update_mask <= 0x0F:
+        raise ValueError("auxiliary update mask must fit in the low nibble")
+    return struct.pack("<BB", output_bits, update_mask)
 
 
 def build_motor_action_payload(

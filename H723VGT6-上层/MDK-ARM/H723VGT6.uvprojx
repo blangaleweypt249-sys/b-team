@@ -1949,6 +1949,16 @@
               <FilePath>../User/App/Robot/robot_state.h</FilePath>
             </File>
             <File>
+              <FileName>position_stall_monitor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/App/Robot/position_stall_monitor.c</FilePath>
+            </File>
+            <File>
+              <FileName>position_stall_monitor.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/App/Robot/position_stall_monitor.h</FilePath>
+            </File>
+            <File>
               <FileName>upper_robot.c</FileName>
               <FileType>1</FileType>
               <FilePath>../User/App/Robot/upper_robot.c</FilePath>

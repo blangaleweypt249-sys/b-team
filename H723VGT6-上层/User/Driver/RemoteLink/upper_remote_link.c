@@ -10,6 +10,8 @@
 #define REMOTE_HEADER_0            0xA5U
 #define REMOTE_HEADER_1            0x5AU
 #define REMOTE_FRAME_SIZE          10U
+#define REMOTE_PRIMARY_KEY_INDEX    6U
+#define REMOTE_PRIMARY_SWITCH_INDEX 7U
 #define REMOTE_KEY_INDEX           8U
 #define REMOTE_SWITCH_INDEX        9U
 #define UPPER_REMOTE_WATCHDOGS_ENABLED 0U
@@ -35,6 +37,11 @@ static void UpperRemoteLink_AcceptFrame(upper_remote_link_t *link,
                                         uint32_t tick_ms)
 {
     link->control_version++;
+    link->control.primary_key_bits =
+        frame[REMOTE_PRIMARY_KEY_INDEX] & UPPER_REMOTE_PRIMARY_KEY_MASK;
+    link->control.primary_switch =
+        frame[REMOTE_PRIMARY_SWITCH_INDEX] &
+        UPPER_REMOTE_PRIMARY_SWITCH_MASK;
     link->control.key_bits = frame[REMOTE_KEY_INDEX] &
                              UPPER_REMOTE_KEY_MASK;
     link->control.switch_bits = frame[REMOTE_SWITCH_INDEX] &
@@ -158,6 +165,8 @@ bool UpperRemoteLink_GetControl(const upper_remote_link_t *link,
         {
             continue;
         }
+        control->primary_key_bits = link->control.primary_key_bits;
+        control->primary_switch = link->control.primary_switch;
         control->key_bits = link->control.key_bits;
         control->switch_bits = link->control.switch_bits;
         control->sequence = link->control.sequence;
@@ -184,6 +193,8 @@ bool UpperRemoteLink_GetControl(const upper_remote_link_t *link,
     control->online = online;
     if (!online)
     {
+        control->primary_key_bits = 0U;
+        control->primary_switch = 0U;
         control->key_bits = 0U;
         control->switch_bits = 0U;
     }

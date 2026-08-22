@@ -30,6 +30,7 @@
 #define UPPER_PC_ACTION_J4310_ENABLE 3U
 
 typedef void (*upper_pc_aux_control_handler_t)(uint8_t output_bits,
+                                                uint8_t update_mask,
                                                 void *user_data);
 
 typedef struct

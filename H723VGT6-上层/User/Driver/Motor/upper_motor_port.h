@@ -91,6 +91,14 @@ typedef struct
     uint8_t state;
 } upper_j4310_feedback_t;
 
+typedef struct
+{
+    float position_rad;
+    float velocity_rad_s;
+    float current_a;
+    uint32_t updated_at_ms;
+} upper_m2006_feedback_t;
+
 #define UPPER_MOTOR_ERROR_FEEDBACK_TIMEOUT 0xF0U
 
 /* 功能：初始化电机协议驱动、拓扑状态和故障状态；用途：建立上层统一电机端口；返回 true 表示全部型号初始化成功。 */
@@ -122,6 +130,10 @@ bool UpperMotorPort_GetJ4310OutputPosition(uint8_t can_bus,
 bool UpperMotorPort_GetJ4310Feedback(uint8_t can_bus,
                                      uint8_t node_id,
                                      upper_j4310_feedback_t *feedback);
+/* 读取机构坐标系下的新鲜 M2006 位置、速度和电流。 */
+bool UpperMotorPort_GetM2006Feedback(uint8_t can_bus,
+                                     uint8_t node_id,
+                                     upper_m2006_feedback_t *feedback);
 /* 功能：读取 J4310 协议接收诊断；用途：区分 FDCAN 有帧但格式、Master ID 或反馈 ID 不匹配；返回 true 表示目标已配置且快照有效。 */
 bool UpperMotorPort_GetJ4310RxDiagnostic(
     uint8_t can_bus,

@@ -1241,6 +1241,54 @@ bool UpperMotorPort_GetJ4310Feedback(uint8_t can_bus,
     return false;
 }
 
+/* 读取 M2006 的新鲜反馈，并应用已配置的机构方向。 */
+bool UpperMotorPort_GetM2006Feedback(uint8_t can_bus,
+                                     uint8_t node_id,
+                                     upper_m2006_feedback_t *feedback)
+{
+    m2006_feedback_t driver_feedback;
+    bool zero_valid;
+    size_t index;
+
+    if (!upper_motor_initialized || (upper_motor_cfg_ref == NULL) ||
+        (feedback == NULL))
+    {
+        return false;
+    }
+    for (index = 0U; index < upper_motor_count; index++)
+    {
+        const motor_cfg_t *cfg = &upper_motor_cfg_ref[index];
+        float direction_sign;
+
+        if ((cfg->model != MOTOR_MODEL_M2006) ||
+            (cfg->can_bus != can_bus) || (cfg->node_id != node_id))
+        {
+            continue;
+        }
+        if (!M2006_GetFeedbackSnapshot(can_bus,
+                                       node_id,
+                                       &driver_feedback,
+                                       &zero_valid) ||
+            !zero_valid ||
+            !UpperMotorPort_FeedbackFresh(driver_feedback.updated_at_ms,
+                                          upper_motor_tick_ms))
+        {
+            return false;
+        }
+
+        direction_sign = UpperMotorPort_DirectionSign(cfg);
+        feedback->position_rad = driver_feedback.output_pos_rad *
+                                 direction_sign;
+        feedback->velocity_rad_s = driver_feedback.output_vel_rad_s *
+                                   direction_sign;
+        feedback->current_a = driver_feedback.torque_current_a *
+                              direction_sign;
+        feedback->updated_at_ms = driver_feedback.updated_at_ms;
+        return true;
+    }
+    return false;
+}
+
 /* 功能：读取 J4310 协议接收诊断；用途：区分 FDCAN 有帧但格式、Master ID 或反馈 ID 不匹配；返回 true 表示目标已配置且快照有效。 */
 bool UpperMotorPort_GetJ4310RxDiagnostic(
     uint8_t can_bus,

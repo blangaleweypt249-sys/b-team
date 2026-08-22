@@ -115,7 +115,7 @@ DJI_REDUCTION_RATIOS = {
 }
 MOTOR_LOG_PATH = Path(__file__).resolve().parents[2] / "电机日志.log"
 MOTOR_PARAMETER_PATH = Path(__file__).resolve().with_name("motor_parameters.json")
-REMOTE_ACTION_PARAMETER_VERSION = 9
+REMOTE_ACTION_PARAMETER_VERSION = 11
 LEGACY_GATE_ACTION_KEY = "\u5f00\u5173\u95e8"
 
 MOTOR_MODEL_NAMES = {
@@ -461,10 +461,10 @@ class UpperConsole:
             },
             "闸门": {
                 "angle_on": tk.DoubleVar(value=180.0),
-                "angle_off": tk.DoubleVar(value=55.0),
+                "angle_off": tk.DoubleVar(value=60.0),
             },
             "夹爪": {
-                "angle_on": tk.DoubleVar(value=45.0),
+                "angle_on": tk.DoubleVar(value=55.0),
                 "angle_off": tk.DoubleVar(value=125.0),
             },
         }
@@ -764,7 +764,7 @@ class UpperConsole:
             "气缸/电子急停状态：" + ("、".join(active_names) if active_names else "全部关闭")
         )
 
-    def _send_aux_control(self, output_bits: int) -> bool:
+    def _send_aux_control(self, output_bits: int, update_mask: int) -> bool:
         if not self.transport.connected:
             self.status_var.set("未连接，气缸/电子急停未发送")
             return False
@@ -772,7 +772,7 @@ class UpperConsole:
             self.status_var.set("尚未握手，气缸/电子急停未发送")
             return False
         try:
-            payload = build_aux_control_payload(output_bits)
+            payload = build_aux_control_payload(output_bits, update_mask)
         except ValueError:
             return False
         if self._send(MSG_AUX_CONTROL, payload):
@@ -783,7 +783,7 @@ class UpperConsole:
 
     def toggle_aux_output(self, output_bit: int) -> None:
         next_bits = self.aux_output_bits ^ output_bit
-        if self._send_aux_control(next_bits):
+        if self._send_aux_control(next_bits, output_bit):
             self.aux_output_bits = next_bits
             self._update_aux_buttons()
             if output_bit == AUX_OUTPUT_ARM_CYLINDER:

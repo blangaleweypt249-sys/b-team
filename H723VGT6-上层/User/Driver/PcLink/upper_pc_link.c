@@ -361,11 +361,15 @@ static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
         }
         if ((frame->payload_len == UPPER_PC_AUX_CONTROL_PAYLOAD_SIZE) &&
             ((frame->payload[0] & 0xF0U) == 0U) &&
-            (frame->payload[1] == 0U) &&
+            ((frame->payload[1] & 0xF0U) == 0U) &&
             (link->aux_control_handler != NULL))
         {
+            uint8_t update_mask = frame->payload[1] & 0x0FU;
+
             UpperPcLink_Accept(link, frame);
-            link->aux_control_handler(frame->payload[0], link->user_data);
+            link->aux_control_handler(frame->payload[0],
+                                      update_mask,
+                                      link->user_data);
         }
         else
         {

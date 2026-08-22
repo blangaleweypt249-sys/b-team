@@ -25,6 +25,7 @@ static uint8_t test_action_node_id;
 static uint8_t test_action_value;
 static bool test_aux_received;
 static uint8_t test_aux_output_bits;
+static uint8_t test_aux_update_mask;
 
 /* 功能：向测试缓冲区写入小端 16 位整数；用途：手工构造上位机协议载荷；结果写入 data。 */
 static void Test_WriteU16(uint8_t *data, uint16_t value)
@@ -114,10 +115,13 @@ static void Test_OnMotorAction(uint8_t action,
 }
 
 /* 功能：执行 OnAuxControl 场景测试；用途：验证对应输入下的行为和断言；无返回值表示由断言报告结果。 */
-static void Test_OnAuxControl(uint8_t output_bits, void *user_data)
+static void Test_OnAuxControl(uint8_t output_bits,
+                              uint8_t update_mask,
+                              void *user_data)
 {
     (void)user_data;
     test_aux_output_bits = output_bits;
+    test_aux_update_mask = update_mask;
     test_aux_received = true;
 }
 
@@ -362,7 +366,7 @@ int main(void)
 
     {
         const uint8_t aux_payload[UPPER_PC_AUX_CONTROL_PAYLOAD_SIZE] = {
-            0x0BU, 0x00U
+            0x0BU, 0x04U
         };
 
         frame_size = PcProtocol_Encode(PC_MSG_AUX_CONTROL,
@@ -375,6 +379,26 @@ int main(void)
         UpperPcLink_Push(&link, frame, frame_size, 100U);
         assert(test_aux_received);
         assert(test_aux_output_bits == 0x0BU);
+        assert(test_aux_update_mask == 0x04U);
+    }
+
+    {
+        const uint8_t legacy_aux_payload[UPPER_PC_AUX_CONTROL_PAYLOAD_SIZE] = {
+            0x05U, 0x00U
+        };
+
+        test_aux_received = false;
+        frame_size = PcProtocol_Encode(PC_MSG_AUX_CONTROL,
+                                       12U,
+                                       legacy_aux_payload,
+                                       sizeof(legacy_aux_payload),
+                                       frame,
+                                       TEST_FRAME_CAPACITY);
+        assert(frame_size > 0U);
+        UpperPcLink_Push(&link, frame, frame_size, 100U);
+        assert(test_aux_received);
+        assert(test_aux_output_bits == 0x05U);
+        assert(test_aux_update_mask == 0x00U);
     }
 
     frame_size = Test_BuildCommand(UPPER_PC_CMD_PAYLOAD_SIZE, frame);

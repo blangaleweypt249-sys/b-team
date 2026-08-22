@@ -11,12 +11,22 @@
 #include <stdint.h>
 
 #define UPPER_REMOTE_TIMEOUT_MS       200U
+#define UPPER_REMOTE_PRIMARY_KEY_MASK    0x06U
+#define UPPER_REMOTE_PRIMARY_SWITCH_MASK 0x03U
 #define UPPER_REMOTE_KEY_MASK         0x3FU
 #define UPPER_REMOTE_SWITCH_MASK      0x37U
 #define UPPER_REMOTE_FRAME_BUFFER_SIZE 32U
 
+#define UPPER_REMOTE_PRIMARY_KEY_PC0     (1U << 2U)
+#define UPPER_REMOTE_PRIMARY_KEY_PC1     (1U << 1U)
+#define UPPER_REMOTE_PRIMARY_SWITCH_PE0 (1U << 0U)
+#define UPPER_REMOTE_PRIMARY_SWITCH_PD6 (1U << 1U)
+#define UPPER_REMOTE_SWITCH_PD6          (1U << 4U)
+
 typedef struct
 {
+    uint8_t primary_key_bits;
+    uint8_t primary_switch;
     uint8_t key_bits;
     uint8_t switch_bits;
     uint8_t sequence;

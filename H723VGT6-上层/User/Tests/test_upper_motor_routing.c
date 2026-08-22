@@ -176,6 +176,27 @@ static void Test_FeedDjiSpeed(uint8_t can_bus,
     UpperMotorPort_OnFrame(can_bus, &frame, tick_ms);
 }
 
+/* 同时注入 DJI 位置、速度和实测电流反馈。 */
+static void Test_FeedDjiMotion(uint8_t can_bus,
+                               uint8_t node_id,
+                               uint16_t encoder,
+                               int16_t rotor_speed_rpm,
+                               int16_t current_raw,
+                               uint32_t tick_ms)
+{
+    can_frame_t frame = {0};
+
+    frame.id = 0x200U + node_id;
+    frame.dlc = 8U;
+    frame.data[0] = (uint8_t)(encoder >> 8U);
+    frame.data[1] = (uint8_t)encoder;
+    frame.data[2] = (uint8_t)((uint16_t)rotor_speed_rpm >> 8U);
+    frame.data[3] = (uint8_t)rotor_speed_rpm;
+    frame.data[4] = (uint8_t)((uint16_t)current_raw >> 8U);
+    frame.data[5] = (uint8_t)current_raw;
+    UpperMotorPort_OnFrame(can_bus, &frame, tick_ms);
+}
+
 /* 功能：判断两个浮点数是否在误差容限内；用途：避免测试受浮点舍入影响；返回 true 表示足够接近。 */
 static bool Test_FloatClose(float actual, float expected, float tolerance)
 {
@@ -484,6 +505,39 @@ static void Test_CheckDjiRestartFeedbackCalibration(void)
     assert(diagnostics[0].relative_output_position_rad > 0.0f);
     assert(diagnostics[2].relative_output_position_rad < 0.0f);
     assert(test_tx_count == 0U);
+}
+
+/* 验证返回的闸门反馈是新鲜数据且采用机构坐标系。 */
+static void Test_CheckGateFeedbackForStallMonitor(void)
+{
+    upper_m2006_feedback_t feedback;
+
+    assert(UpperMotorPort_Init(upper_motor_cfg, UPPER_MOTOR_COUNT));
+    Test_LockDjiZero(CAN_BUS_AUX, NODE_GATE_M2006, 4000U, 100U);
+    Test_FeedDjiMotion(CAN_BUS_AUX,
+                       NODE_GATE_M2006,
+                       4100U,
+                       360,
+                       4000,
+                       101U);
+    UpperMotorPort_BeginCycle(101U);
+    assert(UpperMotorPort_GetM2006Feedback(CAN_BUS_AUX,
+                                            NODE_GATE_M2006,
+                                            &feedback));
+    assert(feedback.position_rad < 0.0f);
+    assert(Test_FloatClose(feedback.velocity_rad_s,
+                           -TEST_TWO_PI / 6.0f,
+                           0.00001f));
+    assert(Test_FloatClose(feedback.current_a, -4.0f, 0.00001f));
+    assert(feedback.updated_at_ms == 101U);
+
+    UpperMotorPort_BeginCycle(152U);
+    assert(!UpperMotorPort_GetM2006Feedback(CAN_BUS_AUX,
+                                             NODE_GATE_M2006,
+                                             &feedback));
+    assert(!UpperMotorPort_GetM2006Feedback(CAN_BUS_AUX,
+                                             NODE_GRIPPER_M2006 + 1U,
+                                             &feedback));
 }
 
 /* 功能：注入一帧正常 J4310 反馈；用途：为模式和健康测试建立在线状态；无返回值表示反馈已送入端口。 */
@@ -1222,5 +1276,6 @@ int main(void)
                                                  &j4310_position_rad));
     Test_CheckDjiReferenceControl();
     Test_CheckDjiRestartFeedbackCalibration();
+    Test_CheckGateFeedbackForStallMonitor();
     return 0;
 }

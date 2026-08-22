@@ -268,8 +268,8 @@ class UpperConsoleTest(unittest.TestCase):
             "取台阶块": (0.0, 90.0, 850.0, 90.0),
             "收块": (0.0, 165.0, 0.0, 240.0),
             "翻转/存块": (0.0, 40.0, 0.0, -20.0),
-            "闸门": (180.0, 55.0),
-            "夹爪": (45.0, 125.0),
+            "闸门": (180.0, 60.0),
+            "夹爪": (55.0, 125.0),
         }
 
         for action, values in expected.items():
@@ -351,7 +351,7 @@ class UpperConsoleTest(unittest.TestCase):
                     variable.get()
                     for variable in other_app.remote_action_angles["闸门"].values()
                 ),
-                (180.0, 55.0),
+                (180.0, 60.0),
             )
         finally:
             other_app.close()
@@ -390,7 +390,7 @@ class UpperConsoleTest(unittest.TestCase):
                     variable.get()
                     for variable in other_app.remote_action_angles["闸门"].values()
                 ),
-                (180.0, 55.0),
+                (180.0, 60.0),
             )
         finally:
             other_app.close()
@@ -448,7 +448,7 @@ class UpperConsoleTest(unittest.TestCase):
                     variable.get()
                     for variable in other_app.remote_action_angles["夹爪"].values()
                 ),
-                (45.0, 125.0),
+                (55.0, 125.0),
             )
         finally:
             other_app.close()
@@ -548,7 +548,7 @@ class UpperConsoleTest(unittest.TestCase):
 
         self.assertEqual(
             [values[6] for values in sent_values[-3:]],
-            [0.0, 180.0, 55.0],
+            [0.0, 180.0, 60.0],
         )
         self.assertEqual(self.app.remote_action_states["闸门"], 0)
 
@@ -661,7 +661,7 @@ class UpperConsoleTest(unittest.TestCase):
             self.app.toggle_aux_output(output_bit)
             frame = FrameParser().feed(transport.write.call_args.args[0])[0]
             self.assertEqual(frame.msg_type, MSG_AUX_CONTROL)
-            self.assertEqual(frame.payload, bytes((expected_bits, 0x00)))
+            self.assertEqual(frame.payload, bytes((expected_bits, output_bit)))
 
         self.app.aux_output_bits = next(iter(self.app.aux_buttons))
         self.app._update_aux_buttons()
