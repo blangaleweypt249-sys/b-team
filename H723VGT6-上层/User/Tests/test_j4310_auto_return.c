@@ -10,7 +10,7 @@
 #include "j4310_auto_return.h"
 
 /* 功能：判断两个浮点数是否在给定误差内接近；用途：辅助验证数值控制结果；返回 true 表示比较通过。 */
-static bool Test_Close(float actual, float expected, float tolerance)
+static bool Test_Close(float actual /* 测试或判断使用的实际值 */, float expected /* 测试期望得到的参考值 */, float tolerance /* 比较实际值与期望值时允许的误差 */)
 {
     float error = actual - expected;
 

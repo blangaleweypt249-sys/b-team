@@ -9,7 +9,7 @@
 #include "fdcan_dlc.h"
 
 /* 功能：把逻辑 CAN 总线号映射为 HAL 句柄；用途：统一选择 FDCAN 外设；返回 NULL 表示总线号无效。 */
-static FDCAN_HandleTypeDef *BspCan_GetHandle(uint8_t can_bus)
+static FDCAN_HandleTypeDef *BspCan_GetHandle(uint8_t can_bus /* CAN 总线编号 */)
 {
     switch (can_bus)
     {

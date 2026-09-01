@@ -11,8 +11,11 @@
 
 #include "upper_pc_link.h"
 
+/** 用于暂存该模块数据的缓冲区容量。 */
 #define TEST_FRAME_CAPACITY  140U
+/** 测试协议载荷中表示 J4310 型号的数值。 */
 #define TEST_MOTOR_MODEL_J4310 0U
+/** 测试协议载荷中表示 M2006 型号的数值。 */
 #define TEST_MOTOR_MODEL_M2006 2U
 
 static upper_pc_target_t test_target;
@@ -28,14 +31,14 @@ static uint8_t test_aux_output_bits;
 static uint8_t test_aux_update_mask;
 
 /* 功能：向测试缓冲区写入小端 16 位整数；用途：手工构造上位机协议载荷；结果写入 data。 */
-static void Test_WriteU16(uint8_t *data, uint16_t value)
+static void Test_WriteU16(uint8_t *data /* 待处理数据的首地址 */, uint16_t value /* 需要检查、限幅或编码的输入值 */)
 {
     data[0] = (uint8_t)value;
     data[1] = (uint8_t)(value >> 8U);
 }
 
 /* 功能：向测试缓冲区写入小端单精度浮点数；用途：手工构造运动与 PID 参数；结果写入 data。 */
-static void Test_WriteFloat(uint8_t *data, float value)
+static void Test_WriteFloat(uint8_t *data /* 待处理数据的首地址 */, float value /* 需要检查、限幅或编码的输入值 */)
 {
     uint32_t bits;
 
@@ -47,7 +50,7 @@ static void Test_WriteFloat(uint8_t *data, float value)
 }
 
 /* 功能：从测试帧读取小端单精度浮点数；用途：核对状态和遥测载荷；返回值表示解码结果。 */
-static float Test_ReadFloat(const uint8_t *data)
+static float Test_ReadFloat(const uint8_t *data /* 待处理数据的首地址 */)
 {
     uint32_t bits;
     float value;
@@ -61,7 +64,7 @@ static float Test_ReadFloat(const uint8_t *data)
 }
 
 /* 功能：从测试帧读取小端 32 位整数；用途：核对计数器和时间字段；返回值表示解码结果。 */
-static uint32_t Test_ReadU32(const uint8_t *data)
+static uint32_t Test_ReadU32(const uint8_t *data /* 待处理数据的首地址 */)
 {
     return (uint32_t)data[0] |
            ((uint32_t)data[1] << 8U) |
@@ -70,13 +73,13 @@ static uint32_t Test_ReadU32(const uint8_t *data)
 }
 
 /* 功能：从测试帧中读取 16 位整数；用途：校验编码后的协议字段；返回值表示解码结果。 */
-static uint16_t Test_ReadU16(const uint8_t *data)
+static uint16_t Test_ReadU16(const uint8_t *data /* 待处理数据的首地址 */)
 {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8U);
 }
 
 /* 功能：判断两个浮点数是否在误差容限内；用途：避免协议换算测试受舍入影响；返回 true 表示足够接近。 */
-static bool Test_FloatClose(float actual, float expected, float tolerance)
+static bool Test_FloatClose(float actual /* 测试或判断使用的实际值 */, float expected /* 测试期望得到的参考值 */, float tolerance /* 比较实际值与期望值时允许的误差 */)
 {
     float error = actual - expected;
 
@@ -84,7 +87,7 @@ static bool Test_FloatClose(float actual, float expected, float tolerance)
 }
 
 /* 功能：记录链路解码出的整机目标；用途：作为命令回调测试桩；无返回值表示目标快照与调用次数已保存。 */
-static void Test_OnTarget(const upper_pc_target_t *target, void *user_data)
+static void Test_OnTarget(const upper_pc_target_t *target /* 本次需要应用的控制目标 */, void *user_data /* 调用回调函数时传递的用户上下文 */)
 {
     (void)user_data;
     assert(target != NULL);
@@ -93,18 +96,18 @@ static void Test_OnTarget(const upper_pc_target_t *target, void *user_data)
 }
 
 /* 功能：记录急停回调是否被触发；用途：验证会话内急停消息分发；无返回值表示急停计数已更新。 */
-static void Test_OnEStop(void *user_data)
+static void Test_OnEStop(void *user_data /* 调用回调函数时传递的用户上下文 */)
 {
     (void)user_data;
     test_estop_received = true;
 }
 
 /* 功能：记录电机维护动作回调参数；用途：验证保存零点命令的解码和路由；无返回值表示动作快照已保存。 */
-static void Test_OnMotorAction(uint8_t action,
-                               uint8_t can_bus,
-                               uint8_t node_id,
-                               uint8_t value,
-                               void *user_data)
+static void Test_OnMotorAction(uint8_t action /* 需要执行的电机或遥控动作 */,
+                               uint8_t can_bus /* CAN 总线编号 */,
+                               uint8_t node_id /* 电机协议节点编号 */,
+                               uint8_t value /* 需要检查、限幅或编码的输入值 */,
+                               void *user_data /* 调用回调函数时传递的用户上下文 */)
 {
     (void)user_data;
     test_action = action;
@@ -115,9 +118,9 @@ static void Test_OnMotorAction(uint8_t action,
 }
 
 /* 功能：执行 OnAuxControl 场景测试；用途：验证对应输入下的行为和断言；无返回值表示由断言报告结果。 */
-static void Test_OnAuxControl(uint8_t output_bits,
-                              uint8_t update_mask,
-                              void *user_data)
+static void Test_OnAuxControl(uint8_t output_bits /* 需要写入辅助控制板的输出位 */,
+                              uint8_t update_mask /* 指定本次允许改变哪些辅助输出位的掩码 */,
+                              void *user_data /* 调用回调函数时传递的用户上下文 */)
 {
     (void)user_data;
     test_aux_output_bits = output_bits;
@@ -126,7 +129,7 @@ static void Test_OnAuxControl(uint8_t output_bits,
 }
 
 /* 功能：构造基础上层控制命令测试帧；用途：覆盖速度模式及不同载荷长度；返回值表示编码后的帧长度。 */
-static size_t Test_BuildCommand(uint16_t payload_size, uint8_t *frame)
+static size_t Test_BuildCommand(uint16_t payload_size /* 待编码载荷的字节数 */, uint8_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
 {
     uint8_t payload[50] = {0};
     static const float value[8] =
@@ -156,7 +159,7 @@ static size_t Test_BuildCommand(uint16_t payload_size, uint8_t *frame)
 }
 
 /* 功能：构造指定序号的握手测试帧；用途：建立并验证链路会话；返回值表示编码后的帧长度。 */
-static size_t Test_BuildHandshake(uint16_t sequence, uint8_t *frame)
+static size_t Test_BuildHandshake(uint16_t sequence /* 用于匹配请求和响应的消息序号 */, uint8_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
 {
     static const uint8_t magic[UPPER_PC_HANDSHAKE_PAYLOAD_SIZE] =
     {
@@ -172,7 +175,7 @@ static size_t Test_BuildHandshake(uint16_t sequence, uint8_t *frame)
 }
 
 /* 功能：构造标准位置控制测试帧；用途：验证各机构位置目标解码；返回值表示编码后的帧长度。 */
-static size_t Test_BuildPositionCommand(uint8_t *frame)
+static size_t Test_BuildPositionCommand(uint8_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
 {
     uint8_t payload[UPPER_PC_POSITION_CMD_PAYLOAD_SIZE] = {0};
     static const float value[8] =
@@ -202,8 +205,8 @@ static size_t Test_BuildPositionCommand(uint8_t *frame)
 }
 
 /* 功能：构造含 PID 参数的扩展位置命令；用途：验证 GUI 单位换算和参数下发；返回值表示编码后的帧长度。 */
-static size_t Test_BuildExtendedPositionCommand(uint16_t enable_mask,
-                                                 uint8_t *frame)
+static size_t Test_BuildExtendedPositionCommand(uint16_t enable_mask /* 控制命令中允许启用的机构位图 */,
+                                                 uint8_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
 {
     uint8_t payload[UPPER_PC_EXTENDED_POSITION_CMD_PAYLOAD_SIZE] = {0};
     static const float value[30] =
@@ -232,8 +235,8 @@ static size_t Test_BuildExtendedPositionCommand(uint16_t enable_mask,
 }
 
 /* 功能：构造含夹持转矩与限制的位置命令；用途：验证 J4310 转矩字段解码和使能组合；返回值表示编码后的帧长度。 */
-static size_t Test_BuildPositionTorqueCommand(uint16_t enable_mask,
-                                               uint8_t *frame)
+static size_t Test_BuildPositionTorqueCommand(uint16_t enable_mask /* 控制命令中允许启用的机构位图 */,
+                                               uint8_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
 {
     uint8_t payload[UPPER_PC_POSITION_TORQUE_CMD_PAYLOAD_SIZE] = {0};
     static const float value[10] =

@@ -269,7 +269,7 @@ class UpperConsoleTest(unittest.TestCase):
             "收块": (0.0, 165.0, 0.0, 240.0),
             "翻转/存块": (0.0, 40.0, 0.0, -20.0),
             "闸门": (180.0, 60.0),
-            "夹爪": (55.0, 125.0),
+            "夹爪": (55.0, 135.0),
         }
 
         for action, values in expected.items():
@@ -448,7 +448,47 @@ class UpperConsoleTest(unittest.TestCase):
                     variable.get()
                     for variable in other_app.remote_action_angles["夹爪"].values()
                 ),
-                (55.0, 125.0),
+                (55.0, 135.0),
+            )
+        finally:
+            other_app.close()
+
+    def test_version_eleven_resets_gripper_second_angle(self) -> None:
+        previous = {
+            "remote_actions": {
+                "夹爪": {
+                    "angle_on": 65.0,
+                    "angle_off": 125.0,
+                },
+                "闸门": {
+                    "angle_on": 170.0,
+                    "angle_off": 70.0,
+                },
+            },
+            "remote_actions_version": 11,
+        }
+        main.MOTOR_PARAMETER_PATH.write_text(
+            json.dumps(previous, ensure_ascii=False), encoding="utf-8"
+        )
+
+        other_root = tk.Toplevel(self.root)
+        other_root.withdraw()
+        with mock.patch.object(UpperConsole, "refresh_ports"):
+            other_app = UpperConsole(other_root)
+        try:
+            self.assertEqual(
+                tuple(
+                    variable.get()
+                    for variable in other_app.remote_action_angles["夹爪"].values()
+                ),
+                (65.0, 135.0),
+            )
+            self.assertEqual(
+                tuple(
+                    variable.get()
+                    for variable in other_app.remote_action_angles["闸门"].values()
+                ),
+                (170.0, 70.0),
             )
         finally:
             other_app.close()

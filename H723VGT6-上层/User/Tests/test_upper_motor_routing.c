@@ -15,19 +15,33 @@
 #include "M3508/m3508.h"
 #include "upper_motor_port.h"
 
+/** 用于暂存该模块数据的缓冲区容量。 */
 #define TEST_TX_CAPACITY  16U
+/** 电机建立软件零点前编码器必须连续稳定的反馈帧数。 */
 #define TEST_DJI_ZERO_STABLE_FRAMES 5U
+/** 角度换算使用的圆周率数值。 */
 #define TEST_PI 3.14159265359f
+/** 角度换算使用的二倍圆周率数值。 */
 #define TEST_TWO_PI 6.28318530718f
+/** 测试中模拟电机控制任务的执行周期，单位：毫秒。 */
 #define TEST_CONTROL_PERIOD_MS 1U
+/** 机械臂 J4310 关节允许接收的最大位置目标，单位：弧度。 */
 #define TEST_J4310_POSITION_MAX_RAD 12.5f
+/** 机械臂 J4310 关节从电机坐标系换算到机构坐标系时使用的方向系数。 */
 #define TEST_J4310_DIRECTION_SIGN (-1.0f)
+/** 测试 J4310 MIT 转矩字段编码时使用的满量程，单位：牛米。 */
 #define TEST_J4310_TORQUE_MAP_MAX_NM 10.0f
+/** 第一台机械臂 M3508 输出轴从电机坐标系换算到机构坐标系时使用的方向系数。 */
 #define TEST_M3508_1_DIRECTION_SIGN 1.0f
+/** 第二台机械臂 M3508 输出轴从电机坐标系换算到机构坐标系时使用的方向系数。 */
 #define TEST_M3508_2_DIRECTION_SIGN (-1.0f)
+/** 机械臂 M3508 输出轴执行位置轨迹时允许的最大速度，单位：弧度每秒。 */
 #define TEST_M3508_POSITION_VEL_LIMIT_RAD_S 15.708f
+/** 机械臂 M3508 输出轴轨迹规划使用的最大加速度，单位：弧度每二次方秒。 */
 #define TEST_M3508_ACCEL_LIMIT_RAD_S2 62.832f
+/** M2006 输出轴的位置积分分离开始生效的误差阈值，单位：弧度。 */
 #define TEST_M2006_POSITION_CUTOFF_RAD 6.45771823238f
+/** 夹爪机构的位置积分分离开始生效的误差阈值，单位：弧度。 */
 #define TEST_GRIPPER_M2006_POSITION_CUTOFF_RAD 12.74090353956f
 
 static const motor_cfg_t upper_motor_cfg[UPPER_MOTOR_COUNT] =
@@ -64,10 +78,11 @@ static const motor_cfg_t upper_motor_cfg[UPPER_MOTOR_COUNT] =
     }
 };
 
+/** 保存 模块 运行过程中需要集中管理的数据。 */
 typedef struct
 {
-    uint8_t can_bus;
-    can_frame_t frame;
+    uint8_t can_bus; /**< 电机或数据帧所在的 CAN 总线编号。 */
+    can_frame_t frame; /**< 测试发送回调最近捕获的一帧 CAN 数据。 */
 } test_tx_t;
 
 static test_tx_t test_tx[TEST_TX_CAPACITY];
@@ -85,13 +100,13 @@ bool BspCan_Send(uint8_t can_bus, const can_frame_t *frame)
 }
 
 /* 功能：从测试帧读取大端 16 位有符号数；用途：核对 DJI 电流槽位；返回值表示解码结果。 */
-static int16_t Test_ReadI16Be(const uint8_t *data)
+static int16_t Test_ReadI16Be(const uint8_t *data /* 待处理数据的首地址 */)
 {
     return (int16_t)(((uint16_t)data[0] << 8U) | data[1]);
 }
 
 /* 功能：从测试帧读取小端单精度浮点数；用途：核对 J4310 位置速度帧；返回值表示解码结果。 */
-static float Test_ReadFloatLe(const uint8_t *data)
+static float Test_ReadFloatLe(const uint8_t *data /* 待处理数据的首地址 */)
 {
     uint32_t raw;
     float value;
@@ -105,14 +120,14 @@ static float Test_ReadFloatLe(const uint8_t *data)
 }
 
 /* 功能：读取 MIT 帧中的 12 位力矩字段；用途：验证软件限幅不会改变固定 TMAX 映射；返回值表示协议原始量。 */
-static uint16_t Test_ReadJ4310TorqueRaw(const can_frame_t *frame)
+static uint16_t Test_ReadJ4310TorqueRaw(const can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
 {
     return (uint16_t)((((uint16_t)frame->data[6] & 0x0FU) << 8U) |
                       frame->data[7]);
 }
 
 /* 功能：读取 MIT 帧的位置物理量；用途：验证机构正方向已映射为电机负方向；返回值为协议位置目标。 */
-static float Test_ReadJ4310MitPosition(const can_frame_t *frame)
+static float Test_ReadJ4310MitPosition(const can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
 {
     uint16_t raw;
 
@@ -130,10 +145,10 @@ static void Test_ResetTx(void)
 }
 
 /* 功能：向电机端口注入一帧模拟 DJI 反馈；用途：建立编码器、速度和电流测试状态；无返回值表示反馈已送入驱动。 */
-static void Test_FeedDji(uint8_t can_bus,
-                         uint8_t node_id,
-                         uint16_t encoder,
-                         uint32_t tick_ms)
+static void Test_FeedDji(uint8_t can_bus /* CAN 总线编号 */,
+                         uint8_t node_id /* 电机协议节点编号 */,
+                         uint16_t encoder /* 当前反馈的单圈编码器原始值 */,
+                         uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     can_frame_t frame = {0};
 
@@ -145,10 +160,10 @@ static void Test_FeedDji(uint8_t can_bus,
 }
 
 /* 功能：连续注入稳定 DJI 反馈以锁定启动零点；用途：模拟完成零位校准；无返回值表示校准帧已送入。 */
-static void Test_LockDjiZero(uint8_t can_bus,
-                             uint8_t node_id,
-                             uint16_t encoder,
-                             uint32_t tick_ms)
+static void Test_LockDjiZero(uint8_t can_bus /* CAN 总线编号 */,
+                             uint8_t node_id /* 电机协议节点编号 */,
+                             uint16_t encoder /* 当前反馈的单圈编码器原始值 */,
+                             uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     uint32_t sample;
 
@@ -159,11 +174,11 @@ static void Test_LockDjiZero(uint8_t can_bus,
 }
 
 /* 功能：向指定 DJI 电机注入带速度的反馈；用途：测试速度闭环与控制方向；无返回值表示反馈已送入。 */
-static void Test_FeedDjiSpeed(uint8_t can_bus,
-                              uint8_t node_id,
-                              uint16_t encoder,
-                              int16_t rotor_speed_rpm,
-                              uint32_t tick_ms)
+static void Test_FeedDjiSpeed(uint8_t can_bus /* CAN 总线编号 */,
+                              uint8_t node_id /* 电机协议节点编号 */,
+                              uint16_t encoder /* 当前反馈的单圈编码器原始值 */,
+                              int16_t rotor_speed_rpm /* 反馈的转子速度，单位：转每分 */,
+                              uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     can_frame_t frame = {0};
 
@@ -177,12 +192,12 @@ static void Test_FeedDjiSpeed(uint8_t can_bus,
 }
 
 /* 同时注入 DJI 位置、速度和实测电流反馈。 */
-static void Test_FeedDjiMotion(uint8_t can_bus,
-                               uint8_t node_id,
-                               uint16_t encoder,
-                               int16_t rotor_speed_rpm,
-                               int16_t current_raw,
-                               uint32_t tick_ms)
+static void Test_FeedDjiMotion(uint8_t can_bus /* CAN 总线编号 */,
+                               uint8_t node_id /* 电机协议节点编号 */,
+                               uint16_t encoder /* 当前反馈的单圈编码器原始值 */,
+                               int16_t rotor_speed_rpm /* 反馈的转子速度，单位：转每分 */,
+                               int16_t current_raw /* DJI 协议中的电流命令原始值 */,
+                               uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     can_frame_t frame = {0};
 
@@ -198,7 +213,7 @@ static void Test_FeedDjiMotion(uint8_t can_bus,
 }
 
 /* 功能：判断两个浮点数是否在误差容限内；用途：避免测试受浮点舍入影响；返回 true 表示足够接近。 */
-static bool Test_FloatClose(float actual, float expected, float tolerance)
+static bool Test_FloatClose(float actual /* 测试或判断使用的实际值 */, float expected /* 测试期望得到的参考值 */, float tolerance /* 比较实际值与期望值时允许的误差 */)
 {
     float error = actual - expected;
 
@@ -541,7 +556,7 @@ static void Test_CheckGateFeedbackForStallMonitor(void)
 }
 
 /* 功能：注入一帧正常 J4310 反馈；用途：为模式和健康测试建立在线状态；无返回值表示反馈已送入端口。 */
-static void Test_FeedJ4310(uint32_t tick_ms)
+static void Test_FeedJ4310(uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     can_frame_t frame = {0};
 
@@ -552,7 +567,7 @@ static void Test_FeedJ4310(uint32_t tick_ms)
 }
 
 /* 功能：注入带指定状态码的 J4310 反馈；用途：测试已使能状态与协议故障；无返回值表示反馈已送入。 */
-static void Test_FeedJ4310State(uint32_t tick_ms, uint8_t state)
+static void Test_FeedJ4310State(uint32_t tick_ms /* 当前系统毫秒时刻 */, uint8_t state /* 需要检查或上报的当前状态 */)
 {
     can_frame_t frame = {0};
 
@@ -563,9 +578,9 @@ static void Test_FeedJ4310State(uint32_t tick_ms, uint8_t state)
 }
 
 /* 功能：向被测端口注入一帧 J4310 位置反馈；用途：建立或更新连续角度跟踪状态；无返回值表示反馈已送入。 */
-static void Test_FeedJ4310Position(float mechanism_position_rad,
-                                   uint32_t tick_ms,
-                                   uint8_t state)
+static void Test_FeedJ4310Position(float mechanism_position_rad /* 测试注入的 J4310 机构关节角，单位：弧度 */,
+                                   uint32_t tick_ms /* 当前系统毫秒时刻 */,
+                                   uint8_t state /* 需要检查或上报的当前状态 */)
 {
     can_frame_t frame = {0};
     float protocol_position_rad;
@@ -718,7 +733,7 @@ static void Test_CheckJ4310RxDiagnostics(void)
 }
 
 /* 功能：判断测试帧是否为指定 J4310 特殊命令；用途：识别使能、失能和清错帧；返回 true 表示格式与命令匹配。 */
-static bool Test_IsJ4310Special(const can_frame_t *frame, uint8_t command)
+static bool Test_IsJ4310Special(const can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */, uint8_t command /* 需要识别或写入帧末尾的电机控制字节 */)
 {
     size_t index;
 
@@ -738,7 +753,7 @@ static bool Test_IsJ4310Special(const can_frame_t *frame, uint8_t command)
 }
 
 /* 功能：在指定时刻对全部配置电机执行一次发送调度；用途：构造完整路由周期；无返回值表示分组帧也已刷新。 */
-static void Test_SendAll(uint32_t tick_ms)
+static void Test_SendAll(uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     static const float current_a[UPPER_MOTOR_COUNT] =
     {
@@ -896,8 +911,8 @@ static void Test_CheckJ4310EnableOnly(void)
 }
 
 /* 功能：验证 J4310 各参考控制模式的帧格式和状态切换；用途：覆盖 MIT、位置速度及速度路由；断言失败会终止测试。 */
-static void Test_CheckJ4310ReferenceModes(motor_cmd_t *command,
-                                           uint32_t *tick_ms)
+static void Test_CheckJ4310ReferenceModes(motor_cmd_t *command /* 需要识别或写入帧末尾的电机控制字节 */,
+                                           uint32_t *tick_ms /* 当前系统毫秒时刻 */)
 {
     command->mode = MOTOR_CMD_POSITION_VELOCITY;
     command->pos_rad = 1.0f;

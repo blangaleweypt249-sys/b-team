@@ -12,23 +12,30 @@
 #include "fdcan_dlc.h"
 #include "usart.h"
 
+/** 每个 UART DMA 循环接收缓冲区的字节数。 */
 #define UART_DMA_RX_BUFFER_SIZE 256U
+/** 通信运行时管理的 UART 通道总数。 */
 #define UART_CHANNEL_COUNT      ((uint32_t)COMM_UART_CHANNEL_COUNT)
+/** 可用于普通串口通信的非 RS485 通道数量。 */
 #define UART_NON_RS485_COUNT    ((uint32_t)COMM_UART_RS485_1)
+/** 向辅助控制板转发控制帧所用 UART 的通道索引。 */
 #define UART_AUX_BRIDGE_INDEX   ((uint32_t)COMM_UART_UART5)
+/** 通信运行时管理的 FDCAN 控制器数量。 */
 #define FDCAN_CHANNEL_COUNT     3U
+/** STM32H7 数据缓存行的字节数，用于 DMA 缓存对齐。 */
 #define DCACHE_LINE_SIZE        32U
 
+/** 保存 模块 运行过程中需要集中管理的数据。 */
 typedef struct
 {
-  UART_HandleTypeDef *handle;
-  uint8_t *buffer;
-  uint32_t event_flag;
-  bool use_dma;
-  volatile uint32_t produced;
-  volatile uint16_t isr_position;
-  volatile uint8_t restart_requested;
-  uint32_t consumed;
+  UART_HandleTypeDef *handle; /**< 该通道绑定的 HAL UART 外设句柄。 */
+  uint8_t *buffer; /**< 用于暂存尚未完成解析的数据字节。 */
+  uint32_t event_flag; /**< 该通道收到数据时通知通信任务的事件位。 */
+  bool use_dma; /**< 该 UART 通道是否采用 DMA 循环接收。 */
+  volatile uint32_t produced; /**< DMA 或中断已经写入接收缓冲区的累计字节位置。 */
+  volatile uint16_t isr_position; /**< UART 中断接收写入 DMA 缓冲区的当前位置。 */
+  volatile uint8_t restart_requested; /**< UART 出错后是否等待通信任务重新启动接收。 */
+  uint32_t consumed; /**< 通信任务已经处理的累计字节位置。 */
 } UartDmaChannel;
 
 __ALIGNED(DCACHE_LINE_SIZE) static uint8_t uart4_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
@@ -89,10 +96,10 @@ volatile uint32_t comm_fdcan_rx_count[FDCAN_CHANNEL_COUNT];
 volatile uint32_t comm_notify_error_count;
 
 /* 功能：计算覆盖缓冲区的 D-Cache 对齐范围；用途：为 DMA 缓存维护提供合法地址和长度；结果写入 start 与 length。 */
-static void GetCacheRange(const void *buffer,
-                          size_t size,
-                          uintptr_t *start,
-                          int32_t *length)
+static void GetCacheRange(const void *buffer /* 函数读取或写入的对象地址 */,
+                          size_t size /* 待处理数据的字节数 */,
+                          uintptr_t *start /* 函数读取或写入的对象地址 */,
+                          int32_t *length /* 函数读取或写入的对象地址 */)
 {
   uintptr_t first;
   uintptr_t last;
@@ -153,8 +160,8 @@ void DmaCache_CompleteRx(void *buffer, size_t size)
 }
 
 /* 功能：按 HAL UART 句柄查找运行时通道；用途：把中断回调映射到通道状态；返回 NULL 表示句柄未注册。 */
-static UartDmaChannel *FindUartChannel(UART_HandleTypeDef *huart,
-                                       uint32_t *channel_index)
+static UartDmaChannel *FindUartChannel(UART_HandleTypeDef *huart /* 函数读取或写入的对象地址 */,
+                                       uint32_t *channel_index /* 函数读取或写入的对象地址 */)
 {
   uint32_t index;
 
@@ -174,7 +181,7 @@ static UartDmaChannel *FindUartChannel(UART_HandleTypeDef *huart,
 }
 
 /* 功能：复位通道计数并启动 UART 空闲接收；用途：初始化或错误后重启 DMA/中断接收；返回值表示 HAL 启动状态。 */
-static HAL_StatusTypeDef StartUartReception(UartDmaChannel *channel)
+static HAL_StatusTypeDef StartUartReception(UartDmaChannel *channel /* 需要选择或上报的 UART 通道 */)
 {
   HAL_StatusTypeDef status;
 
@@ -205,7 +212,7 @@ static HAL_StatusTypeDef StartUartReception(UartDmaChannel *channel)
 }
 
 /* 功能：配置 FDCAN 标准帧接收过滤器；用途：接收全部标准数据帧并拒绝其他帧；返回值表示 HAL 配置状态。 */
-static HAL_StatusTypeDef ConfigureFdcanFilter(FDCAN_HandleTypeDef *hfdcan)
+static HAL_StatusTypeDef ConfigureFdcanFilter(FDCAN_HandleTypeDef *hfdcan /* 函数读取或写入的对象地址 */)
 {
   FDCAN_FilterTypeDef filter = {0};
 
@@ -234,7 +241,7 @@ static HAL_StatusTypeDef ConfigureFdcanFilter(FDCAN_HandleTypeDef *hfdcan)
 }
 
 /* 功能：配置、启动 FDCAN 并打开接收通知；用途：使指定 CAN 外设进入工作状态；返回值表示启动是否成功。 */
-static HAL_StatusTypeDef StartFdcan(FDCAN_HandleTypeDef *hfdcan)
+static HAL_StatusTypeDef StartFdcan(FDCAN_HandleTypeDef *hfdcan /* 函数读取或写入的对象地址 */)
 {
   if (ConfigureFdcanFilter(hfdcan) != HAL_OK)
   {
@@ -285,7 +292,7 @@ HAL_StatusTypeDef CommRuntime_Init(osThreadId_t notify_task)
 }
 
 /* 功能：消费指定 UART 通道的新数据并按需重启接收；用途：在任务上下文处理 DMA 环形缓冲区；无返回值表示数据已交给回调。 */
-static void ProcessUartChannel(uint32_t index)
+static void ProcessUartChannel(uint32_t index /* 需要处理的通道或数组下标 */)
 {
   UartDmaChannel *channel;
   uint32_t produced;
@@ -355,7 +362,7 @@ static void ProcessUartChannel(uint32_t index)
 }
 
 /* 功能：读空指定 FDCAN 接收 FIFO 并转换为通用帧；用途：在任务上下文分发 CAN 数据；无返回值表示当前积压已处理。 */
-static void ProcessFdcanChannel(uint32_t index)
+static void ProcessFdcanChannel(uint32_t index /* 需要处理的通道或数组下标 */)
 {
   FDCAN_RxHeaderTypeDef header;
   can_frame_t frame;
@@ -411,9 +418,9 @@ void CommRuntime_Process(uint32_t flags)
 }
 
 /* 功能：在指定 UART 通道发起异步发送；用途：统一 DMA 与中断发送方式；返回值表示 HAL 是否接受发送请求。 */
-static HAL_StatusTypeDef CommRuntime_UartTransmitAsync(UartDmaChannel *channel,
-                                                       const uint8_t *data,
-                                                       uint16_t size)
+static HAL_StatusTypeDef CommRuntime_UartTransmitAsync(UartDmaChannel *channel /* 需要选择或上报的 UART 通道 */,
+                                                       const uint8_t *data /* 待处理数据的首地址 */,
+                                                       uint16_t size /* 待处理数据的字节数 */)
 {
   if ((channel == NULL) || (channel->handle == NULL) ||
       (data == NULL) || (size == 0U))
@@ -586,7 +593,7 @@ uint32_t CommRuntime_GetTickMs(void)
 }
 
 /* 功能：向通信任务设置事件标志；用途：从 ISR 唤醒对应通道处理；失败时递增通知错误计数。 */
-static void NotifyCommTask(uint32_t flag)
+static void NotifyCommTask(uint32_t flag /* 需要通知通信任务的单个事件位 */)
 {
   uint32_t result;
 

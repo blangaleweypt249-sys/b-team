@@ -7,17 +7,97 @@
 
 #include <string.h>
 
+/** 遥控数据帧的第一个同步字节。 */
 #define REMOTE_HEADER_0            0xA5U
+/** 遥控数据帧的第二个同步字节。 */
 #define REMOTE_HEADER_1            0x5AU
+/** 一帧完整遥控数据占用的字节数。 */
 #define REMOTE_FRAME_SIZE          10U
+/** 主遥控按键位图在遥控帧中的字节下标。 */
 #define REMOTE_PRIMARY_KEY_INDEX    6U
+/** 主遥控开关位图在遥控帧中的字节下标。 */
 #define REMOTE_PRIMARY_SWITCH_INDEX 7U
+/** 副遥控按键位图在遥控帧中的字节下标。 */
 #define REMOTE_KEY_INDEX           8U
+/** 副遥控开关位图在遥控帧中的字节下标。 */
 #define REMOTE_SWITCH_INDEX        9U
+/** 是否启用对应通信链路的超时看门狗检查。 */
 #define UPPER_REMOTE_WATCHDOGS_ENABLED 0U
 
+/* PE0/PD6 are independent mode selectors. A single damaged frame must not
+ * turn an ordinary button press into a mode change. */
+static bool UpperRemoteLink_FilterModeBit(upper_remote_link_t *link /* 需要操作的通信链路对象 */,
+                                          uint8_t sample_bits /* 本帧采样到的 PE0、PD6 模式开关位 */,
+                                          uint8_t bit /* 需要检查或设置的单个位 */,
+                                          uint8_t *stable_frames /* 函数读取或写入的对象地址 */)
+{
+    bool sample_set = (sample_bits & bit) != 0U;
+    bool candidate_set = (link->mode_candidate_bits & bit) != 0U;
+    bool stable_set = (link->control.primary_switch & bit) != 0U;
+
+    if (sample_set != candidate_set)
+    {
+        if (sample_set)
+        {
+            link->mode_candidate_bits |= bit;
+        }
+        else
+        {
+            link->mode_candidate_bits &= (uint8_t)~bit;
+        }
+        *stable_frames = 1U;
+        return false;
+    }
+    if (sample_set == stable_set)
+    {
+        *stable_frames = 0U;
+        return false;
+    }
+    if (*stable_frames < UPPER_REMOTE_MODE_STABLE_FRAMES)
+    {
+        (*stable_frames)++;
+    }
+    if (*stable_frames < UPPER_REMOTE_MODE_STABLE_FRAMES)
+    {
+        return false;
+    }
+
+    if (sample_set)
+    {
+        link->control.primary_switch |= bit;
+    }
+    else
+    {
+        link->control.primary_switch &= (uint8_t)~bit;
+    }
+    *stable_frames = 0U;
+    return true;
+}
+
+static void UpperRemoteLink_UpdateModeSwitches(upper_remote_link_t *link /* 需要操作的通信链路对象 */,
+                                                uint8_t sample_bits /* 本帧采样到的 PE0、PD6 模式开关位 */)
+{
+    sample_bits &= UPPER_REMOTE_PRIMARY_SWITCH_MASK;
+    if (!link->mode_switches_initialized)
+    {
+        link->control.primary_switch = sample_bits;
+        link->mode_candidate_bits = sample_bits;
+        link->mode_pe0_stable_frames = 0U;
+        link->mode_pd6_stable_frames = 0U;
+        link->mode_switches_initialized = true;
+        return;
+    }
+
+    (void)UpperRemoteLink_FilterModeBit(
+        link, sample_bits, UPPER_REMOTE_PRIMARY_SWITCH_PE0,
+        &link->mode_pe0_stable_frames);
+    (void)UpperRemoteLink_FilterModeBit(
+        link, sample_bits, UPPER_REMOTE_PRIMARY_SWITCH_PD6,
+        &link->mode_pd6_stable_frames);
+}
+
 /* 功能：从遥控接收缓存头部丢弃指定字节；用途：消费已处理数据或恢复帧同步；无返回值表示缓存已前移。 */
-static void UpperRemoteLink_Discard(upper_remote_link_t *link, size_t size)
+static void UpperRemoteLink_Discard(upper_remote_link_t *link /* 需要操作的通信链路对象 */, size_t size /* 待处理数据的字节数 */)
 {
     if (size >= link->buffered_size)
     {
@@ -32,16 +112,15 @@ static void UpperRemoteLink_Discard(upper_remote_link_t *link, size_t size)
 }
 
 /* 功能：解码并接收一帧合法遥控数据；用途：更新按键、摇杆、序列号和接收时刻；无返回值表示最新控制状态已保存。 */
-static void UpperRemoteLink_AcceptFrame(upper_remote_link_t *link,
-                                        const uint8_t *frame,
-                                        uint32_t tick_ms)
+static void UpperRemoteLink_AcceptFrame(upper_remote_link_t *link /* 需要操作的通信链路对象 */,
+                                        const uint8_t *frame /* 需要解析或发送的 CAN 或协议帧 */,
+                                        uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     link->control_version++;
     link->control.primary_key_bits =
         frame[REMOTE_PRIMARY_KEY_INDEX] & UPPER_REMOTE_PRIMARY_KEY_MASK;
-    link->control.primary_switch =
-        frame[REMOTE_PRIMARY_SWITCH_INDEX] &
-        UPPER_REMOTE_PRIMARY_SWITCH_MASK;
+    UpperRemoteLink_UpdateModeSwitches(
+        link, frame[REMOTE_PRIMARY_SWITCH_INDEX]);
     link->control.key_bits = frame[REMOTE_KEY_INDEX] &
                              UPPER_REMOTE_KEY_MASK;
     link->control.switch_bits = frame[REMOTE_SWITCH_INDEX] &
@@ -55,8 +134,8 @@ static void UpperRemoteLink_AcceptFrame(upper_remote_link_t *link,
 }
 
 /* 功能：扫描遥控接收缓存并提取完整帧；用途：处理分包、粘包、噪声和帧头重同步；无返回值表示当前可解析数据已消费。 */
-static void UpperRemoteLink_Process(upper_remote_link_t *link,
-                                    uint32_t tick_ms)
+static void UpperRemoteLink_Process(upper_remote_link_t *link /* 需要操作的通信链路对象 */,
+                                    uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     size_t header_offset;
 

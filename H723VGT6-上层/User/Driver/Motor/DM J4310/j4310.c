@@ -10,33 +10,46 @@
 
 #include "motor_online_tune.h"
 
+/** 标准 CAN 帧允许的最大 11 位标识符。 */
 #define J4310_CAN_STD_ID_MAX  0x7FFU
+/** J4310 反馈帧中电机编号字段允许的最大值。 */
 #define J4310_FEEDBACK_ID_MAX 0x0FU
+/** 机械臂 J4310 关节控制命令允许使用的最大比例增益。 */
 #define J4310_KP_MAX          500.0f
+/** 机械臂 J4310 关节控制命令允许使用的最大微分增益。 */
 #define J4310_KD_MAX          5.0f
+/** 机械臂 J4310 关节控制命令允许使用的最大比例增益。 */
 #define J4310_ONLINE_MIT_KP_MAX 49.0f
+/** 机械臂 J4310 关节控制命令允许使用的最大微分增益。 */
 #define J4310_ONLINE_MIT_KD_MAX 0.95f
+/** J4310 MIT 在线调参判定接近目标的位置误差阈值，单位：弧度。 */
 #define J4310_ONLINE_MIT_NEAR_ERROR_RAD 0.01745329252f
+/** J4310 MIT 在线调参判定远离目标的位置误差阈值，单位：弧度。 */
 #define J4310_ONLINE_MIT_FAR_ERROR_RAD  0.17453292520f
+/** J4310 清除故障命令的协议控制字节。 */
 #define J4310_CMD_CLEAR_FAULT 0xFBU
+/** J4310 进入使能状态命令的协议控制字节。 */
 #define J4310_CMD_ENABLE      0xFCU
+/** J4310 退出使能状态命令的协议控制字节。 */
 #define J4310_CMD_DISABLE     0xFDU
+/** J4310 将当前位置写入零点命令的协议控制字节。 */
 #define J4310_CMD_SAVE_ZERO   0xFEU
 
+/** 保存 J4310 运行过程中需要集中管理的数据。 */
 typedef struct
 {
-    bool used;
-    uint8_t motor_id;
-    uint16_t master_id;
-    uint8_t feedback_id;
-    j4310_mode_t mode;
+    bool used; /**< 该 J4310 上下文槽位是否已经分配给电机。 */
+    uint8_t motor_id; /**< DJI 电机编号。 */
+    uint16_t master_id; /**< J4310 向主控反馈时使用的 CAN 标识符。 */
+    uint8_t feedback_id; /**< J4310 反馈数据首字节中的电机编号。 */
+    j4310_mode_t mode; /**< 当前采用的电机控制或调试工作模式。 */
     /* 协议映射值存储在电机中，不属于可编辑的安全限值。 */
-    j4310_limits_t limits;
-    float software_torque_limit_nm;
-    motor_online_mit_t mit_tuner;
-    uint32_t online_last_feedback_ms;
-    volatile uint32_t sequence;
-    volatile j4310_feedback_t feedback;
+    j4310_limits_t limits; /**< J4310 MIT 协议各物理量的映射范围。 */
+    float software_torque_limit_nm; /**< J4310的转矩上限，单位：牛米。 */
+    motor_online_mit_t mit_tuner; /**< 用于在线调整 J4310 MIT 比例和微分增益的状态。 */
+    uint32_t online_last_feedback_ms; /**< MIT 在线调参最近一次取得有效反馈的系统毫秒时刻。 */
+    volatile uint32_t sequence; /**< 用于匹配请求和响应的消息序号。 */
+    volatile j4310_feedback_t feedback; /**< 最近一次有效电机反馈的快照。 */
 } j4310_context_t;
 
 static j4310_context_t j4310_context[J4310_MAX_MOTOR_COUNT];
@@ -44,8 +57,8 @@ static volatile uint32_t j4310_rx_diagnostic_sequence;
 static volatile j4310_rx_diagnostics_t j4310_rx_diagnostics;
 
 /* 功能：记录达妙解析结果和最近一帧帧头；用途：区分物理收帧与协议匹配失败；无返回值表示诊断快照已更新。 */
-static void J4310_RecordRxDiagnostic(const can_frame_t *frame,
-                                     j4310_rx_result_t result)
+static void J4310_RecordRxDiagnostic(const can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */,
+                                     j4310_rx_result_t result /* 用于写出操作结果的对象 */)
 {
     uint32_t sequence;
 
@@ -76,13 +89,13 @@ static void J4310_RecordRxDiagnostic(const can_frame_t *frame,
 }
 
 /* 功能：判断浮点数是否有限；用途：过滤 J4310 命令中的 NaN 和无穷值；返回 true 表示数值可用。 */
-static bool J4310_IsFinite(float value)
+static bool J4310_IsFinite(float value /* 需要检查、限幅或编码的输入值 */)
 {
     return (value == value) && (value <= FLT_MAX) && (value >= -FLT_MAX);
 }
 
 /* 功能：把数值限制在给定区间；用途：约束位置、速度、转矩和增益；返回值表示限幅结果。 */
-static float J4310_Clamp(float value, float min, float max)
+static float J4310_Clamp(float value /* 需要检查、限幅或编码的输入值 */, float min /* 允许输出的下限 */, float max /* 允许输出的上限 */)
 {
     if (value < min)
     {
@@ -96,7 +109,7 @@ static float J4310_Clamp(float value, float min, float max)
 }
 
 /* 功能：检查 J4310 控制模式枚举；用途：拒绝驱动不支持的模式；返回 true 表示模式合法。 */
-static bool J4310_ModeValid(j4310_mode_t mode)
+static bool J4310_ModeValid(j4310_mode_t mode /* 需要设置或判断的工作模式 */)
 {
     return (mode == J4310_MODE_MIT) ||
            (mode == J4310_MODE_POSITION_VELOCITY) ||
@@ -104,10 +117,10 @@ static bool J4310_ModeValid(j4310_mode_t mode)
 }
 
 /* 功能：将物理浮点量线性映射为指定比特的无符号整数；用途：编码 MIT 控制字段；返回值表示量化后的协议值。 */
-static uint16_t J4310_FloatToUint(float value,
-                                  float min,
-                                  float max,
-                                  uint8_t bits)
+static uint16_t J4310_FloatToUint(float value /* 需要检查、限幅或编码的输入值 */,
+                                  float min /* 允许输出的下限 */,
+                                  float max /* 允许输出的上限 */,
+                                  uint8_t bits /* 需要检查或设置的状态位图 */)
 {
     uint32_t scale;
     float normalized;
@@ -119,7 +132,7 @@ static uint16_t J4310_FloatToUint(float value,
 }
 
 /* 功能：把单精度浮点数按小端位模式写入字节；用途：编码位置速度和速度模式帧；结果写入 data。 */
-static void J4310_WriteFloatLe(uint8_t *data, float value)
+static void J4310_WriteFloatLe(uint8_t *data /* 待处理数据的首地址 */, float value /* 需要检查、限幅或编码的输入值 */)
 {
     uint32_t raw;
 
@@ -131,10 +144,10 @@ static void J4310_WriteFloatLe(uint8_t *data, float value)
 }
 
 /* 功能：将协议无符号整数线性还原为物理浮点量；用途：解析 MIT 反馈；返回值表示对应的物理值。 */
-static float J4310_UintToFloat(uint16_t value,
-                               float min,
-                               float max,
-                               uint8_t bits)
+static float J4310_UintToFloat(uint16_t value /* 需要检查、限幅或编码的输入值 */,
+                               float min /* 允许输出的下限 */,
+                               float max /* 允许输出的上限 */,
+                               uint8_t bits /* 需要检查或设置的状态位图 */)
 {
     uint32_t scale;
 
@@ -143,7 +156,7 @@ static float J4310_UintToFloat(uint16_t value,
 }
 
 /* 功能：按节点号查找已注册的 J4310 上下文；用途：访问模式、限制和反馈；返回 NULL 表示电机未注册。 */
-static j4310_context_t *J4310_Find(uint8_t motor_id)
+static j4310_context_t *J4310_Find(uint8_t motor_id /* DJI 电机编号 */)
 {
     uint32_t index;
 
@@ -159,8 +172,8 @@ static j4310_context_t *J4310_Find(uint8_t motor_id)
 }
 
 /* 功能：根据电机限制配置 MIT 在线调参器；用途：建立刚度和阻尼的动态调整边界；返回 true 表示配置成功。 */
-static bool J4310_ConfigureOnlineMit(j4310_context_t *context,
-                                     bool enabled)
+static bool J4310_ConfigureOnlineMit(j4310_context_t *context /* 函数读取或写入的对象地址 */,
+                                     bool enabled /* 是否启用对应功能 */)
 {
     motor_online_mit_cfg_t cfg;
 
@@ -185,9 +198,9 @@ static bool J4310_ConfigureOnlineMit(j4310_context_t *context,
 }
 
 /* 功能：构造 J4310 使能、停机、清错或置零特殊帧；用途：复用特殊命令格式；返回 true 表示构帧成功。 */
-static bool J4310_BuildSpecial(uint8_t motor_id,
-                               uint8_t command,
-                               can_frame_t *frame)
+static bool J4310_BuildSpecial(uint8_t motor_id /* DJI 电机编号 */,
+                               uint8_t command /* 需要识别或写入帧末尾的电机控制字节 */,
+                               can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
 {
     j4310_context_t *context;
 

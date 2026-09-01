@@ -7,19 +7,23 @@
 
 #include <string.h>
 
+/** 上位机通信帧的第一个同步字节。 */
 #define PC_SYNC_0       0xA5U
+/** 上位机通信帧的第二个同步字节。 */
 #define PC_SYNC_1       0x5AU
+/** 上位机通信帧头在载荷之前占用的字节数。 */
 #define PC_HEADER_SIZE  8U
+/** 上位机通信帧末尾 CRC16 占用的字节数。 */
 #define PC_CRC_SIZE     2U
 
 /* 功能：从字节流读取小端 16 位整数；用途：解析上位机协议字段；返回值表示解码结果。 */
-static uint16_t PcProtocol_ReadU16(const uint8_t *data)
+static uint16_t PcProtocol_ReadU16(const uint8_t *data /* 待处理数据的首地址 */)
 {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8U);
 }
 
 /* 功能：将 16 位整数写成小端字节；用途：编码上位机协议字段；无返回值表示结果写入 data。 */
-static void PcProtocol_WriteU16(uint8_t *data, uint16_t value)
+static void PcProtocol_WriteU16(uint8_t *data /* 待处理数据的首地址 */, uint16_t value /* 需要检查、限幅或编码的输入值 */)
 {
     data[0] = (uint8_t)value;
     data[1] = (uint8_t)(value >> 8U);
@@ -93,7 +97,7 @@ size_t PcProtocol_Encode(uint8_t type,
 }
 
 /* 功能：复位协议解析进度并尝试保留新的同步首字节；用途：错误后快速重新同步；无返回值表示状态已更新。 */
-static void PcProtocol_Reset(pc_parser_t *parser, uint8_t last_byte)
+static void PcProtocol_Reset(pc_parser_t *parser /* 需要操作的协议解析器 */, uint8_t last_byte /* 解析器复位前最后收到的字节，用于保留可能的新同步头 */)
 {
     parser->received = 0U;
     parser->expected = 0U;
@@ -105,9 +109,9 @@ static void PcProtocol_Reset(pc_parser_t *parser, uint8_t last_byte)
 }
 
 /* 功能：校验并提交一帧已收齐的数据；用途：检查 CRC 后调用业务回调；失败时更新错误计数并重新同步。 */
-static void PcProtocol_Deliver(pc_parser_t *parser,
-                               pc_frame_handler_t handler,
-                               void *user_data)
+static void PcProtocol_Deliver(pc_parser_t *parser /* 需要操作的协议解析器 */,
+                               pc_frame_handler_t handler /* 收到有效数据后调用的处理函数 */,
+                               void *user_data /* 调用回调函数时传递的用户上下文 */)
 {
     pc_frame_t frame;
     uint16_t payload_len;

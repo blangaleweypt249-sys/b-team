@@ -4,6 +4,7 @@
  */
 
 #ifndef FREERTOS_APP_H
+/** 防止 freertos_app.h 被重复包含。 */
 #define FREERTOS_APP_H
 
 #include <stdint.h>

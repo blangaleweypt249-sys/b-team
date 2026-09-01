@@ -8,16 +8,23 @@
 #include <math.h>
 #include <string.h>
 
+/** J4310 自动回位轨迹状态的更新周期，单位：毫秒。 */
 #define J4310_AUTO_RETURN_CONTROL_PERIOD_MS       10U
+/** 机械臂 J4310 关节轨迹规划使用的最大速度，单位：弧度每秒。 */
 #define J4310_AUTO_RETURN_MAX_VELOCITY_RAD_S       2.0f
+/** 机械臂 J4310 关节轨迹规划使用的最大加速度，单位：弧度每二次方秒。 */
 #define J4310_AUTO_RETURN_MAX_ACCEL_RAD_S2        10.0f
+/** 自动回位完成时允许的 J4310 位置误差，单位：弧度。 */
 #define J4310_AUTO_RETURN_SETTLE_POSITION_RAD      0.03f
+/** 自动回位完成时允许的 J4310 关节速度，单位：弧度每秒。 */
 #define J4310_AUTO_RETURN_SETTLE_VELOCITY_RAD_S    0.20f
+/** 五次平滑插值曲线的一阶导数最大系数，用于根据行程和速度计算轨迹时长。 */
 #define J4310_AUTO_RETURN_QUINTIC_VELOCITY_BOUND   1.875f
+/** 五次平滑插值曲线的二阶导数最大系数，用于根据行程和加速度计算轨迹时长。 */
 #define J4310_AUTO_RETURN_QUINTIC_ACCEL_BOUND      5.7736f
 
 /* 功能：按回零距离计算五次轨迹持续时间；用途：同时满足最大速度和加速度约束；返回值表示轨迹时长（毫秒）。 */
-static uint32_t J4310AutoReturn_TrajectoryDurationMs(float distance_rad)
+static uint32_t J4310AutoReturn_TrajectoryDurationMs(float distance_rad /* 轨迹起点与目标之间的角距离，单位：弧度 */)
 {
     float velocity_time_s;
     float acceleration_time_s;
@@ -52,8 +59,8 @@ static uint32_t J4310AutoReturn_TrajectoryDurationMs(float distance_rad)
 }
 
 /* 功能：采样当前自动回零五次轨迹；用途：生成平滑的位置和速度目标；无返回值表示目标已写入控制器。 */
-static void J4310AutoReturn_Sample(j4310_auto_return_t *control,
-                                   uint32_t tick_ms)
+static void J4310AutoReturn_Sample(j4310_auto_return_t *control /* 需要读取或更新的控制状态 */,
+                                   uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     uint32_t elapsed_ms;
     float normalized_time;
@@ -98,10 +105,10 @@ static void J4310AutoReturn_Sample(j4310_auto_return_t *control,
 }
 
 /* 功能：从当前位置启动 J4310 自动回零轨迹；用途：电机重连后平滑返回零位；无返回值表示控制权和轨迹状态已更新。 */
-static void J4310AutoReturn_Start(j4310_auto_return_t *control,
-                                  uint32_t tick_ms,
-                                  float position_rad,
-                                  float velocity_rad_s)
+static void J4310AutoReturn_Start(j4310_auto_return_t *control /* 需要读取或更新的控制状态 */,
+                                  uint32_t tick_ms /* 当前系统毫秒时刻 */,
+                                  float position_rad /* 目标或反馈位置，单位：弧度 */,
+                                  float velocity_rad_s /* 目标或反馈速度，单位：弧度每秒 */)
 {
     control->reconnect_armed = false;
     control->owns_control = true;

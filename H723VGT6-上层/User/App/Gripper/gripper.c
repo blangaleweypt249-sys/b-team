@@ -13,7 +13,7 @@
 #include "upper_motor_port.h"
 
 /* 功能：校验夹爪 PID 参数；用途：阻止非法增益进入 M2006 控制器；返回 true 表示配置有效。 */
-static bool Gripper_PidValid(const upper_pid_cfg_t *cfg)
+static bool Gripper_PidValid(const upper_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */)
 {
     return (cfg != NULL) && isfinite(cfg->kp) && isfinite(cfg->ki) &&
            isfinite(cfg->kd) && isfinite(cfg->integral_limit) &&
@@ -23,14 +23,14 @@ static bool Gripper_PidValid(const upper_pid_cfg_t *cfg)
 }
 
 /* 功能：比较两组夹爪 PID 配置；用途：判断是否需要重复下发参数；返回 true 表示两者相同。 */
-static bool Gripper_PidEqual(const upper_pid_cfg_t *left,
-                             const upper_pid_cfg_t *right)
+static bool Gripper_PidEqual(const upper_pid_cfg_t *left /* 函数读取或写入的对象地址 */,
+                             const upper_pid_cfg_t *right /* 函数读取或写入的对象地址 */)
 {
     return memcmp(left, right, sizeof(*left)) == 0;
 }
 
 /* 功能：将数值限制在给定上下界内；用途：约束夹爪控制量和积分状态；返回值表示限幅后的数值。 */
-static float Gripper_Clamp(float value, float lower, float upper)
+static float Gripper_Clamp(float value /* 需要检查、限幅或编码的输入值 */, float lower /* 允许输出的下限 */, float upper /* 允许输出的上限 */)
 {
     if (value < lower)
     {

@@ -1474,3 +1474,9 @@
 2026-08-22T11:08:59.999+08:00 | M2006 | FDCAN3 | ID=0x01 | error=0xF0 (反馈超时/离线) | board_tick_ms=87312
 2026-08-22T11:12:19.802+08:00 | M3508 | FDCAN2 | ID=0x01 | error=0xF0 (反馈超时/离线) | board_tick_ms=51
 2026-08-22T11:18:11.973+08:00 | M3508 | FDCAN2 | ID=0x01 | error=0xF0 (反馈超时/离线) | board_tick_ms=51
+2026-08-22T16:32:29.753+08:00 | M3508 | FDCAN2 | ID=0x01 | error=0xF0 (反馈超时/离线) | board_tick_ms=51
+2026-08-22T16:33:56.281+08:00 | M2006 | FDCAN3 | ID=0x02 | error=0xF0 (反馈超时/离线) | board_tick_ms=402615
+2026-08-22T16:33:56.440+08:00 | M2006 | FDCAN3 | ID=0x02 | error=0xF0 (反馈超时/离线) | board_tick_ms=402777
+2026-08-22T16:33:57.265+08:00 | M2006 | FDCAN3 | ID=0x02 | error=0xF0 (反馈超时/离线) | board_tick_ms=403613
+2026-08-22T16:33:57.423+08:00 | M2006 | FDCAN3 | ID=0x02 | error=0xF0 (反馈超时/离线) | board_tick_ms=403755
+2026-08-22T16:35:17.354+08:00 | M3508 | FDCAN2 | ID=0x01 | error=0xF0 (反馈超时/离线) | board_tick_ms=51

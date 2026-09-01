@@ -115,7 +115,7 @@ DJI_REDUCTION_RATIOS = {
 }
 MOTOR_LOG_PATH = Path(__file__).resolve().parents[2] / "电机日志.log"
 MOTOR_PARAMETER_PATH = Path(__file__).resolve().with_name("motor_parameters.json")
-REMOTE_ACTION_PARAMETER_VERSION = 11
+REMOTE_ACTION_PARAMETER_VERSION = 12
 LEGACY_GATE_ACTION_KEY = "\u5f00\u5173\u95e8"
 
 MOTOR_MODEL_NAMES = {
@@ -465,7 +465,7 @@ class UpperConsole:
             },
             "夹爪": {
                 "angle_on": tk.DoubleVar(value=55.0),
-                "angle_off": tk.DoubleVar(value=125.0),
+                "angle_off": tk.DoubleVar(value=135.0),
             },
         }
         self._restore_motor_parameters()
@@ -1559,7 +1559,7 @@ class UpperConsole:
             remote_actions_version = data.get("remote_actions_version", 1)
             for action, variables in self.remote_action_angles.items():
                 if remote_actions_version != REMOTE_ACTION_PARAMETER_VERSION:
-                    if action == "闸门":
+                    if action == "闸门" and remote_actions_version != 11:
                         continue
                     if action == "夹爪" and (
                         not isinstance(remote_actions_version, int)
@@ -1584,6 +1584,9 @@ class UpperConsole:
                 if not isinstance(section, dict):
                     continue
                 for name, variable in variables.items():
+                    if (action == "夹爪" and name == "angle_off" and
+                            remote_actions_version != REMOTE_ACTION_PARAMETER_VERSION):
+                        continue
                     if name.startswith("j4310"):
                         lower, upper = J4310_POSITION_MIN_DEG, J4310_POSITION_MAX_DEG
                     elif name.startswith("m3508"):

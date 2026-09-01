@@ -13,66 +13,113 @@
 #include "M2006/m2006.h"
 #include "M3508/m3508.h"
 
+/** 电机端口按节点编号建立索引时允许的最大节点号。 */
 #define UPPER_MOTOR_PORT_MAX_NODE_ID  255U
+/** 驱动可同时管理的 CAN 总线数量。 */
 #define UPPER_CAN_BUS_COUNT            3U
+/** 上层电机端口分别用于 M3508 和 M2006 的 DJI 电流组数量。 */
 #define UPPER_DJI_GROUP_COUNT         2U
+/** 电机转子编码器每圈的计数值。 */
 #define UPPER_DJI_ENCODER_COUNTS      8192LL
+/** 角度换算使用的二倍圆周率数值。 */
 #define UPPER_DJI_TWO_PI              6.28318530718f
+/** 角度换算使用的圆周率数值。 */
 #define UPPER_J4310_PI                3.14159265359f
+/** 角度换算使用的二倍圆周率数值。 */
 #define UPPER_J4310_TWO_PI            6.28318530718f
+/** J4310 反馈状态中表示电机已经使能的状态值。 */
 #define UPPER_J4310_STATE_ENABLED     0x01U
+/** 控制命令中用于启用对应功能的标志位。 */
 #define UPPER_J4310_ENABLE_RETRY_MS   20U
 
+/** 上层电机控制状态机的执行周期，单位：毫秒。 */
 #define UPPER_CONTROL_PERIOD_MS                 1U
+/** 是否启用对应通信链路的超时看门狗检查。 */
 #define UPPER_CONTROL_WATCHDOGS_ENABLED         0U
+/** 超过该时间未收到有效上位机数据后判定会话超时，单位：毫秒。 */
 #define UPPER_PC_TIMEOUT_MS                   200U
+/** 电机反馈超过该时间未更新后上报离线故障，单位：毫秒。 */
 #define UPPER_MOTOR_FEEDBACK_TIMEOUT_MS        50U
 
 /* MIT 映射限值必须与 J4310 中保存的数值一致。 */
+/** 电机端口编码 J4310 MIT 位置字段时使用的满量程，单位：弧度。 */
 #define UPPER_J4310_POSITION_MAX_RAD           12.5f
+/** 机械臂 J4310 关节 MIT 协议速度字段映射的满量程，单位：弧度每秒。 */
 #define UPPER_J4310_VELOCITY_MAX_RAD_S         30.0f
+/** 机械臂 J4310 关节 MIT 协议转矩字段映射的满量程，单位：牛米。 */
 #define UPPER_J4310_TORQUE_MAP_MAX_NM          10.0f
+/** 机械臂 J4310 关节从电机坐标系换算到机构坐标系时使用的方向系数。 */
 #define UPPER_J4310_DIRECTION_SIGN             (-1.0f)
 
 /* 电机端口负责协议方向、驱动限幅和默认闭环参数。 */
+/** 第一台机械臂 M3508 从电机坐标系换算到机构坐标系的方向系数。 */
 #define UPPER_M3508_1_DIRECTION_SIGN            (1.0f)
+/** 第二台机械臂 M3508 输出轴从电机坐标系换算到机构坐标系时使用的方向系数。 */
 #define UPPER_M3508_2_DIRECTION_SIGN           (-1.0f)
+/** 机械臂 M3508 输出轴软件限制的最大输出电流，单位：安培。 */
 #define UPPER_M3508_CURRENT_LIMIT_A              3.0f
+/** 机械臂 M3508 输出轴执行位置轨迹时允许的最大速度，单位：弧度每秒。 */
 #define UPPER_M3508_POSITION_VEL_LIMIT_RAD_S    15.708f
+/** 机械臂 M3508 输出轴位置环输出的目标速度绝对值上限，单位：弧度每秒。 */
 #define UPPER_M3508_POSITION_PID_OUTPUT_LIMIT_RAD_S \
     UPPER_M3508_POSITION_VEL_LIMIT_RAD_S
+/** 机械臂 M3508 输出轴轨迹规划使用的最大加速度，单位：弧度每二次方秒。 */
 #define UPPER_M3508_ACCEL_LIMIT_RAD_S2          62.832f
+/** 机械臂 M3508 输出轴速度环的比例增益。 */
 #define UPPER_M3508_SPEED_KP                     1.3988f
+/** 机械臂 M3508 输出轴速度环的积分增益。 */
 #define UPPER_M3508_SPEED_KI                     0.9325f
+/** 机械臂 M3508 输出轴速度环的微分增益。 */
 #define UPPER_M3508_SPEED_KD                     0.0f
+/** 机械臂 M3508 输出轴速度环积分项的绝对值上限。 */
 #define UPPER_M3508_SPEED_I_LIMIT                6.0f
+/** 机械臂 M3508 输出轴位置环的比例增益。 */
 #define UPPER_M3508_POSITION_KP                 10.4720f
+/** 机械臂 M3508 输出轴位置环的积分增益。 */
 #define UPPER_M3508_POSITION_KI                  0.0f
+/** 机械臂 M3508 输出轴位置环的微分增益。 */
 #define UPPER_M3508_POSITION_KD                  0.0f
+/** 机械臂 M3508 输出轴位置环积分项的绝对值上限。 */
 #define UPPER_M3508_POSITION_I_LIMIT             0.0f
 
+/** M2006 输出轴软件限制的最大输出电流，单位：安培。 */
 #define UPPER_M2006_CURRENT_LIMIT_A             10.0f
+/** M2006 输出轴的位置积分分离开始生效的误差阈值，单位：弧度。 */
 #define UPPER_M2006_POSITION_CUTOFF_RAD          6.45771823238f
+/** 夹爪机构的位置积分分离开始生效的误差阈值，单位：弧度。 */
 #define UPPER_GRIPPER_M2006_POSITION_CUTOFF_RAD 12.74090353956f
+/** M2006 输出轴执行位置轨迹时允许的最大速度，单位：弧度每秒。 */
 #define UPPER_M2006_POSITION_VEL_LIMIT_RAD_S     5.235987756f
+/** M2006 输出轴位置环输出的目标速度绝对值上限，单位：弧度每秒。 */
 #define UPPER_M2006_POSITION_PID_OUTPUT_LIMIT_RAD_S \
     UPPER_M2006_POSITION_VEL_LIMIT_RAD_S
+/** M2006 输出轴轨迹规划使用的最大加速度，单位：弧度每二次方秒。 */
 #define UPPER_M2006_ACCEL_LIMIT_RAD_S2          62.832f
+/** M2006 输出轴速度环的比例增益。 */
 #define UPPER_M2006_SPEED_KP                     3.342253805f
+/** M2006 输出轴速度环的积分增益。 */
 #define UPPER_M2006_SPEED_KI                     2.387324146f
+/** M2006 输出轴速度环的微分增益。 */
 #define UPPER_M2006_SPEED_KD                     0.0f
+/** M2006 输出轴速度环积分项的绝对值上限。 */
 #define UPPER_M2006_SPEED_I_LIMIT                0.052359878f
+/** M2006 输出轴位置环的比例增益。 */
 #define UPPER_M2006_POSITION_KP                 94.247779608f
+/** M2006 输出轴位置环的积分增益。 */
 #define UPPER_M2006_POSITION_KI                 52.359877560f
+/** M2006 输出轴位置环的微分增益。 */
 #define UPPER_M2006_POSITION_KD                  0.523598776f
+/** M2006 输出轴位置环积分项的绝对值上限。 */
 #define UPPER_M2006_POSITION_I_LIMIT             0.002f
+/** 挡板机构从电机坐标系换算到机构坐标系时使用的方向系数。 */
 #define UPPER_GATE_M2006_DIRECTION_SIGN         (-1.0f)
 
+/** 标识本次准备发送的 J4310 帧用途。 */
 typedef enum
 {
-    UPPER_J4310_TX_CONTROL = 0U,
-    UPPER_J4310_TX_ENABLE,
-    UPPER_J4310_TX_DISABLE
+    UPPER_J4310_TX_CONTROL = 0U, /**< 本帧下发 J4310 MIT 控制目标。 */
+    UPPER_J4310_TX_ENABLE, /**< 本帧请求 J4310 进入使能状态。 */
+    UPPER_J4310_TX_DISABLE /**< 本帧请求 J4310 退出使能状态。 */
 } upper_j4310_tx_type_t;
 
 static const motor_cfg_t *upper_motor_cfg_ref;
@@ -104,14 +151,14 @@ static uint32_t upper_motor_fault_sequence;
 static upper_j4310_tx_diagnostic_t j4310_tx_diagnostic;
 
 /* 功能：判断电机型号是否属于 DJI 分组电流协议；用途：区分 M2006/M3508 与独立帧电机；返回 true 表示是 DJI 型号。 */
-static bool UpperMotorPort_IsDjiModel(motor_model_t model)
+static bool UpperMotorPort_IsDjiModel(motor_model_t model /* 需要匹配或上报的电机型号 */)
 {
     return (model == MOTOR_MODEL_M3508) ||
            (model == MOTOR_MODEL_M2006);
 }
 
 /* 功能：读取指定电机在机械安装中的方向符号；用途：统一逻辑目标与物理转向；返回值表示目标乘数。 */
-static float UpperMotorPort_DirectionSign(const motor_cfg_t *cfg)
+static float UpperMotorPort_DirectionSign(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */)
 {
     if ((cfg != NULL) && (cfg->model == MOTOR_MODEL_M3508) &&
         (cfg->can_bus == CAN_BUS_ARM_M3508))
@@ -135,7 +182,7 @@ static float UpperMotorPort_DirectionSign(const motor_cfg_t *cfg)
 }
 
 /* 功能：选择指定 M2006 电机的位置安全阈值；用途：为夹爪和通用机构应用不同限位；返回值表示位置截止值。 */
-static float UpperMotorPort_M2006PositionCutoff(const motor_cfg_t *cfg)
+static float UpperMotorPort_M2006PositionCutoff(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */)
 {
     if ((cfg != NULL) && (cfg->model == MOTOR_MODEL_M2006) &&
         (cfg->can_bus == CAN_BUS_AUX) &&
@@ -147,7 +194,7 @@ static float UpperMotorPort_M2006PositionCutoff(const motor_cfg_t *cfg)
 }
 
 /* 功能：将 J4310 相邻位置差归一化到半圈范围；用途：处理单圈编码器跨零点变化；返回值表示最短角度增量。 */
-static float UpperMotorPort_WrapJ4310Delta(float delta_rad)
+static float UpperMotorPort_WrapJ4310Delta(float delta_rad /* 相邻反馈位置之间的角度增量，单位：弧度 */)
 {
     while (delta_rad > UPPER_J4310_PI)
     {
@@ -163,8 +210,8 @@ static float UpperMotorPort_WrapJ4310Delta(float delta_rad)
 /* 在单圈编码器分支变化时保持逻辑关节角连续。
    只要两次接收采样之间的运动小于半圈，该处理就是有效的。 */
 /* 功能：根据最新单圈反馈更新 J4310 连续位置；用途：跨越编码器分支时保持逻辑关节角连续；无返回值表示位置状态已更新。 */
-static void UpperMotorPort_UpdateJ4310Position(uint8_t can_bus,
-                                                uint32_t tick_ms)
+static void UpperMotorPort_UpdateJ4310Position(uint8_t can_bus /* CAN 总线编号 */,
+                                                uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     size_t index;
 
@@ -207,7 +254,7 @@ static void UpperMotorPort_UpdateJ4310Position(uint8_t can_bus,
 }
 
 /* 功能：清空指定 J4310 的连续位置跟踪状态；用途：电机掉电或重新置零后重新建立基准；无返回值表示跟踪状态已复位。 */
-static void UpperMotorPort_ResetJ4310Position(uint8_t node_id)
+static void UpperMotorPort_ResetJ4310Position(uint8_t node_id /* 电机协议节点编号 */)
 {
     j4310_position_valid[node_id] = false;
     j4310_last_raw_position_rad[node_id] = 0.0f;
@@ -216,7 +263,7 @@ static void UpperMotorPort_ResetJ4310Position(uint8_t node_id)
 }
 
 /* 功能：区分 J4310 运行状态与协议故障码；用途：避免将 0x1 已使能状态误判为故障；返回 true 表示需要失能。 */
-static bool UpperMotorPort_IsJ4310Fault(uint8_t state)
+static bool UpperMotorPort_IsJ4310Fault(uint8_t state /* 需要检查或上报的当前状态 */)
 {
     return (state == 0x02U) || (state == 0x03U) ||
            (state == 0x05U) || (state == 0x07U) ||
@@ -224,8 +271,8 @@ static bool UpperMotorPort_IsJ4310Fault(uint8_t state)
 }
 
 /* 功能：校验上层电机拓扑、地址和协议约束；用途：启动前排除重复节点及不支持组合；返回 true 表示配置可路由。 */
-static bool UpperMotorPort_CheckCfg(const motor_cfg_t *cfg,
-                                    size_t motor_count)
+static bool UpperMotorPort_CheckCfg(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */,
+                                    size_t motor_count /* 调用方提供的电机配置数量 */)
 {
     size_t index;
 
@@ -284,14 +331,14 @@ static bool UpperMotorPort_CheckCfg(const motor_cfg_t *cfg,
 }
 
 /* 功能：通过 BSP 发送一帧并更新发送计数；用途：统一所有电机协议的实际 CAN 输出；返回 true 表示底层发送成功。 */
-static bool UpperMotorPort_SendFrame(uint8_t can_bus,
-                                     const can_frame_t *frame)
+static bool UpperMotorPort_SendFrame(uint8_t can_bus /* CAN 总线编号 */,
+                                     const can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
 {
     return BspCan_Send(can_bus, frame);
 }
 
 /* 功能：查找电机配置指针在当前拓扑中的索引；用途：访问对应运行时状态；返回电机总数表示未找到。 */
-static size_t UpperMotorPort_FindCfg(const motor_cfg_t *cfg)
+static size_t UpperMotorPort_FindCfg(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */)
 {
     size_t index;
 
@@ -310,8 +357,8 @@ static size_t UpperMotorPort_FindCfg(const motor_cfg_t *cfg)
 }
 
 /* 功能：判断反馈时间戳是否仍在新鲜窗口内；用途：识别电机离线或反馈超时；返回 true 表示反馈可用于控制。 */
-static bool UpperMotorPort_FeedbackFresh(uint32_t updated_at_ms,
-                                         uint32_t tick_ms)
+static bool UpperMotorPort_FeedbackFresh(uint32_t updated_at_ms /* 反馈最近一次更新的系统毫秒时刻 */,
+                                         uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     int32_t age_ms;
 
@@ -322,9 +369,9 @@ static bool UpperMotorPort_FeedbackFresh(uint32_t updated_at_ms,
 
 /* 功能：发送 J4310 帧并记录实际入队结果；用途：证明使能帧是否进入 FDCAN1 TX 队列；返回 true 表示 HAL 已接受该帧。 */
 static bool UpperMotorPort_SendJ4310Frame(
-    uint8_t can_bus,
-    const can_frame_t *frame,
-    upper_j4310_tx_type_t type)
+    uint8_t can_bus /* CAN 总线编号 */,
+    const can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */,
+    upper_j4310_tx_type_t type /* 需要构造、发送或统计的消息或帧种类 */)
 {
     bool success;
 
@@ -360,9 +407,9 @@ static bool UpperMotorPort_SendJ4310Frame(
 }
 
 /* 功能：记录新的电机故障事件；用途：保存待上报故障的型号、地址、错误码和时刻；无返回值表示故障槽已更新。 */
-static void UpperMotorPort_RecordFault(const motor_cfg_t *cfg,
-                                       uint8_t error_code,
-                                       uint32_t tick_ms)
+static void UpperMotorPort_RecordFault(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */,
+                                       uint8_t error_code /* 需要记录或上报的电机错误码 */,
+                                       uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     if ((cfg == NULL) || (error_code == 0U))
     {
@@ -388,7 +435,7 @@ void UpperMotorPort_RecordExternalFault(const motor_cfg_t *cfg,
 }
 
 /* 功能：标记指定 DJI 四电机组本周期需要发送；用途：把单电机目标汇总为分组帧；返回 true 表示地址合法并已标记。 */
-static bool UpperMotorPort_MarkDjiGroup(uint8_t can_bus, uint8_t node_id)
+static bool UpperMotorPort_MarkDjiGroup(uint8_t can_bus /* CAN 总线编号 */, uint8_t node_id /* 电机协议节点编号 */)
 {
     uint32_t group_index;
 
@@ -404,8 +451,8 @@ static bool UpperMotorPort_MarkDjiGroup(uint8_t can_bus, uint8_t node_id)
 }
 
 /* 功能：构造并发送一个已标记的 DJI 电流组帧；用途：一次下发四个槽位的 M2006/M3508 电流；返回 true 表示无需发送或发送成功。 */
-static bool UpperMotorPort_FlushDjiGroup(uint8_t can_bus,
-                                         uint32_t group_index)
+static bool UpperMotorPort_FlushDjiGroup(uint8_t can_bus /* CAN 总线编号 */,
+                                         uint32_t group_index /* DJI 电机控制组的数组下标 */)
 {
     can_frame_t frame;
     int16_t current_raw[DJI_GROUP_MOTOR_COUNT] = {0};
@@ -496,8 +543,8 @@ static bool UpperMotorPort_FlushDjiGroup(uint8_t can_bus,
 }
 
 /* 功能：按命令模式驱动一台 J4310 并管理使能状态；用途：生成特殊帧或运动控制帧；返回 true 表示本次路由成功。 */
-static bool UpperMotorPort_SendJ4310(const motor_cfg_t *cfg,
-                                     const motor_cmd_t *cmd)
+static bool UpperMotorPort_SendJ4310(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */,
+                                     const motor_cmd_t *cmd /* 函数读取或写入的对象地址 */)
 {
     can_frame_t command_frame;
     can_frame_t state_frame;
@@ -689,8 +736,8 @@ static bool UpperMotorPort_SendJ4310(const motor_cfg_t *cfg,
 }
 
 /* 功能：计算 M3508 当前电流并写入分组槽位；用途：把统一电机命令转换为 DJI 协议输出；返回 true 表示已成功暂存。 */
-static bool UpperMotorPort_SendM3508(const motor_cfg_t *cfg,
-                                     const motor_cmd_t *cmd)
+static bool UpperMotorPort_SendM3508(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */,
+                                     const motor_cmd_t *cmd /* 函数读取或写入的对象地址 */)
 {
     m3508_mode_t mode;
     float target;
@@ -736,8 +783,8 @@ static bool UpperMotorPort_SendM3508(const motor_cfg_t *cfg,
 }
 
 /* 功能：计算 M2006 当前电流并写入分组槽位；用途：把统一电机命令转换为 DJI 协议输出；返回 true 表示已成功暂存。 */
-static bool UpperMotorPort_SendM2006(const motor_cfg_t *cfg,
-                                     const motor_cmd_t *cmd)
+static bool UpperMotorPort_SendM2006(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */,
+                                     const motor_cmd_t *cmd /* 函数读取或写入的对象地址 */)
 {
     m2006_mode_t mode;
     float target;

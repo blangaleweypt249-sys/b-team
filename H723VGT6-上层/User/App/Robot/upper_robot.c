@@ -100,7 +100,7 @@ void UpperRobot_ClearError(upper_robot_t *robot)
 }
 
 /* 功能：关闭机械臂全部电机；用途：把机械臂局部计算或应用失败限制在本机构内。 */
-static void UpperRobot_DisableArm(motor_manager_t *manager)
+static void UpperRobot_DisableArm(motor_manager_t *manager /* 需要操作的电机管理器 */)
 {
     uint32_t index;
 
@@ -117,7 +117,7 @@ static void UpperRobot_DisableArm(motor_manager_t *manager)
 }
 
 /* 功能：关闭闸门机构电机；用途：阻止无效闸门目标继续使用旧命令。 */
-static void UpperRobot_DisableGate(motor_manager_t *manager)
+static void UpperRobot_DisableGate(motor_manager_t *manager /* 需要操作的电机管理器 */)
 {
     (void)MotorManager_SetEnabled(manager,
                                   UPPER_MOTOR_GATE_M2006,
@@ -125,7 +125,7 @@ static void UpperRobot_DisableGate(motor_manager_t *manager)
 }
 
 /* 功能：关闭夹爪电机；用途：阻止无效夹爪目标继续使用旧命令。 */
-static void UpperRobot_DisableGripper(motor_manager_t *manager)
+static void UpperRobot_DisableGripper(motor_manager_t *manager /* 需要操作的电机管理器 */)
 {
     (void)MotorManager_SetEnabled(manager,
                                   UPPER_MOTOR_GRIPPER_M2006,

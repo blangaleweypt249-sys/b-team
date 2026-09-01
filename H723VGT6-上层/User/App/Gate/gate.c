@@ -13,7 +13,7 @@
 #include "upper_motor_port.h"
 
 /* 功能：校验闸门电机 PID 参数是否合法；参数 cfg 为待检查配置；返回 true 表示参数完整且位于有效范围。 */
-static bool Gate_PidValid(const upper_pid_cfg_t *cfg)
+static bool Gate_PidValid(const upper_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */)
 {
     return (cfg != NULL) && isfinite(cfg->kp) && isfinite(cfg->ki) &&
            isfinite(cfg->kd) && isfinite(cfg->integral_limit) &&
@@ -23,14 +23,14 @@ static bool Gate_PidValid(const upper_pid_cfg_t *cfg)
 }
 
 /* 功能：比较两组闸门电机 PID 配置是否一致；参数 left、right 为待比较配置；返回 true 表示所有字段相同。 */
-static bool Gate_PidEqual(const upper_pid_cfg_t *left,
-                          const upper_pid_cfg_t *right)
+static bool Gate_PidEqual(const upper_pid_cfg_t *left /* 函数读取或写入的对象地址 */,
+                          const upper_pid_cfg_t *right /* 函数读取或写入的对象地址 */)
 {
     return memcmp(left, right, sizeof(*left)) == 0;
 }
 
 /* 功能：将数值限制在指定区间内；参数 value 为输入值，lower、upper 为上下限；返回限幅后的结果。 */
-static float Gate_Clamp(float value, float lower, float upper)
+static float Gate_Clamp(float value /* 需要检查、限幅或编码的输入值 */, float lower /* 允许输出的下限 */, float upper /* 允许输出的上限 */)
 {
     if (value < lower)
     {

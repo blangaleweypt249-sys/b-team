@@ -4,6 +4,7 @@
  */
 
 #ifndef MY_MAIN_H
+/** 防止 my_main.h 被重复包含。 */
 #define MY_MAIN_H
 
 #include "main.h"

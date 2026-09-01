@@ -8,7 +8,7 @@
 #include <string.h>
 
 /* 功能：将数值限制在正负上限内；用途：抑制 PID 积分和输出饱和；返回值表示限幅后的数值。 */
-static float PID_Clamp(float value, float limit)
+static float PID_Clamp(float value /* 需要检查、限幅或编码的输入值 */, float limit /* 输入值允许达到的绝对值上限 */)
 {
     if (limit <= 0.0f)
     {

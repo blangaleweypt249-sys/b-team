@@ -11,76 +11,92 @@
 
 #include "motor_online_tune.h"
 
+/** M2006 输出轴转子编码器每圈的计数值。 */
 #define M2006_ENCODER_COUNTS   8192U
+/** M2006 输出轴转子到机构输出轴的减速比。 */
 #define M2006_REDUCTION_RATIO  36.0f
+/** M2006 输出轴电流命令的协议原始值满量程。 */
 #define M2006_CURRENT_RAW_MAX  10000
+/** M2006 输出轴协议满量程对应的电流，单位：安培。 */
 #define M2006_CURRENT_MAX_A    10.0f
+/** 角度换算使用的二倍圆周率数值。 */
 #define M2006_TWO_PI           6.28318530718f
+/** 五次平滑插值曲线的一阶导数最大系数，用于根据行程和速度计算轨迹时长。 */
 #define M2006_QUINTIC_MAX_SPEED 1.875f
+/** 五次平滑插值曲线的二阶导数最大系数，用于根据行程和加速度计算轨迹时长。 */
 #define M2006_QUINTIC_MAX_ACCEL 5.7735026919f
+/** M2006 输出轴平滑位置轨迹允许使用的最短时间，单位：秒。 */
 #define M2006_MIN_TRAJECTORY_S  0.01f
+/** M2006 速度环自动整定允许持续的最长时间，单位：毫秒。 */
 #define M2006_AUTOTUNE_TIMEOUT_MS 15000U
+/** M2006 输出轴速度环自动整定需要采集的完整振荡周期数。 */
 #define M2006_AUTOTUNE_CYCLES   5U
+/** M2006 输出轴建立软件零点前编码器必须连续稳定的反馈帧数。 */
 #define M2006_ZERO_STABLE_FRAMES 5U
+/** M2006 输出轴置零期间相邻反馈仍可视为静止的最大编码器计数差。 */
 #define M2006_ZERO_MAX_STEP_COUNTS 128
+/** M2006 输出轴允许建立软件零点的最大转子速度，单位：转每分。 */
 #define M2006_ZERO_MAX_SPEED_RPM 30
 
+/** 保存 M2006 运行过程中需要集中管理的数据。 */
 typedef struct
 {
-    m2006_pid_cfg_t cfg;
-    float integral;
-    float previous_error;
-    float full_integral_error;
-    float integral_separation_error;
-    bool previous_valid;
+    m2006_pid_cfg_t cfg; /**< M2006当前使用的配置参数。 */
+    float integral; /**< 当前积分累计值。 */
+    float previous_error; /**< 上一次更新使用的误差。 */
+    float full_integral_error; /**< PID 积分完全生效的误差范围。 */
+    float integral_separation_error; /**< 超过该误差后停止继续积分的阈值。 */
+    bool previous_valid; /**< PID 控制器是否保存了可用于微分计算的上次误差。 */
 } m2006_pid_t;
 
+/** 保存 M2006 运行过程中需要集中管理的数据。 */
 typedef struct
 {
-    m2006_autotune_state_t state;
-    float safety_velocity_rad_s;
-    float phase_max_rad_s;
-    float phase_min_rad_s;
-    float positive_peak_rad_s;
-    float period_sum_s;
-    float amplitude_sum_rad_s;
-    uint32_t started_ms;
-    uint32_t last_positive_cross_ms;
-    bool relay_positive;
-    bool positive_peak_valid;
-    bool positive_cross_valid;
-    uint8_t completed_cycles;
+    m2006_autotune_state_t state; /**< 当前运行状态。 */
+    float safety_velocity_rad_s; /**< M2006的当前速度，单位：弧度每秒。 */
+    float phase_max_rad_s; /**< 当前继电整定半周期测得的最高速度，单位：弧度每秒。 */
+    float phase_min_rad_s; /**< 当前继电整定半周期测得的最低速度，单位：弧度每秒。 */
+    float positive_peak_rad_s; /**< 最近一个正向半周期记录的速度峰值，单位：弧度每秒。 */
+    float period_sum_s; /**< 已完成振荡周期的总时间，单位：秒。 */
+    float amplitude_sum_rad_s; /**< 已完成振荡周期的速度振幅总和，单位：弧度每秒。 */
+    uint32_t started_ms; /**< 自动整定开始的系统毫秒时刻。 */
+    uint32_t last_positive_cross_ms; /**< 速度最近一次正向跨越迟滞区的系统毫秒时刻。 */
+    bool relay_positive; /**< 继电整定当前是否施加正向测试电流。 */
+    bool positive_peak_valid; /**< 当前是否已记录有效正向速度峰值。 */
+    bool positive_cross_valid; /**< 当前是否已记录一次有效正向过零时刻。 */
+    uint8_t completed_cycles; /**< 自动整定已经完成的完整振荡周期数。 */
 } m2006_autotune_t;
 
+/** 保存 M2006 运行过程中需要集中管理的数据。 */
 typedef struct
 {
-    volatile uint32_t feedback_sequence;
-    volatile bool feedback_valid;
-    volatile m2006_feedback_t feedback;
-    uint16_t previous_encoder;
-    uint8_t zero_stable_frames;
-    int64_t zero_encoder_counts;
-    m2006_mode_t mode;
-    float target;
-    float current_limit_a;
-    float position_vel_limit_rad_s;
-    float acceleration_limit_rad_s2;
-    float speed_ramp_start_rad_s;
-    float trajectory_start_rad;
-    float trajectory_delta_rad;
-    float trajectory_duration_s;
-    float trajectory_elapsed_s;
-    bool speed_reference_valid;
-    bool trajectory_pending;
-    uint32_t command_updated_at_ms;
-    uint32_t feedback_monitor_started_at_ms;
-    volatile m2006_timeout_stats_t timeout_stats;
-    m2006_pid_t speed_pid;
-    m2006_pid_cfg_t speed_pid_base;
-    motor_online_pid_t speed_online_pid;
-    m2006_pid_t position_pid;
-    m2006_motion_state_t motion;
-    m2006_autotune_t auto_tune;
+    volatile uint32_t feedback_sequence; /**< 反馈快照每次更新时递增的序号，用于无锁一致性读取。 */
+    volatile bool feedback_valid; /**< 当前反馈快照是否已经由有效帧更新。 */
+    volatile m2006_feedback_t feedback; /**< 最近一次有效电机反馈的快照。 */
+    uint16_t previous_encoder; /**< 上一帧反馈的单圈转子编码器值。 */
+    uint8_t zero_stable_frames; /**< 置零前编码器连续保持稳定的反馈帧数。 */
+    int64_t zero_encoder_counts; /**< 建立软件零点时记录的累计转子计数。 */
+    m2006_mode_t mode; /**< 当前采用的电机控制或调试工作模式。 */
+    float target; /**< 当前控制模式下的电流、速度或位置目标值。 */
+    float current_limit_a; /**< M2006的电流上限，单位：安培。 */
+    float position_vel_limit_rad_s; /**< 位置轨迹允许的最大输出轴速度，单位：弧度每秒。 */
+    float acceleration_limit_rad_s2; /**< M2006的轨迹加速度，单位：弧度每二次方秒。 */
+    float speed_ramp_start_rad_s; /**< M2006的当前速度，单位：弧度每秒。 */
+    float trajectory_start_rad; /**< 当前平滑轨迹的起始输出轴位置，单位：弧度。 */
+    float trajectory_delta_rad; /**< 当前轨迹从起点到目标的输出轴位移，单位：弧度。 */
+    float trajectory_duration_s; /**< 当前轨迹计划执行的总时间，单位：秒。 */
+    float trajectory_elapsed_s; /**< 当前轨迹已经执行的时间，单位：秒。 */
+    bool speed_reference_valid; /**< M2006的轨迹参考速度。 */
+    bool trajectory_pending; /**< 位置目标改变后是否等待创建新的平滑轨迹。 */
+    uint32_t command_updated_at_ms; /**< 最近一次更新电机目标的系统毫秒时刻。 */
+    uint32_t feedback_monitor_started_at_ms; /**< 开始执行反馈超时监测的系统毫秒时刻。 */
+    volatile m2006_timeout_stats_t timeout_stats; /**< 当前电机累计的命令和反馈超时状态。 */
+    m2006_pid_t speed_pid; /**< M2006对应控制环的 PID 参数或运行状态。 */
+    m2006_pid_cfg_t speed_pid_base; /**< M2006对应控制环的 PID 参数或运行状态。 */
+    motor_online_pid_t speed_online_pid; /**< M2006对应控制环的 PID 参数或运行状态。 */
+    m2006_pid_t position_pid; /**< M2006对应控制环的 PID 参数或运行状态。 */
+    m2006_motion_state_t motion; /**< 当前速度斜坡和位置轨迹的诊断快照。 */
+    m2006_autotune_t auto_tune; /**< 速度环继电自动整定的内部运行状态。 */
 } m2006_context_t;
 
 static m2006_cfg_t m2006_cfg;
@@ -88,20 +104,20 @@ static m2006_context_t
     m2006_context[M2006_CAN_BUS_COUNT][M2006_MOTOR_COUNT];
 
 /* 功能：判断浮点数是否有限；用途：过滤 M2006 配置和目标中的异常值；返回 true 表示数值可用。 */
-static bool M2006_IsFinite(float value)
+static bool M2006_IsFinite(float value /* 需要检查、限幅或编码的输入值 */)
 {
     return (value == value) && (value <= FLT_MAX) && (value >= -FLT_MAX);
 }
 
 /* 功能：检查 M2006 的 CAN 总线号和节点号；用途：保护上下文数组索引与分组路由；返回 true 表示地址合法。 */
-static bool M2006_IsValidAddress(uint8_t can_bus, uint8_t motor_id)
+static bool M2006_IsValidAddress(uint8_t can_bus /* CAN 总线编号 */, uint8_t motor_id /* DJI 电机编号 */)
 {
     return (can_bus >= 1U) && (can_bus <= M2006_CAN_BUS_COUNT) &&
            (motor_id >= 1U) && (motor_id <= M2006_MOTOR_COUNT);
 }
 
 /* 功能：校验 M2006 PID 增益及限幅参数；用途：防止非法控制参数进入闭环；返回 true 表示配置可用。 */
-static bool M2006_IsValidPid(const m2006_pid_cfg_t *cfg)
+static bool M2006_IsValidPid(const m2006_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */)
 {
     return (cfg != NULL) && M2006_IsFinite(cfg->kp) &&
            M2006_IsFinite(cfg->ki) && M2006_IsFinite(cfg->kd) &&
@@ -112,8 +128,8 @@ static bool M2006_IsValidPid(const m2006_pid_cfg_t *cfg)
 }
 
 /* 功能：按总线和节点定位 M2006 运行上下文；用途：访问目标、反馈、PID 和统计状态；返回 NULL 表示地址无效。 */
-static m2006_context_t *M2006_GetContext(uint8_t can_bus,
-                                         uint8_t motor_id)
+static m2006_context_t *M2006_GetContext(uint8_t can_bus /* CAN 总线编号 */,
+                                         uint8_t motor_id /* DJI 电机编号 */)
 {
     if (!M2006_IsValidAddress(can_bus, motor_id))
     {
@@ -123,7 +139,7 @@ static m2006_context_t *M2006_GetContext(uint8_t can_bus,
 }
 
 /* 功能：把浮点数限制在给定区间；用途：约束积分、电流、速度和轨迹量；返回值表示限幅结果。 */
-static float M2006_Clamp(float value, float min, float max)
+static float M2006_Clamp(float value /* 需要检查、限幅或编码的输入值 */, float min /* 允许输出的下限 */, float max /* 允许输出的上限 */)
 {
     if (value < min)
     {
@@ -137,14 +153,14 @@ static float M2006_Clamp(float value, float min, float max)
 }
 
 /* 功能：读取大端 16 位无符号整数；用途：解析 DJI M2006 反馈字段；返回值表示解码结果。 */
-static uint16_t M2006_ReadU16Be(const uint8_t *data)
+static uint16_t M2006_ReadU16Be(const uint8_t *data /* 待处理数据的首地址 */)
 {
     return ((uint16_t)data[0] << 8U) | data[1];
 }
 
 /* 功能：计算跨越编码器零点后的最短计数差；用途：展开多圈转子位置；返回值表示带方向的增量计数。 */
-static int32_t M2006_EncoderDelta(uint16_t encoder,
-                                   uint16_t previous_encoder)
+static int32_t M2006_EncoderDelta(uint16_t encoder /* 当前反馈的单圈编码器原始值 */,
+                                   uint16_t previous_encoder /* 上一帧反馈的单圈编码器原始值 */)
 {
     int32_t delta;
 
@@ -161,7 +177,7 @@ static int32_t M2006_EncoderDelta(uint16_t encoder,
 }
 
 /* 功能：清空 M2006 单个 PID 的积分和历史误差；用途：模式切换或停机后重新起算；无返回值表示运行状态已复位。 */
-static void M2006_ResetPid(m2006_pid_t *pid)
+static void M2006_ResetPid(m2006_pid_t *pid /* 需要操作的 PID 控制器 */)
 {
     pid->integral = 0.0f;
     pid->previous_error = 0.0f;
@@ -169,10 +185,10 @@ static void M2006_ResetPid(m2006_pid_t *pid)
 }
 
 /* 功能：执行一次带积分和输出限幅的 PID 计算；用途：实现位置环或基础速度环；返回值表示限幅后的控制量。 */
-static float M2006_PidCalc(m2006_pid_t *pid,
-                           float error,
-                           float dt_s,
-                           float output_limit)
+static float M2006_PidCalc(m2006_pid_t *pid /* 需要操作的 PID 控制器 */,
+                           float error /* 当前控制误差 */,
+                           float dt_s /* 本次计算的控制周期，单位：秒 */,
+                           float output_limit /* PID 控制器输出的绝对值上限 */)
 {
     float derivative;
     float previous_integral;
@@ -245,8 +261,8 @@ static float M2006_PidCalc(m2006_pid_t *pid,
 }
 
 /* 功能：按当前速度 PID 配置在线调参器；用途：建立自适应增益边界和学习参数；返回 true 表示初始化成功。 */
-static bool M2006_ConfigureOnlinePid(m2006_context_t *context,
-                                     bool enabled)
+static bool M2006_ConfigureOnlinePid(m2006_context_t *context /* 函数读取或写入的对象地址 */,
+                                     bool enabled /* 是否启用对应功能 */)
 {
     motor_online_pid_cfg_t cfg;
     const m2006_pid_cfg_t *base;
@@ -279,10 +295,10 @@ static bool M2006_ConfigureOnlinePid(m2006_context_t *context,
 }
 
 /* 功能：使用在线增益执行 M2006 速度环计算；用途：把目标转速转换为电流命令；返回值表示限幅后的电流安培值。 */
-static float M2006_SpeedPidCalc(m2006_context_t *context,
-                                float error,
-                                float dt_s,
-                                float output_limit)
+static float M2006_SpeedPidCalc(m2006_context_t *context /* 函数读取或写入的对象地址 */,
+                                float error /* 当前控制误差 */,
+                                float dt_s /* 本次计算的控制周期，单位：秒 */,
+                                float output_limit /* PID 控制器输出的绝对值上限 */)
 {
     motor_online_gains_t gains;
 
@@ -301,7 +317,7 @@ static float M2006_SpeedPidCalc(m2006_context_t *context,
 }
 
 /* 功能：将安培值换算并限制为 M2006 原始电流字段；用途：填充 DJI 分组帧；返回值表示协议电流值。 */
-static int16_t M2006_CurrentToRaw(float current_a)
+static int16_t M2006_CurrentToRaw(float current_a /* 目标或限制电流，单位：安培 */)
 {
     float raw;
 
@@ -317,7 +333,7 @@ static int16_t M2006_CurrentToRaw(float current_a)
 }
 
 /* 功能：复位 M2006 双环 PID、轨迹、斜坡和在线调参状态；用途：停机或控制模式改变时清除历史；无返回值表示状态已归零。 */
-static void M2006_ResetControl(m2006_context_t *context)
+static void M2006_ResetControl(m2006_context_t *context /* 函数读取或写入的对象地址 */)
 {
     M2006_ResetPid(&context->speed_pid);
     MotorOnlinePid_Reset(&context->speed_online_pid, true);
@@ -331,8 +347,8 @@ static void M2006_ResetControl(m2006_context_t *context)
 }
 
 /* 功能：以当前反馈为起点建立新的位置轨迹；用途：让位置目标按限速和加速度平滑变化；无返回值表示轨迹状态已初始化。 */
-static void M2006_BeginPositionTrajectory(m2006_context_t *context,
-                                           float position_rad)
+static void M2006_BeginPositionTrajectory(m2006_context_t *context /* 函数读取或写入的对象地址 */,
+                                           float position_rad /* 目标或反馈位置，单位：弧度 */)
 {
     float distance_rad;
     float speed_duration_s;
@@ -363,8 +379,8 @@ static void M2006_BeginPositionTrajectory(m2006_context_t *context,
 }
 
 /* 功能：推进一个周期的位置轨迹位置和速度；用途：生成受限的内部位置给定；无返回值表示轨迹状态已更新。 */
-static void M2006_UpdatePositionTrajectory(m2006_context_t *context,
-                                            float dt_s)
+static void M2006_UpdatePositionTrajectory(m2006_context_t *context /* 函数读取或写入的对象地址 */,
+                                            float dt_s /* 本次计算的控制周期，单位：秒 */)
 {
     float tau;
     float tau2;
@@ -414,9 +430,9 @@ static void M2006_UpdatePositionTrajectory(m2006_context_t *context,
 }
 
 /* 功能：按加速度限制推进速度给定；用途：避免速度命令阶跃；无返回值表示内部参考速度已更新。 */
-static void M2006_UpdateSpeedRamp(m2006_context_t *context,
-                                  float actual_velocity_rad_s,
-                                  float dt_s)
+static void M2006_UpdateSpeedRamp(m2006_context_t *context /* 函数读取或写入的对象地址 */,
+                                  float actual_velocity_rad_s /* J4310 当前实测关节速度，单位：弧度每秒 */,
+                                  float dt_s /* 本次计算的控制周期，单位：秒 */)
 {
     float delta_rad_s;
     float step_rad_s;
@@ -454,7 +470,7 @@ static void M2006_UpdateSpeedRamp(m2006_context_t *context,
 }
 
 /* 功能：将 M2006 自动整定标记为失败并清理测试输出；用途：统一处理超时或非法工况；无返回值表示整定已终止。 */
-static void M2006_FailAutoTune(m2006_context_t *context)
+static void M2006_FailAutoTune(m2006_context_t *context /* 函数读取或写入的对象地址 */)
 {
     context->auto_tune.state.status = M2006_AUTOTUNE_FAILED;
     context->mode = M2006_MODE_STOP;
@@ -463,9 +479,9 @@ static void M2006_FailAutoTune(m2006_context_t *context)
 }
 
 /* 功能：执行 M2006 速度环自动整定的一步状态机；用途：施加测试激励并估算 PID；返回值表示本周期测试电流。 */
-static float M2006_AutoTuneStep(m2006_context_t *context,
-                                float velocity_rad_s,
-                                uint32_t tick_ms)
+static float M2006_AutoTuneStep(m2006_context_t *context /* 函数读取或写入的对象地址 */,
+                                float velocity_rad_s /* 目标或反馈速度，单位：弧度每秒 */,
+                                uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     m2006_autotune_t *tune;
 
@@ -557,10 +573,10 @@ static float M2006_AutoTuneStep(m2006_context_t *context,
 }
 
 /* 功能：根据反馈新鲜度更新 M2006 超时统计；用途：累计连续丢帧、恢复和最大间隔；无返回值表示统计已刷新。 */
-static void M2006_UpdateTimeoutStats(m2006_context_t *context,
-                                     bool feedback_valid,
-                                     const m2006_feedback_t *feedback,
-                                     uint32_t tick_ms)
+static void M2006_UpdateTimeoutStats(m2006_context_t *context /* 函数读取或写入的对象地址 */,
+                                     bool feedback_valid /* 当前反馈快照是否有效 */,
+                                     const m2006_feedback_t *feedback /* 用于写出或读取最新反馈的对象 */,
+                                     uint32_t tick_ms /* 当前系统毫秒时刻 */)
 {
     bool command_timed_out;
     bool feedback_timed_out;

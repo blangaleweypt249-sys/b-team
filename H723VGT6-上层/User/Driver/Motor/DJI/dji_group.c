@@ -7,11 +7,13 @@
 
 #include <string.h>
 
+/** DJI 一号至四号电机电流组帧的 CAN 标识符。 */
 #define DJI_GROUP_ID_1_TO_4  0x200U
+/** DJI 五号至八号电机电流组帧的 CAN 标识符。 */
 #define DJI_GROUP_ID_5_TO_8  0x1FFU
 
 /* 功能：把 16 位有符号数写成大端字节；用途：编码 DJI 电机电流字段；无返回值表示结果写入 data。 */
-static void DjiGroup_WriteI16Be(uint8_t *data, int16_t value)
+static void DjiGroup_WriteI16Be(uint8_t *data /* 待处理数据的首地址 */, int16_t value /* 需要检查、限幅或编码的输入值 */)
 {
     uint16_t raw;
 

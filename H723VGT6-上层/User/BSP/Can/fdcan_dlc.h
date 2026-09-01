@@ -4,6 +4,7 @@
  */
 
 #ifndef FDCAN_DLC_H
+/** 防止 fdcan_dlc.h 被重复包含。 */
 #define FDCAN_DLC_H
 
 #include <stdint.h>

@@ -8,34 +8,61 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/** W25Qxx 允许后续写入或擦除操作的指令码。 */
 #define W25Q_CMD_WRITE_ENABLE          0x06U
+/** W25Qxx 读取状态寄存器一的指令码。 */
 #define W25Q_CMD_READ_STATUS_REG1      0x05U
+/** W25Qxx 从指定地址连续读取数据的指令码。 */
 #define W25Q_CMD_READ_DATA             0x03U
+/** W25Qxx 对指定页执行编程写入的指令码。 */
 #define W25Q_CMD_PAGE_PROGRAM          0x02U
+/** W25Qxx 擦除指定扇区的指令码。 */
 #define W25Q_CMD_SECTOR_ERASE          0x20U
+/** W25Qxx 读取 JEDEC 厂商、类型和容量标识的指令码。 */
 #define W25Q_CMD_JEDEC_ID              0x9FU
+/** W25Qxx 读取厂商及器件标识的指令码。 */
 #define W25Q_CMD_DEVICE_ID             0x90U
 
+/** 从状态寄存器一提取芯片忙状态的位掩码。 */
 #define W25Q_STATUS_BUSY_MASK          0x01U
+/** 从状态寄存器一提取写使能锁存状态的位掩码。 */
 #define W25Q_STATUS_WEL_MASK           0x02U
+/** SPI 只读传输时由主机发送的占位字节。 */
 #define W25Q_DUMMY_BYTE                0xFFU
+/** 一 KB 对应的字节数，用于 Flash 容量换算。 */
 #define W25Q_KB_SIZE_BYTE              1024UL
+/** 把 24 位 Flash 地址的高字节移到发送位置所需的位数。 */
 #define W25Q_ADDR_HIGH_SHIFT           16U
+/** 把 24 位 Flash 地址的中字节移到发送位置所需的位数。 */
 #define W25Q_ADDR_MID_SHIFT            8U
+/** 组合器件标识时厂商编号需要左移的位数。 */
 #define W25Q_ID_MFR_SHIFT              16U
+/** 组合 JEDEC 标识时存储器类型需要左移的位数。 */
 #define W25Q_ID_TYPE_SHIFT             8U
+/** 读取 JEDEC 标识时 SPI 命令和返回数据合计传输的字节数。 */
 #define W25Q_JEDEC_TRANSFER_SIZE_BYTE  5U
+/** JEDEC 返回数据中厂商标识所在的字节下标。 */
 #define W25Q_JEDEC_MFR_INDEX           1U
+/** JEDEC 返回数据中存储器类型所在的字节下标。 */
 #define W25Q_JEDEC_TYPE_INDEX          2U
+/** JEDEC 返回数据中容量编码所在的字节下标。 */
 #define W25Q_JEDEC_CAPACITY_INDEX      3U
+/** 读取器件标识时 SPI 命令、地址和返回数据合计传输的字节数。 */
 #define W25Q_DEVICE_ID_TRANSFER_SIZE   6U
+/** 器件标识返回数据中厂商编号所在的字节下标。 */
 #define W25Q_DEVICE_MFR_INDEX          4U
+/** 器件标识返回数据中型号编号所在的字节下标。 */
 #define W25Q_DEVICE_CODE_INDEX         5U
+/** 组合器件标识时厂商编号需要左移的位数。 */
 #define W25Q_DEVICE_MFR_SHIFT          8U
 
+/** 16 Mbit W25Qxx 器件的存储容量，单位：KB。 */
 #define W25Q16_CAPACITY_KB             2048UL
+/** 32 Mbit W25Qxx 器件的存储容量，单位：KB。 */
 #define W25Q32_CAPACITY_KB             4096UL
+/** 64 Mbit W25Qxx 器件的存储容量，单位：KB。 */
 #define W25Q64_CAPACITY_KB             8192UL
+/** 128 Mbit W25Qxx 器件的存储容量，单位：KB。 */
 #define W25Q128_CAPACITY_KB            16384UL
 
 /* 功能：声明拉低 Flash 片选信号的内部接口。 */
@@ -203,15 +230,15 @@ static void W25Q_CsDeselect(void)
  * @retval true SPI 收发成功
  * @retval false SPI 收发失败
  */
-static bool W25Q_SpiRwByte(uint8_t tx_data, uint8_t *rx_data)
+static bool W25Q_SpiRwByte(uint8_t tx_data /* SPI 传输时发送的字节 */, uint8_t *rx_data /* 函数读取或写入的对象地址 */)
 {
     return W25Q_MCU_SPI_RW_BYTE(&tx_data, rx_data);
 }
 
 /* 功能：通过端口层执行一段 SPI 全双工传输；用途：为 Flash 驱动提供批量收发适配；返回 true 表示底层传输成功。 */
-static bool W25Q_SpiTransfer(const uint8_t *tx_data,
-                             uint8_t *rx_data,
-                             uint16_t data_len_byte)
+static bool W25Q_SpiTransfer(const uint8_t *tx_data /* SPI 传输时发送的字节 */,
+                             uint8_t *rx_data /* 函数读取或写入的对象地址 */,
+                             uint16_t data_len_byte /* 本次传输或处理的数据字节数 */)
 {
     return W25Q_MCU_SPI_TRANSFER(tx_data, rx_data, data_len_byte);
 }
@@ -221,7 +248,7 @@ static bool W25Q_SpiTransfer(const uint8_t *tx_data,
  * @param delay_ms 延时时间(ms)
  * @retval 无
  */
-static void W25Q_DelayMs(uint32_t delay_ms)
+static void W25Q_DelayMs(uint32_t delay_ms /* 需要等待的时间，单位：毫秒 */)
 {
 #if (W25Q_DELAY_MODE == W25Q_DELAY_USE_HAL)
     W25Q_MCU_HAL_DELAY_MS(delay_ms);
@@ -532,7 +559,7 @@ w25q_status_t W25Q_WriteData(w25q_handle_t *dev,
  * @retval true 句柄有效
  * @retval false 句柄无效
  */
-static bool W25Q_IsHandleValid(const w25q_handle_t *dev)
+static bool W25Q_IsHandleValid(const w25q_handle_t *dev /* 函数读取或写入的对象地址 */)
 {
     bool lock_pair_valid;
 
@@ -560,7 +587,7 @@ static bool W25Q_IsHandleValid(const w25q_handle_t *dev)
  * @retval W25Q_OK 设备可用
  * @retval 其他值 设备句柄无效或尚未初始化
  */
-static w25q_status_t W25Q_CheckDevice(const w25q_handle_t *dev)
+static w25q_status_t W25Q_CheckDevice(const w25q_handle_t *dev /* 函数读取或写入的对象地址 */)
 {
     if (!W25Q_IsHandleValid(dev))
     {
@@ -583,9 +610,9 @@ static w25q_status_t W25Q_CheckDevice(const w25q_handle_t *dev)
  * @retval W25Q_OK 地址范围有效
  * @retval W25Q_ERROR_OUT_OF_RANGE 地址范围越界
  */
-static w25q_status_t W25Q_CheckRange(const w25q_handle_t *dev,
-                                     uint32_t start_addr,
-                                     uint32_t data_len_byte)
+static w25q_status_t W25Q_CheckRange(const w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                     uint32_t start_addr /* 待检查数据区的起始字节地址 */,
+                                     uint32_t data_len_byte /* 本次传输或处理的数据字节数 */)
 {
     uint32_t capacity_byte;
 
@@ -609,7 +636,7 @@ static w25q_status_t W25Q_CheckRange(const w25q_handle_t *dev,
  * @retval W25Q_OK 获取成功或未配置锁
  * @retval W25Q_ERROR_LOCK_TIMEOUT 获取锁超时
  */
-static w25q_status_t W25Q_Lock(w25q_handle_t *dev)
+static w25q_status_t W25Q_Lock(w25q_handle_t *dev /* 函数读取或写入的对象地址 */)
 {
     if ((dev->bus_lock != NULL) &&
         (!dev->bus_lock(W25Q_LOCK_TIMEOUT_MS)))
@@ -625,7 +652,7 @@ static w25q_status_t W25Q_Lock(w25q_handle_t *dev)
  * @param dev W25Qxx 设备句柄
  * @retval 无
  */
-static void W25Q_Unlock(w25q_handle_t *dev)
+static void W25Q_Unlock(w25q_handle_t *dev /* 函数读取或写入的对象地址 */)
 {
     if (dev->bus_unlock != NULL)
     {
@@ -641,9 +668,9 @@ static void W25Q_Unlock(w25q_handle_t *dev)
  * @retval W25Q_OK 收发成功
  * @retval W25Q_ERROR_SPI 收发失败
  */
-static w25q_status_t W25Q_TransferByte(w25q_handle_t *dev,
-                                       uint8_t tx_data,
-                                       uint8_t *rx_data)
+static w25q_status_t W25Q_TransferByte(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                       uint8_t tx_data /* SPI 传输时发送的字节 */,
+                                       uint8_t *rx_data /* 函数读取或写入的对象地址 */)
 {
     uint8_t discard_data = 0U;
     uint8_t *receive_data = rx_data;
@@ -668,8 +695,8 @@ static w25q_status_t W25Q_TransferByte(w25q_handle_t *dev,
  * @retval W25Q_OK 发送成功
  * @retval W25Q_ERROR_SPI 发送失败
  */
-static w25q_status_t W25Q_SendAddress(w25q_handle_t *dev,
-                                      uint32_t address)
+static w25q_status_t W25Q_SendAddress(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                      uint32_t address /* Flash 操作的起始字节地址 */)
 {
     w25q_status_t status;
 
@@ -699,8 +726,8 @@ static w25q_status_t W25Q_SendAddress(w25q_handle_t *dev,
  * @retval W25Q_OK 读取成功
  * @retval W25Q_ERROR_SPI 读取失败
  */
-static w25q_status_t W25Q_ReadStatus(w25q_handle_t *dev,
-                                     uint8_t *status_reg)
+static w25q_status_t W25Q_ReadStatus(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                     uint8_t *status_reg /* 函数读取或写入的对象地址 */)
 {
     w25q_status_t status;
 
@@ -726,8 +753,8 @@ static w25q_status_t W25Q_ReadStatus(w25q_handle_t *dev,
  * @retval W25Q_OK 读取成功
  * @retval W25Q_ERROR_SPI 读取失败
  */
-static w25q_status_t W25Q_ReadJedecId(w25q_handle_t *dev,
-                                      uint32_t *jedec_id)
+static w25q_status_t W25Q_ReadJedecId(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                      uint32_t *jedec_id /* Flash 的 JEDEC 器件标识 */)
 {
     w25q_status_t status;
     uint8_t tx_data[W25Q_JEDEC_TRANSFER_SIZE_BYTE] =
@@ -765,8 +792,8 @@ static w25q_status_t W25Q_ReadJedecId(w25q_handle_t *dev,
  * @retval W25Q_OK 读取成功
  * @retval W25Q_ERROR_SPI SPI 传输失败
  */
-static w25q_status_t W25Q_ReadDeviceIdLocked(w25q_handle_t *dev,
-                                              uint16_t *device_id)
+static w25q_status_t W25Q_ReadDeviceIdLocked(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                              uint16_t *device_id /* 函数读取或写入的对象地址 */)
 {
     w25q_status_t status;
     uint8_t tx_data[W25Q_DEVICE_ID_TRANSFER_SIZE] =
@@ -805,7 +832,7 @@ static w25q_status_t W25Q_ReadDeviceIdLocked(w25q_handle_t *dev,
  * @retval W25Q_ERROR_TIMEOUT 等待超时
  * @retval W25Q_ERROR_SPI SPI 通信失败
  */
-static w25q_status_t W25Q_WaitReady(w25q_handle_t *dev)
+static w25q_status_t W25Q_WaitReady(w25q_handle_t *dev /* 函数读取或写入的对象地址 */)
 {
     w25q_status_t status;
     uint32_t waited_ms = 0U;
@@ -843,7 +870,7 @@ static w25q_status_t W25Q_WaitReady(w25q_handle_t *dev)
  * @retval W25Q_ERROR_WRITE_ENABLE 写使能失败
  * @retval W25Q_ERROR_SPI SPI 通信失败
  */
-static w25q_status_t W25Q_WriteEnable(w25q_handle_t *dev)
+static w25q_status_t W25Q_WriteEnable(w25q_handle_t *dev /* 函数读取或写入的对象地址 */)
 {
     w25q_status_t status;
     uint8_t status_reg = 0U;
@@ -874,10 +901,10 @@ static w25q_status_t W25Q_WriteEnable(w25q_handle_t *dev)
  * @retval W25Q_OK 读取成功
  * @retval W25Q_ERROR_SPI SPI 通信失败
  */
-static w25q_status_t W25Q_ReadBytes(w25q_handle_t *dev,
-                                    uint32_t read_addr,
-                                    uint8_t *data,
-                                    uint32_t data_len_byte)
+static w25q_status_t W25Q_ReadBytes(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                    uint32_t read_addr /* Flash 读取操作的起始字节地址 */,
+                                    uint8_t *data /* 待处理数据的首地址 */,
+                                    uint32_t data_len_byte /* 本次传输或处理的数据字节数 */)
 {
     w25q_status_t status;
     uint32_t data_index;
@@ -911,10 +938,10 @@ static w25q_status_t W25Q_ReadBytes(w25q_handle_t *dev,
  * @retval W25Q_OK 写入成功
  * @retval 其他值 具体错误见 w25q_status_t
  */
-static w25q_status_t W25Q_WritePage(w25q_handle_t *dev,
-                                    uint32_t write_addr,
-                                    const uint8_t *data,
-                                    uint32_t data_len_byte)
+static w25q_status_t W25Q_WritePage(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                    uint32_t write_addr /* Flash 写入操作的起始字节地址 */,
+                                    const uint8_t *data /* 待处理数据的首地址 */,
+                                    uint32_t data_len_byte /* 本次传输或处理的数据字节数 */)
 {
     w25q_status_t status;
     uint32_t data_index;
@@ -960,8 +987,8 @@ static w25q_status_t W25Q_WritePage(w25q_handle_t *dev,
  * @retval W25Q_OK 命令发送成功
  * @retval W25Q_ERROR_SPI SPI 通信失败
  */
-static w25q_status_t W25Q_EraseCommand(w25q_handle_t *dev,
-                                       uint32_t sector_addr)
+static w25q_status_t W25Q_EraseCommand(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                       uint32_t sector_addr /* 待擦除或改写扇区的起始地址 */)
 {
     w25q_status_t status;
 
@@ -983,8 +1010,8 @@ static w25q_status_t W25Q_EraseCommand(w25q_handle_t *dev,
  * @retval W25Q_OK 擦除成功
  * @retval 其他值 具体错误见 w25q_status_t
  */
-static w25q_status_t W25Q_EraseSectorLocked(w25q_handle_t *dev,
-                                             uint32_t sector_addr)
+static w25q_status_t W25Q_EraseSectorLocked(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                             uint32_t sector_addr /* 待擦除或改写扇区的起始地址 */)
 {
     w25q_status_t status;
 
@@ -1014,10 +1041,10 @@ static w25q_status_t W25Q_EraseSectorLocked(w25q_handle_t *dev,
  * @retval W25Q_OK 写入成功
  * @retval 其他值 具体错误见 w25q_status_t
  */
-static w25q_status_t W25Q_ProgramDataLocked(w25q_handle_t *dev,
-                                             uint32_t write_addr,
-                                             const uint8_t *data,
-                                             uint32_t data_len_byte)
+static w25q_status_t W25Q_ProgramDataLocked(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                             uint32_t write_addr /* Flash 写入操作的起始字节地址 */,
+                                             const uint8_t *data /* 待处理数据的首地址 */,
+                                             uint32_t data_len_byte /* 本次传输或处理的数据字节数 */)
 {
     w25q_status_t status = W25Q_OK;
     uint32_t page_remain_byte;
@@ -1058,11 +1085,11 @@ static w25q_status_t W25Q_ProgramDataLocked(w25q_handle_t *dev,
  * @retval W25Q_OK 更新成功
  * @retval 其他值 具体错误见 w25q_status_t
  */
-static w25q_status_t W25Q_UpdateSectorLocked(w25q_handle_t *dev,
-                                              uint32_t sector_addr,
-                                              uint32_t sector_offset,
-                                              const uint8_t *data,
-                                              uint32_t data_len_byte)
+static w25q_status_t W25Q_UpdateSectorLocked(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
+                                              uint32_t sector_addr /* 待擦除或改写扇区的起始地址 */,
+                                              uint32_t sector_offset /* 写入数据相对扇区起始位置的字节偏移 */,
+                                              const uint8_t *data /* 待处理数据的首地址 */,
+                                              uint32_t data_len_byte /* 本次传输或处理的数据字节数 */)
 {
     w25q_status_t status;
     uint32_t data_index;

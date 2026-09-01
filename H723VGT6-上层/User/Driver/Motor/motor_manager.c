@@ -8,7 +8,7 @@
 #include <string.h>
 
 /* 功能：检查电机表的数量、地址和调度参数；用途：在管理器启动前验证拓扑；返回 true 表示配置可用。 */
-static bool MotorManager_CheckCfg(const motor_cfg_t *cfg, size_t motor_count)
+static bool MotorManager_CheckCfg(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */, size_t motor_count /* 调用方提供的电机配置数量 */)
 {
     size_t index;
 

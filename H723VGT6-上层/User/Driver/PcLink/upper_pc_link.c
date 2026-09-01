@@ -7,28 +7,49 @@
 
 #include <string.h>
 
+/** 控制命令中用于启用对应功能的标志位。 */
 #define UPPER_ENABLE_ARM       (1U << 0)
+/** 控制命令中用于启用对应功能的标志位。 */
 #define UPPER_ENABLE_GATE      (1U << 1)
+/** 控制命令中用于启用对应功能的标志位。 */
 #define UPPER_ENABLE_GRIPPER   (1U << 2)
+/** 控制命令中用于启用对应功能的标志位。 */
 #define UPPER_ENABLE_DJI_SYNC  (1U << 3)
+/** 控制命令中用于启用对应功能的标志位。 */
 #define UPPER_ENABLE_J4310_ONLY (1U << 4)
+/** 控制命令中用于启用对应功能的标志位。 */
 #define UPPER_ENABLE_M3508_ONLY (1U << 5)
+/** 上位机控制字中请求 J4310 立即停止的标志位。 */
 #define UPPER_COMMAND_J4310_STOP (1U << 6)
+/** 机器人基础状态消息载荷占用的字节数。 */
 #define UPPER_STATE_BASE_PAYLOAD_SIZE 84U
+/** 机器人状态帧中单条 DJI 诊断扩展数据占用的字节数。 */
 #define UPPER_STATE_DJI_DIAGNOSTIC_SIZE 16U
+/** 单台 DJI 电机诊断遥测载荷占用的字节数。 */
 #define UPPER_DJI_TELEMETRY_PAYLOAD_SIZE \
     (UPPER_STATE_DJI_DIAGNOSTIC_SIZE + \
      UPPER_PC_FDCAN_COUNT * sizeof(uint32_t))
+/** 状态载荷中表示该条件是否成立的标志位。 */
 #define UPPER_DJI_FLAG_FEEDBACK_RECEIVED (1U << 0)
+/** 状态载荷中表示该条件是否成立的标志位。 */
 #define UPPER_DJI_FLAG_ZERO_VALID        (1U << 1)
+/** 状态载荷中表示该条件是否成立的标志位。 */
 #define UPPER_DJI_FLAG_FEEDBACK_FRESH    (1U << 2)
+/** 电机动作结果或故障事件载荷占用的字节数。 */
 #define UPPER_MOTOR_EVENT_PAYLOAD_SIZE 8U
+/** 将转速从转每分换算为弧度每秒的比例系数。 */
 #define UPPER_PC_RPM_TO_RAD_S    0.10471975512f
+/** 将转速从弧度每秒换算为转每分的比例系数。 */
 #define UPPER_PC_RAD_S_TO_RPM    9.54929658551f
+/** 将 M3508 协议电流原始值换算为安培的比例系数。 */
 #define UPPER_PC_M3508_CURRENT_SCALE (20.0f / 16384.0f)
+/** 将 M2006 协议电流原始值换算为安培的比例系数。 */
 #define UPPER_PC_M2006_CURRENT_SCALE (10.0f / 10000.0f)
+/** 是否启用对应通信链路的超时看门狗检查。 */
 #define UPPER_PC_LINK_WATCHDOGS_ENABLED 0U
+/** 超过该时间未收到有效上位机数据后判定会话超时，单位：毫秒。 */
 #define UPPER_PC_TIMEOUT_MS            200U
+/** 上位机控制 J4310 时允许请求的最大转矩，单位：牛米。 */
 #define UPPER_PC_J4310_TORQUE_LIMIT_NM  10.0f
 static const uint8_t UPPER_PC_HANDSHAKE_MAGIC[UPPER_PC_HANDSHAKE_PAYLOAD_SIZE] =
 {
@@ -36,13 +57,13 @@ static const uint8_t UPPER_PC_HANDSHAKE_MAGIC[UPPER_PC_HANDSHAKE_PAYLOAD_SIZE] =
 };
 
 /* 功能：读取小端 16 位整数；用途：解析上位机载荷字段；返回值表示解码后的无符号数。 */
-static uint16_t UpperPcLink_ReadU16(const uint8_t *data)
+static uint16_t UpperPcLink_ReadU16(const uint8_t *data /* 待处理数据的首地址 */)
 {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8U);
 }
 
 /* 功能：读取小端 32 位整数；用途：解析上位机计数和时间字段；返回值表示解码后的无符号数。 */
-static uint32_t UpperPcLink_ReadU32(const uint8_t *data)
+static uint32_t UpperPcLink_ReadU32(const uint8_t *data /* 待处理数据的首地址 */)
 {
     return (uint32_t)data[0] |
            ((uint32_t)data[1] << 8U) |
@@ -51,7 +72,7 @@ static uint32_t UpperPcLink_ReadU32(const uint8_t *data)
 }
 
 /* 功能：按小端位模式读取单精度浮点数；用途：解析上位机控制量；返回值表示还原后的 float。 */
-static float UpperPcLink_ReadFloat(const uint8_t *data)
+static float UpperPcLink_ReadFloat(const uint8_t *data /* 待处理数据的首地址 */)
 {
     uint32_t bits;
     float value;
@@ -62,14 +83,14 @@ static float UpperPcLink_ReadFloat(const uint8_t *data)
 }
 
 /* 功能：将 16 位整数写成小端字节；用途：编码上位机协议字段；无返回值表示结果写入 data。 */
-static void UpperPcLink_WriteU16(uint8_t *data, uint16_t value)
+static void UpperPcLink_WriteU16(uint8_t *data /* 待处理数据的首地址 */, uint16_t value /* 需要检查、限幅或编码的输入值 */)
 {
     data[0] = (uint8_t)value;
     data[1] = (uint8_t)(value >> 8U);
 }
 
 /* 功能：将 32 位整数写成小端字节；用途：编码计数和时间字段；无返回值表示结果写入 data。 */
-static void UpperPcLink_WriteU32(uint8_t *data, uint32_t value)
+static void UpperPcLink_WriteU32(uint8_t *data /* 待处理数据的首地址 */, uint32_t value /* 需要检查、限幅或编码的输入值 */)
 {
     data[0] = (uint8_t)value;
     data[1] = (uint8_t)(value >> 8U);
@@ -78,7 +99,7 @@ static void UpperPcLink_WriteU32(uint8_t *data, uint32_t value)
 }
 
 /* 功能：按小端位模式写入单精度浮点数；用途：编码状态和遥测量；无返回值表示结果写入 data。 */
-static void UpperPcLink_WriteFloat(uint8_t *data, float value)
+static void UpperPcLink_WriteFloat(uint8_t *data /* 待处理数据的首地址 */, float value /* 需要检查、限幅或编码的输入值 */)
 {
     uint32_t bits;
 
@@ -87,10 +108,10 @@ static void UpperPcLink_WriteFloat(uint8_t *data, float value)
 }
 
 /* 功能：读取 GUI 下发的 PID 参数并换算到固件单位；用途：适配 M3508/M2006 的速度环或位置环；结果写入 cfg。 */
-static void UpperPcLink_ReadGuiPid(const uint8_t *data,
-                                   upper_pc_pid_cfg_t *cfg,
-                                   bool m3508,
-                                   bool speed_loop)
+static void UpperPcLink_ReadGuiPid(const uint8_t *data /* 待处理数据的首地址 */,
+                                   upper_pc_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */,
+                                   bool m3508 /* 是否选择机械臂 M3508 而不是 J4310 */,
+                                   bool speed_loop /* 本次读写的 PID 参数是否属于速度环 */)
 {
     float current_scale;
 
@@ -120,8 +141,8 @@ static void UpperPcLink_ReadGuiPid(const uint8_t *data,
 }
 
 /* 功能：把上位机命令帧解码为整机目标；用途：解析使能位、模式、运动量和可选 PID；返回 true 表示帧合法。 */
-static bool UpperPcLink_DecodeTarget(const pc_frame_t *frame,
-                                     upper_pc_target_t *target)
+static bool UpperPcLink_DecodeTarget(const pc_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */,
+                                     upper_pc_target_t *target /* 本次需要应用的控制目标 */)
 {
     uint16_t enable_mask;
     const uint8_t *value;
@@ -238,15 +259,15 @@ static bool UpperPcLink_DecodeTarget(const pc_frame_t *frame,
 }
 
 /* 功能：记录一帧已接受消息的序号和接收时间；用途：刷新会话心跳与超时基准；无返回值表示链路状态已更新。 */
-static void UpperPcLink_Accept(upper_pc_link_t *link,
-                               const pc_frame_t *frame)
+static void UpperPcLink_Accept(upper_pc_link_t *link /* 需要操作的通信链路对象 */,
+                               const pc_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
 {
     link->last_rx_sequence = frame->sequence;
     link->last_rx_tick_ms = link->current_rx_tick_ms;
 }
 
 /* 功能：分发一帧已解析的上位机消息；用途：处理握手、心跳、急停、目标和电机动作；业务结果通过已注册回调上报。 */
-static void UpperPcLink_OnFrame(const pc_frame_t *frame, void *user_data)
+static void UpperPcLink_OnFrame(const pc_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */, void *user_data /* 调用回调函数时传递的用户上下文 */)
 {
     upper_pc_link_t *link;
 
@@ -673,15 +694,15 @@ size_t UpperPcLink_BuildState(upper_pc_link_t *link,
 }
 
 /* 功能：按统一格式构造电机事件帧；用途：复用动作结果与故障消息的公共编码；返回值表示完整帧长度。 */
-static size_t UpperPcLink_BuildMotorEvent(upper_pc_link_t *link,
-                                          uint8_t type,
-                                          uint8_t value_0,
-                                          uint8_t can_bus,
-                                          uint8_t node_id,
-                                          uint8_t value_3,
-                                          uint32_t tick_ms,
-                                          uint8_t *output,
-                                          size_t output_size)
+static size_t UpperPcLink_BuildMotorEvent(upper_pc_link_t *link /* 需要操作的通信链路对象 */,
+                                          uint8_t type /* 需要构造、发送或统计的消息或帧种类 */,
+                                          uint8_t value_0 /* 消息载荷中第一个动作参数字节 */,
+                                          uint8_t can_bus /* CAN 总线编号 */,
+                                          uint8_t node_id /* 电机协议节点编号 */,
+                                          uint8_t value_3 /* 消息载荷中第四个动作参数字节 */,
+                                          uint32_t tick_ms /* 当前系统毫秒时刻 */,
+                                          uint8_t *output /* 用于写出计算结果或编码数据的缓冲区 */,
+                                          size_t output_size /* 输出缓冲区可用的字节数 */)
 {
     uint8_t payload[UPPER_MOTOR_EVENT_PAYLOAD_SIZE];
 

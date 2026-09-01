@@ -28,9 +28,9 @@ static uint32_t disable_count[UPPER_MOTOR_COUNT];
 static const motor_cfg_t test_motor_cfg[UPPER_MOTOR_COUNT] = {0};
 
 /* 功能：提供测试用 CAN 发送桩并记录输出帧；用途：隔离真实硬件发送接口；返回 true 表示桩接受该帧。 */
-static bool Test_Send(const motor_cfg_t *cfg,
-                      const motor_cmd_t *cmd,
-                      void *user_data)
+static bool Test_Send(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */,
+                      const motor_cmd_t *cmd /* 函数读取或写入的对象地址 */,
+                      void *user_data /* 调用回调函数时传递的用户上下文 */)
 {
     (void)cfg;
     (void)cmd;

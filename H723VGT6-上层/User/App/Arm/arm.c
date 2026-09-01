@@ -13,25 +13,25 @@
 #include "m3508.h"
 
 /* 功能：检查数值是否有限且位于正负限制内；用途：校验机械臂目标；返回 true 表示输入安全有效。 */
-static bool Arm_ValueWithin(float value, float limit)
+static bool Arm_ValueWithin(float value /* 需要检查、限幅或编码的输入值 */, float limit /* 输入值允许达到的绝对值上限 */)
 {
     return isfinite(value) && (value >= -limit) && (value <= limit);
 }
 
 /* 功能：检查位置是否位于机构的单向安全区间；用途：限制上位机和遥控目标；返回 true 表示目标可执行。 */
-static bool Arm_PositionWithin(float value, float minimum, float maximum)
+static bool Arm_PositionWithin(float value /* 需要检查、限幅或编码的输入值 */, float minimum /* 允许输出的下限 */, float maximum /* 允许输出的上限 */)
 {
     return isfinite(value) && (value >= minimum) && (value <= maximum);
 }
 
 /* 功能：检查数值是否为有限浮点数；用途：过滤机械臂命令中的异常值；返回 true 表示数值有效。 */
-static bool Arm_ValueFinite(float value)
+static bool Arm_ValueFinite(float value /* 需要检查、限幅或编码的输入值 */)
 {
     return isfinite(value);
 }
 
 /* 功能：校验机械臂 PID 参数及上下限；用途：防止非法参数写入电机驱动；返回 true 表示配置可用。 */
-static bool Arm_PidValid(const upper_pid_cfg_t *cfg)
+static bool Arm_PidValid(const upper_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */)
 {
     return (cfg != NULL) && isfinite(cfg->kp) && isfinite(cfg->ki) &&
            isfinite(cfg->kd) && isfinite(cfg->integral_limit) &&
@@ -41,8 +41,8 @@ static bool Arm_PidValid(const upper_pid_cfg_t *cfg)
 }
 
 /* 功能：比较两组机械臂 PID 配置是否完全相同；用途：避免重复下发未变化的参数；返回 true 表示一致。 */
-static bool Arm_PidEqual(const upper_pid_cfg_t *left,
-                         const upper_pid_cfg_t *right)
+static bool Arm_PidEqual(const upper_pid_cfg_t *left /* 函数读取或写入的对象地址 */,
+                         const upper_pid_cfg_t *right /* 函数读取或写入的对象地址 */)
 {
     return memcmp(left, right, sizeof(*left)) == 0;
 }

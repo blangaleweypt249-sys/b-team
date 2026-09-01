@@ -8,23 +8,35 @@
 #include <math.h>
 #include <string.h>
 
+/** J4310 位置轨迹和重力补偿状态的更新周期，单位：毫秒。 */
 #define J4310_POSITION_CONTROL_PERIOD_MS              1U
+/** J4310 位置轨迹将行程视为零时使用的角度容差，单位：弧度。 */
 #define J4310_POSITION_CONTROL_DISTANCE_EPSILON_RAD   0.0001f
+/** 五次平滑插值曲线的一阶导数最大系数，用于根据行程和速度计算轨迹时长。 */
 #define J4310_POSITION_CONTROL_QUINTIC_VELOCITY_BOUND 1.875f
+/** 五次平滑插值曲线的二阶导数最大系数，用于根据行程和加速度计算轨迹时长。 */
 #define J4310_POSITION_CONTROL_QUINTIC_ACCEL_BOUND    5.7736f
+/** 允许采集 J4310 重力模型样本的最大实测速度，单位：弧度每秒。 */
 #define J4310_GRAVITY_LEARN_ACTUAL_VELOCITY_RAD_S     0.05f
+/** 允许采集 J4310 重力模型样本的最大期望速度，单位：弧度每秒。 */
 #define J4310_GRAVITY_LEARN_DESIRED_VELOCITY_RAD_S    0.05f
+/** 允许采集 J4310 重力模型样本的位置跟踪误差，单位：弧度。 */
 #define J4310_GRAVITY_LEARN_POSITION_ERROR_RAD         1.00f
+/** 允许采集 J4310 重力模型样本的最大位置控制转矩，单位：牛米。 */
 #define J4310_GRAVITY_LEARN_REQUESTED_TORQUE_NM        0.05f
+/** J4310 重力模型残差进入该死区后不再更新参数，单位：牛米。 */
 #define J4310_GRAVITY_LEARN_RESIDUAL_DEADBAND_NM       0.05f
+/** J4310 重力补偿模型在零位附近不参与输出的角度死区，单位：弧度。 */
 #define J4310_GRAVITY_POSITION_DEADBAND_RAD             0.034906585f
+/** 角度换算使用的圆周率数值。 */
 #define J4310_PI_RAD                                    3.14159265359f
+/** 角度换算使用的二倍圆周率数值。 */
 #define J4310_TWO_PI_RAD                                6.28318530718f
 
 /* 功能：将数值限制在给定上下界内；用途：约束轨迹和扭矩控制量；返回值表示限幅后的数值。 */
-static float J4310PositionControl_Clamp(float value,
-                                        float minimum,
-                                        float maximum)
+static float J4310PositionControl_Clamp(float value /* 需要检查、限幅或编码的输入值 */,
+                                        float minimum /* 允许输出的下限 */,
+                                        float maximum /* 允许输出的上限 */)
 {
     if (value < minimum)
     {
@@ -38,9 +50,9 @@ static float J4310PositionControl_Clamp(float value,
 }
 
 /* 功能：按最大步长使当前值逼近目标值；用途：限制重力补偿扭矩的变化速度；返回值表示本周期更新值。 */
-static float J4310PositionControl_Approach(float current,
-                                           float target,
-                                           float maximum_step)
+static float J4310PositionControl_Approach(float current /* 当前需要平滑或换算的数值 */,
+                                           float target /* 本次需要应用的控制目标 */,
+                                           float maximum_step /* 两帧编码器反馈仍可视为静止的最大计数变化量 */)
 {
     return current + J4310PositionControl_Clamp(
         target - current, -maximum_step, maximum_step);
@@ -48,15 +60,15 @@ static float J4310PositionControl_Approach(float current,
 
 /* 功能：根据关节角和正余弦系数计算重力模型扭矩；用途：形成位置相关的前馈补偿；返回值表示估算扭矩。 */
 static float J4310PositionControl_GravityModel(
-    const j4310_position_control_t *control,
-    float position_rad)
+    const j4310_position_control_t *control /* 需要读取或更新的控制状态 */,
+    float position_rad /* 目标或反馈位置，单位：弧度 */)
 {
     return control->gravity_cos_nm * cosf(position_rad) +
            control->gravity_sin_nm * sinf(position_rad);
 }
 
 /* 功能：将角度归一化到负 π 至正 π；用途：统一重力补偿的周期角度；返回值表示归一化后的角度。 */
-static float J4310PositionControl_WrapToPi(float position_rad)
+static float J4310PositionControl_WrapToPi(float position_rad /* 目标或反馈位置，单位：弧度 */)
 {
     position_rad = fmodf(position_rad, J4310_TWO_PI_RAD);
     if (position_rad > J4310_PI_RAD)
@@ -72,8 +84,8 @@ static float J4310PositionControl_WrapToPi(float position_rad)
 
 /* 功能：判断当前位置是否允许启用重力补偿；用途：在禁用角度窗口内抑制补偿；返回 true 表示允许补偿。 */
 static bool J4310PositionControl_GravityEnabled(
-    const j4310_position_control_t *control,
-    float position_rad)
+    const j4310_position_control_t *control /* 需要读取或更新的控制状态 */,
+    float position_rad /* 目标或反馈位置，单位：弧度 */)
 {
     float wrapped_abs_rad = fabsf(
         J4310PositionControl_WrapToPi(position_rad));
@@ -85,8 +97,8 @@ static bool J4310PositionControl_GravityEnabled(
 
 /* 功能：按位移计算五次位置轨迹持续时间；用途：满足配置的速度和加速度限制；返回值表示轨迹时长（毫秒）。 */
 static uint32_t J4310PositionControl_DurationMs(
-    const j4310_position_control_t *control,
-    float distance_rad)
+    const j4310_position_control_t *control /* 需要读取或更新的控制状态 */,
+    float distance_rad /* 轨迹起点与目标之间的角距离，单位：弧度 */)
 {
     float velocity_time_s;
     float acceleration_time_s;
