@@ -17,67 +17,37 @@
 #include "M3508/m3508.h"
 #include "upper_motor_port.h"
 
-/** VOFA 文本命令接收行缓冲区的字节数。 */
-#define VOFA_LINE_SIZE                  192U
-/** 一条 VOFA 文本命令允许拆分的最大参数数量。 */
-#define VOFA_TOKEN_COUNT                 24U
-/** 该模块可同时管理的电机数量。 */
-#define VOFA_DJI_MOTOR_COUNT              8U
-/** 驱动可同时管理的 CAN 总线数量。 */
-#define VOFA_CAN_BUS_COUNT                3U
-/** JustFloat 遥测帧包含的浮点通道数量。 */
-#define VOFA_CHANNEL_COUNT               16U
-/** VOFA 遥测默认发送周期，单位：毫秒。 */
-#define VOFA_DEFAULT_PERIOD_MS           20U
-/** VOFA 允许设置的最短遥测周期，单位：毫秒。 */
-#define VOFA_MIN_PERIOD_MS                5U
-/** VOFA 允许设置的最长遥测周期，单位：毫秒。 */
-#define VOFA_MAX_PERIOD_MS             1000U
-/** VOFA 判定电机反馈离线的时间，单位：毫秒。 */
-#define VOFA_FEEDBACK_TIMEOUT_MS         200U
-/** JustFloat 浮点数据帧末尾使用的固定结束标记。 */
-#define VOFA_JUSTFLOAT_TAIL       0x7F800000UL
-/** 角度换算使用的圆周率数值。 */
-#define VOFA_PI                    3.14159265358979323846f
-/** 角度换算使用的二倍圆周率数值。 */
-#define VOFA_TWO_PI                6.28318530717958647692f
-/** 将角度值从度换算为弧度的比例系数。 */
-#define VOFA_DEG_TO_RAD           (VOFA_PI / 180.0f)
-/** 将转速从转每分换算为弧度每秒的比例系数。 */
-#define VOFA_RPM_TO_RAD_S         (VOFA_TWO_PI / 60.0f)
-/** 将转速从弧度每秒换算为转每分的比例系数。 */
-#define VOFA_RAD_S_TO_RPM         (60.0f / VOFA_TWO_PI)
-/** M2006 输出轴电流命令的协议原始值满量程。 */
-#define VOFA_M2006_RAW_MAX             10000.0f
-/** M2006 输出轴协议满量程对应的电流，单位：安培。 */
-#define VOFA_M2006_CURRENT_MAX_A          10.0f
-/** 机械臂 M3508 输出轴电流命令的协议原始值满量程。 */
-#define VOFA_M3508_RAW_MAX             16384.0f
-/** 机械臂 M3508 输出轴协议满量程对应的电流，单位：安培。 */
-#define VOFA_M3508_CURRENT_MAX_A          20.0f
-/** M2006 输出轴软件限制的最大输出电流，单位：安培。 */
-#define VOFA_DEFAULT_M2006_CURRENT_LIMIT_A 10.0f
-/** 机械臂 M3508 输出轴软件限制的最大输出电流，单位：安培。 */
-#define VOFA_DEFAULT_M3508_CURRENT_LIMIT_A  3.0f
+#define VOFA_LINE_SIZE                  192U /**< VOFA 文本命令接收行缓冲区的字节数。 */
+#define VOFA_TOKEN_COUNT                 24U /**< 一条 VOFA 文本命令允许拆分的最大参数数量。 */
+#define VOFA_DJI_MOTOR_COUNT              8U /**< VOFA 遥测可遍历的 DJI 电机数量。 */
+#define VOFA_CAN_BUS_COUNT                3U /**< VOFA 调试桥接支持的 CAN 总线数量。 */
+#define VOFA_CHANNEL_COUNT               16U /**< JustFloat 遥测帧包含的浮点通道数量。 */
+#define VOFA_DEFAULT_PERIOD_MS           20U /**< VOFA 遥测默认发送周期，单位：毫秒。 */
+#define VOFA_MIN_PERIOD_MS                5U /**< VOFA 允许设置的最短遥测周期，单位：毫秒。 */
+#define VOFA_MAX_PERIOD_MS             1000U /**< VOFA 允许设置的最长遥测周期，单位：毫秒。 */
+#define VOFA_FEEDBACK_TIMEOUT_MS         200U /**< VOFA 判定电机反馈离线的时间，单位：毫秒。 */
+#define VOFA_JUSTFLOAT_TAIL       0x7F800000UL /**< JustFloat 浮点数据帧末尾使用的固定结束标记。 */
+#define VOFA_PI                    3.14159265358979323846f /**< 角度换算使用的圆周率数值。 */
+#define VOFA_TWO_PI                6.28318530717958647692f /**< 角度换算使用的二倍圆周率数值。 */
+#define VOFA_DEG_TO_RAD           (VOFA_PI / 180.0f) /**< 将角度值从度换算为弧度的比例系数。 */
+#define VOFA_RPM_TO_RAD_S         (VOFA_TWO_PI / 60.0f) /**< 将转速从转每分换算为弧度每秒的比例系数。 */
+#define VOFA_RAD_S_TO_RPM         (60.0f / VOFA_TWO_PI) /**< 将转速从弧度每秒换算为转每分的比例系数。 */
+#define VOFA_M2006_RAW_MAX             10000.0f /**< M2006 输出轴电流命令的协议原始值满量程。 */
+#define VOFA_M2006_CURRENT_MAX_A          10.0f /**< M2006 输出轴协议满量程对应的电流，单位：安培。 */
+#define VOFA_M3508_RAW_MAX             16384.0f /**< 机械臂 M3508 输出轴电流命令的协议原始值满量程。 */
+#define VOFA_M3508_CURRENT_MAX_A          20.0f /**< 机械臂 M3508 输出轴协议满量程对应的电流，单位：安培。 */
+#define VOFA_DEFAULT_M2006_CURRENT_LIMIT_A 10.0f /**< M2006 输出轴软件限制的最大输出电流，单位：安培。 */
+#define VOFA_DEFAULT_M3508_CURRENT_LIMIT_A  3.0f /**< 机械臂 M3508 输出轴软件限制的最大输出电流，单位：安培。 */
 
-/** VOFA 命令响应中表示当前处理结果的状态码。 */
-#define VOFA_STATUS_INVALID       (-1)
-/** VOFA 命令响应中表示当前处理结果的状态码。 */
-#define VOFA_STATUS_BUSY          (-2)
-/** VOFA 命令响应中表示当前处理结果的状态码。 */
-#define VOFA_STATUS_EXITING       (-3)
-/** VOFA 命令响应中表示当前处理结果的状态码。 */
-#define VOFA_STATUS_TUNE_FAILED   (-4)
-/** VOFA 命令响应中表示当前处理结果的状态码。 */
-#define VOFA_STATUS_TIMEOUT       (-5)
-/** VOFA 命令响应中表示当前处理结果的状态码。 */
-#define VOFA_STATUS_OFFLINE         0
-/** VOFA 命令响应中表示当前处理结果的状态码。 */
-#define VOFA_STATUS_ONLINE          1
-/** VOFA 命令响应中表示当前处理结果的状态码。 */
-#define VOFA_STATUS_TUNING          4
-/** VOFA 命令响应中表示当前处理结果的状态码。 */
-#define VOFA_STATUS_TUNED           5
+#define VOFA_STATUS_INVALID       (-1) /**< VOFA 命令或参数无效状态码。 */
+#define VOFA_STATUS_BUSY          (-2) /**< VOFA 调参资源正忙状态码。 */
+#define VOFA_STATUS_EXITING       (-3) /**< VOFA 调参会话正在退出状态码。 */
+#define VOFA_STATUS_TUNE_FAILED   (-4) /**< VOFA 自动整定失败状态码。 */
+#define VOFA_STATUS_TIMEOUT       (-5) /**< VOFA 电机反馈超时状态码。 */
+#define VOFA_STATUS_OFFLINE         0 /**< VOFA 电机离线状态码。 */
+#define VOFA_STATUS_ONLINE          1 /**< VOFA 电机在线状态码。 */
+#define VOFA_STATUS_TUNING          4 /**< VOFA 电机正在自动整定状态码。 */
+#define VOFA_STATUS_TUNED           5 /**< VOFA 电机自动整定完成状态码。 */
 
 /** 选择 VOFA 调试会话控制的 DJI 电机系列。 */
 typedef enum
@@ -99,27 +69,26 @@ typedef enum
 /** 保存 模块 运行过程中需要集中管理的数据。 */
 typedef struct
 {
-    bool active; /**< 对应流程当前是否正在运行。 */
+    bool active; /**< 当前 VOFA 电机调参会话是否已启动。 */
     vofa_family_t family; /**< 当前 VOFA 会话控制的 DJI 电机系列。 */
-    uint8_t can_bus; /**< 电机或数据帧所在的 CAN 总线编号。 */
+    uint8_t can_bus; /**< 当前 VOFA 会话控制电机所在的 CAN 总线编号。 */
     uint8_t motor_ids[VOFA_DJI_MOTOR_COUNT]; /**< 当前 VOFA 会话同时控制的 DJI 电机编号。 */
     uint8_t motor_count; /**< 当前配置或会话实际包含的电机数量。 */
     vofa_mode_t mode; /**< 当前采用的电机控制或调试工作模式。 */
     uint32_t telemetry_period_ms; /**< VOFA 遥测数据的发送周期，单位：毫秒。 */
     uint32_t next_telemetry_ms; /**< 下一帧 VOFA 遥测允许发送的系统毫秒时刻。 */
-    float current_limit_a; /**< 模块的电流上限，单位：安培。 */
-    float target_current_a; /**< 模块的目标电流，单位：安培。 */
-    float target_speed_rpm; /**< 模块的目标速度，单位：转每分。 */
-    float target_position_rad; /**< 模块的目标位置，单位：弧度。 */
+    float current_limit_a; /**< 当前 VOFA 会话允许的电流上限，单位：安培。 */
+    float target_current_a; /**< VOFA 电流模式的目标电流，单位：安培。 */
+    float target_speed_rpm; /**< VOFA 速度模式的目标转速，单位：转每分。 */
+    float target_position_rad; /**< VOFA 位置模式的目标位置，单位：弧度。 */
     float position_speed_rpm; /**< 位置模式生成轨迹时允许的最大转速，单位：转每分。 */
     float acceleration_rpm_s; /**< VOFA 电机目标允许的最大转速变化率，单位：转每分每秒。 */
-    int16_t current_raw[VOFA_DJI_MOTOR_COUNT]; /**< 模块的反馈电流的协议原始值。 */
+    int16_t current_raw[VOFA_DJI_MOTOR_COUNT]; /**< 各 DJI 电机本周期待发送的电流命令原始值。 */
     int32_t command_status; /**< 最近一条 VOFA 控制命令的执行状态码。 */
     bool auto_tune_active; /**< 当前 VOFA 会话是否正在执行速度环自动整定。 */
 } vofa_session_t;
 
-/** 电机系列与 CAN 总线组合形成的 VOFA 会话总数。 */
-#define VOFA_SESSION_COUNT (VOFA_FAMILY_COUNT * VOFA_CAN_BUS_COUNT)
+#define VOFA_SESSION_COUNT (VOFA_FAMILY_COUNT * VOFA_CAN_BUS_COUNT) /**< 电机系列与 CAN 总线组合形成的 VOFA 会话总数。 */
 
 static vofa_session_t vofa_sessions[VOFA_SESSION_COUNT];
 static vofa_session_t *vofa_telemetry_session;
@@ -135,7 +104,7 @@ static uint8_t vofa_telemetry_frame[
     sizeof(uint32_t)];
 
 /* 功能：忽略字母大小写比较两个字符串；用途：识别 VOFA 文本命令关键字；返回 true 表示内容相同。 */
-static bool Vofa_StringEquals(const char *left, const char *right)
+static bool Vofa_StringEquals(const char *left /**< 待比较的左侧字符串 */, const char *right /**< 待比较的右侧字符串 */)
 {
     char left_value;
     char right_value;
@@ -167,10 +136,10 @@ static bool Vofa_StringEquals(const char *left, const char *right)
 }
 
 /* 功能：将文本解析为指定范围内的无符号整数；用途：读取总线号、电机号和周期；返回 true 表示格式及范围合法。 */
-static bool Vofa_ParseU32(const char *text /* 函数读取或写入的对象地址 */,
-                          uint32_t minimum /* 允许输出的下限 */,
-                          uint32_t maximum /* 允许输出的上限 */,
-                          uint32_t *value /* 需要检查、限幅或编码的输入值 */)
+static bool Vofa_ParseU32(const char *text /**< 待解析的 VOFA 数值文本 */,
+                          uint32_t minimum /**< 允许输出的下限 */,
+                          uint32_t maximum /**< 允许输出的上限 */,
+                          uint32_t *value /**< 用于写出解析后无符号整数的对象 */)
 {
     char *end;
     unsigned long parsed;
@@ -189,7 +158,7 @@ static bool Vofa_ParseU32(const char *text /* 函数读取或写入的对象地�
 }
 
 /* 功能：将文本解析为有限浮点数；用途：读取目标值和 PID 参数；返回 true 表示整段文本均为合法数值。 */
-static bool Vofa_ParseFloat(const char *text /* 函数读取或写入的对象地址 */, float *value /* 需要检查、限幅或编码的输入值 */)
+static bool Vofa_ParseFloat(const char *text /**< 待解析的 VOFA 数值文本 */, float *value /**< 用于写出解析后浮点数的对象 */)
 {
     char *end;
     float parsed;
@@ -209,7 +178,7 @@ static bool Vofa_ParseFloat(const char *text /* 函数读取或写入的对象�
 }
 
 /* 功能：按空格和制表符拆分命令行；用途：为命令解析建立参数数组；返回值表示得到的字段数量。 */
-static uint8_t Vofa_Tokenize(char *line /* 函数读取或写入的对象地址 */, char *tokens[VOFA_TOKEN_COUNT] /* 函数读取或写入的对象地址 */)
+static uint8_t Vofa_Tokenize(char *line /**< 待拆分或执行的 VOFA 命令行 */, char *tokens[VOFA_TOKEN_COUNT] /**< 用于写出各 VOFA 命令字段的字符串数组 */)
 {
     uint8_t count;
     char *token;
@@ -229,14 +198,14 @@ static uint8_t Vofa_Tokenize(char *line /* 函数读取或写入的对象地址 
 }
 
 /* 功能：取得指定电机族的默认 CAN 总线；用途：简化未显式指定总线的 VOFA 命令；返回值为默认总线号。 */
-static uint8_t Vofa_DefaultCanBus(vofa_family_t family /* 需要操作的 DJI 电机系列 */)
+static uint8_t Vofa_DefaultCanBus(vofa_family_t family /**< 需要操作的 DJI 电机系列 */)
 {
     return (family == VOFA_FAMILY_M2006) ? 3U : 2U;
 }
 
 /* 功能：定位电机族与 CAN 总线对应的 VOFA 会话；用途：访问固定会话表；返回值为该会话对象。 */
-static vofa_session_t *Vofa_GetSession(vofa_family_t family /* 需要操作的 DJI 电机系列 */,
-                                       uint8_t can_bus /* CAN 总线编号 */)
+static vofa_session_t *Vofa_GetSession(vofa_family_t family /**< 需要操作的 DJI 电机系列 */,
+                                       uint8_t can_bus /**< CAN 总线编号 */)
 {
     uint32_t index;
 
@@ -245,22 +214,22 @@ static vofa_session_t *Vofa_GetSession(vofa_family_t family /* 需要操作的 D
 }
 
 /* 功能：取得电机族允许的最大物理电流；用途：校验命令并换算原始电流；返回值单位为安培。 */
-static float Vofa_CurrentMaximum(vofa_family_t family /* 需要操作的 DJI 电机系列 */)
+static float Vofa_CurrentMaximum(vofa_family_t family /**< 需要操作的 DJI 电机系列 */)
 {
     return (family == VOFA_FAMILY_M2006) ?
            VOFA_M2006_CURRENT_MAX_A : VOFA_M3508_CURRENT_MAX_A;
 }
 
 /* 功能：取得电机族协议中的最大原始电流值；用途：在安培和 CAN 原始量之间换算；返回值为协议量程。 */
-static float Vofa_RawMaximum(vofa_family_t family /* 需要操作的 DJI 电机系列 */)
+static float Vofa_RawMaximum(vofa_family_t family /**< 需要操作的 DJI 电机系列 */)
 {
     return (family == VOFA_FAMILY_M2006) ?
            VOFA_M2006_RAW_MAX : VOFA_M3508_RAW_MAX;
 }
 
 /* 功能：按会话电流限制约束原始电流命令；用途：保护被调试电机；返回值表示限幅后的 CAN 电流值。 */
-static int16_t Vofa_ClampCurrentRaw(const vofa_session_t *session /* 函数读取或写入的对象地址 */,
-                                    int16_t current_raw /* DJI 协议中的电流命令原始值 */)
+static int16_t Vofa_ClampCurrentRaw(const vofa_session_t *session /**< 需要启动、更新或停止的 VOFA 电机调参会话 */,
+                                    int16_t current_raw /**< DJI 协议中的电流命令原始值 */)
 {
     float raw_limit;
 
@@ -279,7 +248,7 @@ static int16_t Vofa_ClampCurrentRaw(const vofa_session_t *session /* 函数读�
 }
 
 /* 功能：向会话内所有电机应用运动与电流限制配置；用途：在启动调试前统一控制参数；返回 true 表示全部应用成功。 */
-static bool Vofa_ApplyProfile(const vofa_session_t *session /* 函数读取或写入的对象地址 */)
+static bool Vofa_ApplyProfile(const vofa_session_t *session /**< 需要启动、更新或停止的 VOFA 电机调参会话 */)
 {
     uint8_t index;
     bool success;
@@ -329,7 +298,7 @@ static bool Vofa_ApplyProfile(const vofa_session_t *session /* 函数读取或�
 }
 
 /* 功能：停止会话内全部电机并清理调试状态；用途：响应 STOP、超时或错误；无返回值表示会话已失活。 */
-static void Vofa_StopSession(vofa_session_t *session /* 函数读取或写入的对象地址 */, uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void Vofa_StopSession(vofa_session_t *session /**< 需要启动、更新或停止的 VOFA 电机调参会话 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     uint8_t index;
 
@@ -366,10 +335,10 @@ static void Vofa_StopSession(vofa_session_t *session /* 函数读取或写入的
 }
 
 /* 功能：检查活动会话是否占用相同 CAN 电机地址；用途：防止两个会话同时控制同一电机；返回 true 表示存在冲突。 */
-static bool Vofa_SessionsConflict(const vofa_session_t *session /* 函数读取或写入的对象地址 */,
-                                  uint8_t can_bus /* CAN 总线编号 */,
-                                  const uint8_t *motor_ids /* 函数读取或写入的对象地址 */,
-                                  uint8_t motor_count /* 调用方提供的电机配置数量 */)
+static bool Vofa_SessionsConflict(const vofa_session_t *session /**< 需要启动、更新或停止的 VOFA 电机调参会话 */,
+                                  uint8_t can_bus /**< CAN 总线编号 */,
+                                  const uint8_t *motor_ids /**< 参与 VOFA 会话的电机编号数组 */,
+                                  uint8_t motor_count /**< 调用方提供的电机配置数量 */)
 {
     uint8_t left;
     uint8_t right;
@@ -392,10 +361,10 @@ static bool Vofa_SessionsConflict(const vofa_session_t *session /* 函数读取�
 }
 
 /* 功能：遍历会话表检查目标路由冲突；用途：启动新会话前保证控制权唯一；返回 true 表示至少一处地址被占用。 */
-static bool Vofa_RouteConflicts(const vofa_session_t *target /* 本次需要应用的控制目标 */,
-                                uint8_t can_bus /* CAN 总线编号 */,
-                                const uint8_t *motor_ids /* 函数读取或写入的对象地址 */,
-                                uint8_t motor_count /* 调用方提供的电机配置数量 */)
+static bool Vofa_RouteConflicts(const vofa_session_t *target /**< 待检查路由冲突的目标 VOFA 调参会话 */,
+                                uint8_t can_bus /**< CAN 总线编号 */,
+                                const uint8_t *motor_ids /**< 参与 VOFA 会话的电机编号数组 */,
+                                uint8_t motor_count /**< 调用方提供的电机配置数量 */)
 {
     uint8_t session_index;
 
@@ -419,12 +388,12 @@ static bool Vofa_RouteConflicts(const vofa_session_t *target /* 本次需要应�
 }
 
 /* 功能：配置并启动一个 VOFA 电机调试会话；用途：绑定电机、周期和初始状态；返回 true 表示会话已激活。 */
-static bool Vofa_StartSession(vofa_session_t *session /* 函数读取或写入的对象地址 */,
-                              uint8_t can_bus /* CAN 总线编号 */,
-                              const uint8_t *motor_ids /* 函数读取或写入的对象地址 */,
-                              uint8_t motor_count /* 调用方提供的电机配置数量 */,
-                              uint32_t period_ms /* 周期或保持时间，单位：毫秒 */,
-                              uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static bool Vofa_StartSession(vofa_session_t *session /**< 需要启动、更新或停止的 VOFA 电机调参会话 */,
+                              uint8_t can_bus /**< CAN 总线编号 */,
+                              const uint8_t *motor_ids /**< 参与 VOFA 会话的电机编号数组 */,
+                              uint8_t motor_count /**< 调用方提供的电机配置数量 */,
+                              uint32_t period_ms /**< 周期或保持时间，单位：毫秒 */,
+                              uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     uint8_t index;
 
@@ -459,12 +428,12 @@ static bool Vofa_StartSession(vofa_session_t *session /* 函数读取或写入�
 }
 
 /* 功能：解析 START 命令中的电机列表和发送周期；用途：形成会话启动参数；返回 true 表示所有字段合法。 */
-static bool Vofa_ParseStart(char *const *tokens /* 函数读取或写入的对象地址 */,
-                            uint8_t token_count /* 当前 VOFA 命令解析得到的参数数量 */,
-                            uint8_t start_index /* 本次遍历开始的数组下标 */,
-                            uint8_t *motor_ids /* 函数读取或写入的对象地址 */,
-                            uint8_t *motor_count /* 调用方提供的电机配置数量 */,
-                            uint32_t *period_ms /* 周期或保持时间，单位：毫秒 */)
+static bool Vofa_ParseStart(char *const *tokens /**< 已经拆分的 VOFA 命令字段数组 */,
+                            uint8_t token_count /**< 当前 VOFA 命令解析得到的参数数量 */,
+                            uint8_t start_index /**< 本次遍历开始的数组下标 */,
+                            uint8_t *motor_ids /**< 用于写出 VOFA 命令指定电机编号的数组 */,
+                            uint8_t *motor_count /**< 调用方提供的电机配置数量 */,
+                            uint32_t *period_ms /**< 周期或保持时间，单位：毫秒 */)
 {
     uint32_t parsed;
     uint8_t index;
@@ -539,7 +508,7 @@ static bool Vofa_ParseStart(char *const *tokens /* 函数读取或写入的对�
 }
 
 /* 功能：把会话目标应用到各电机控制器；用途：周期执行电流、速度或位置调试命令；返回 true 表示全部设置成功。 */
-static bool Vofa_ApplyTarget(vofa_session_t *session /* 函数读取或写入的对象地址 */, uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static bool Vofa_ApplyTarget(vofa_session_t *session /**< 需要启动、更新或停止的 VOFA 电机调参会话 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     uint8_t index;
     bool success;
@@ -609,9 +578,9 @@ static bool Vofa_ApplyTarget(vofa_session_t *session /* 函数读取或写入的
 }
 
 /* 功能：向会话内电机应用速度环或位置环 PID；用途：支持 VOFA 在线整定；返回 true 表示全部参数设置成功。 */
-static bool Vofa_ApplyPid(vofa_session_t *session /* 函数读取或写入的对象地址 */,
-                          bool speed_loop /* 本次读写的 PID 参数是否属于速度环 */,
-                          const float values[5] /* VOFA 命令携带的 PID 参数数组 */)
+static bool Vofa_ApplyPid(vofa_session_t *session /**< 需要启动、更新或停止的 VOFA 电机调参会话 */,
+                          bool speed_loop /**< 本次读写的 PID 参数是否属于速度环 */,
+                          const float values[5] /**< VOFA 命令携带的 PID 参数数组 */)
 {
     uint8_t index;
     bool success;
@@ -684,7 +653,7 @@ static bool Vofa_ApplyPid(vofa_session_t *session /* 函数读取或写入的对
 }
 
 /* 功能：解析并执行一条 VOFA 业务命令；用途：处理 START、目标、PID、自动整定和停止操作；返回值为协议状态码。 */
-static int32_t Vofa_ProcessCommand(char *line /* 函数读取或写入的对象地址 */, uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static int32_t Vofa_ProcessCommand(char *line /**< 待拆分或执行的 VOFA 命令行 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     char *tokens[VOFA_TOKEN_COUNT];
     uint8_t token_count;
@@ -1100,7 +1069,7 @@ static int32_t Vofa_ProcessCommand(char *line /* 函数读取或写入的对象�
 }
 
 /* 功能：发送文本格式的 VOFA 命令确认；用途：反馈命令序号和执行状态；无返回值表示发送结果由通信层处理。 */
-static void Vofa_SendAck(uint32_t sequence /* 用于匹配请求和响应的消息序号 */, int32_t status /* 需要返回给调试端的命令执行状态 */)
+static void Vofa_SendAck(uint32_t sequence /**< 用于匹配请求和响应的消息序号 */, int32_t status /**< 需要返回给调试端的命令执行状态 */)
 {
     char response[48];
     int length;
@@ -1118,7 +1087,7 @@ static void Vofa_SendAck(uint32_t sequence /* 用于匹配请求和响应的消�
 }
 
 /* 功能：识别并处理一行完整 VOFA 文本；用途：解析可选序号并发送 ACK；返回 true 表示该行属于 VOFA 协议。 */
-static bool Vofa_ProcessLine(char *line /* 函数读取或写入的对象地址 */, uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static bool Vofa_ProcessLine(char *line /**< 待拆分或执行的 VOFA 命令行 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     char sequence_copy[VOFA_LINE_SIZE];
     char *tokens[VOFA_TOKEN_COUNT];
@@ -1160,8 +1129,8 @@ static bool Vofa_ProcessLine(char *line /* 函数读取或写入的对象地址 
 }
 
 /* 功能：在会话电机列表中查找节点号；用途：把 CAN 反馈映射到遥测槽位；返回负数表示未找到。 */
-static int8_t Vofa_FindMotorIndex(const vofa_session_t *session /* 函数读取或写入的对象地址 */,
-                                  uint8_t motor_id /* DJI 电机编号 */)
+static int8_t Vofa_FindMotorIndex(const vofa_session_t *session /**< 需要启动、更新或停止的 VOFA 电机调参会话 */,
+                                  uint8_t motor_id /**< DJI 电机编号 */)
 {
     uint8_t index;
 
@@ -1176,7 +1145,7 @@ static int8_t Vofa_FindMotorIndex(const vofa_session_t *session /* 函数读取�
 }
 
 /* 功能：汇总并发送各 CAN 总线的 DJI 四电机电流组帧；用途：统一下发 M2006/M3508 调试输出；无返回值表示完成本周期发送。 */
-static void Vofa_SendGroups(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void Vofa_SendGroups(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     uint8_t can_bus;
     uint8_t group_index;
@@ -1257,10 +1226,10 @@ static void Vofa_SendGroups(uint32_t tick_ms /* 当前系统毫秒时刻 */)
 }
 
 /* 功能：填充单台电机的 VOFA 遥测通道；用途：汇集目标、反馈、误差和自动整定状态；结果写入 channels。 */
-static void Vofa_FillTelemetry(const vofa_session_t *session /* 函数读取或写入的对象地址 */,
-                               uint8_t motor_index /* 电机在管理器配置表中的下标 */,
-                               uint32_t tick_ms /* 当前系统毫秒时刻 */,
-                               float channels[VOFA_CHANNEL_COUNT] /* 用于写出 JustFloat 各遥测通道的数组 */)
+static void Vofa_FillTelemetry(const vofa_session_t *session /**< 需要启动、更新或停止的 VOFA 电机调参会话 */,
+                               uint8_t motor_index /**< 电机在管理器配置表中的下标 */,
+                               uint32_t tick_ms /**< 当前系统毫秒时刻 */,
+                               float channels[VOFA_CHANNEL_COUNT] /**< 用于写出 JustFloat 各遥测通道的数组 */)
 {
     uint8_t motor_id;
     bool feedback_fresh;
@@ -1440,7 +1409,7 @@ static void Vofa_FillTelemetry(const vofa_session_t *session /* 函数读取或�
 }
 
 /* 功能：打包并发送一个会话的 JustFloat 遥测；用途：供 VOFA 实时绘图和调参观察；无返回值表示更新发送统计与时刻。 */
-static void Vofa_SendTelemetry(vofa_session_t *session /* 函数读取或写入的对象地址 */, uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void Vofa_SendTelemetry(vofa_session_t *session /**< 需要启动、更新或停止的 VOFA 电机调参会话 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     uint8_t motor_index;
     uint16_t payload_size;
@@ -1513,9 +1482,9 @@ void VofaBridge_Init(void)
 }
 
 /* 功能：接收字节流并按行解析 VOFA 命令；用途：从 UART 数据中提取文本控制消息；返回 true 表示至少消费了 VOFA 数据。 */
-bool VofaBridge_Receive(const uint8_t *data,
-                        size_t size,
-                        uint32_t tick_ms)
+bool VofaBridge_Receive(const uint8_t *data /**< 待解析的VOFA串口字节流 */,
+                        size_t size /**< 本次VOFA串口数据字节数 */,
+                        uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     size_t data_index;
     bool consumed;
@@ -1581,7 +1550,7 @@ bool VofaBridge_Receive(const uint8_t *data,
 }
 
 /* 功能：执行 VOFA 桥的 1 ms 周期任务；用途：处理会话超时、目标应用、分组发送和遥测；无返回值表示完成一次调度。 */
-void VofaBridge_Control1ms(uint32_t tick_ms)
+void VofaBridge_Control1ms(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     uint8_t session_index;
 
@@ -1615,9 +1584,9 @@ void VofaBridge_Control1ms(uint32_t tick_ms)
 }
 
 /* 功能：把 DJI CAN 反馈路由到对应 VOFA 会话；用途：更新调试电机反馈和在线整定输入；无返回值表示匹配帧已记录。 */
-void VofaBridge_OnCanFrame(uint8_t can_bus,
-                           const can_frame_t *frame,
-                           uint32_t tick_ms)
+void VofaBridge_OnCanFrame(uint8_t can_bus /**< CAN 总线编号 */,
+                           const can_frame_t *frame /**< 待解析的 CAN 接收帧 */,
+                           uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     uint8_t motor_id;
     uint8_t session_index;

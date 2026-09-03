@@ -10,36 +10,24 @@
 
 #include "motor_online_tune.h"
 
-/** 标准 CAN 帧允许的最大 11 位标识符。 */
-#define J4310_CAN_STD_ID_MAX  0x7FFU
-/** J4310 反馈帧中电机编号字段允许的最大值。 */
-#define J4310_FEEDBACK_ID_MAX 0x0FU
-/** 机械臂 J4310 关节控制命令允许使用的最大比例增益。 */
-#define J4310_KP_MAX          500.0f
-/** 机械臂 J4310 关节控制命令允许使用的最大微分增益。 */
-#define J4310_KD_MAX          5.0f
-/** 机械臂 J4310 关节控制命令允许使用的最大比例增益。 */
-#define J4310_ONLINE_MIT_KP_MAX 49.0f
-/** 机械臂 J4310 关节控制命令允许使用的最大微分增益。 */
-#define J4310_ONLINE_MIT_KD_MAX 0.95f
-/** J4310 MIT 在线调参判定接近目标的位置误差阈值，单位：弧度。 */
-#define J4310_ONLINE_MIT_NEAR_ERROR_RAD 0.01745329252f
-/** J4310 MIT 在线调参判定远离目标的位置误差阈值，单位：弧度。 */
-#define J4310_ONLINE_MIT_FAR_ERROR_RAD  0.17453292520f
-/** J4310 清除故障命令的协议控制字节。 */
-#define J4310_CMD_CLEAR_FAULT 0xFBU
-/** J4310 进入使能状态命令的协议控制字节。 */
-#define J4310_CMD_ENABLE      0xFCU
-/** J4310 退出使能状态命令的协议控制字节。 */
-#define J4310_CMD_DISABLE     0xFDU
-/** J4310 将当前位置写入零点命令的协议控制字节。 */
-#define J4310_CMD_SAVE_ZERO   0xFEU
+#define J4310_CAN_STD_ID_MAX  0x7FFU /**< 标准 CAN 帧允许的最大 11 位标识符。 */
+#define J4310_FEEDBACK_ID_MAX 0x0FU /**< J4310 反馈帧中电机编号字段允许的最大值。 */
+#define J4310_KP_MAX          500.0f /**< 机械臂 J4310 关节控制命令允许使用的最大比例增益。 */
+#define J4310_KD_MAX          5.0f /**< 机械臂 J4310 关节控制命令允许使用的最大微分增益。 */
+#define J4310_ONLINE_MIT_KP_MAX 49.0f /**< 机械臂 J4310 关节控制命令允许使用的最大比例增益。 */
+#define J4310_ONLINE_MIT_KD_MAX 0.95f /**< 机械臂 J4310 关节控制命令允许使用的最大微分增益。 */
+#define J4310_ONLINE_MIT_NEAR_ERROR_RAD 0.01745329252f /**< J4310 MIT 在线调参判定接近目标的位置误差阈值，单位：弧度。 */
+#define J4310_ONLINE_MIT_FAR_ERROR_RAD  0.17453292520f /**< J4310 MIT 在线调参判定远离目标的位置误差阈值，单位：弧度。 */
+#define J4310_CMD_CLEAR_FAULT 0xFBU /**< J4310 清除故障命令的协议控制字节。 */
+#define J4310_CMD_ENABLE      0xFCU /**< J4310 进入使能状态命令的协议控制字节。 */
+#define J4310_CMD_DISABLE     0xFDU /**< J4310 退出使能状态命令的协议控制字节。 */
+#define J4310_CMD_SAVE_ZERO   0xFEU /**< J4310 将当前位置写入零点命令的协议控制字节。 */
 
 /** 保存 J4310 运行过程中需要集中管理的数据。 */
 typedef struct
 {
     bool used; /**< 该 J4310 上下文槽位是否已经分配给电机。 */
-    uint8_t motor_id; /**< DJI 电机编号。 */
+    uint8_t motor_id; /**< J4310 电机编号。 */
     uint16_t master_id; /**< J4310 向主控反馈时使用的 CAN 标识符。 */
     uint8_t feedback_id; /**< J4310 反馈数据首字节中的电机编号。 */
     j4310_mode_t mode; /**< 当前采用的电机控制或调试工作模式。 */
@@ -48,7 +36,7 @@ typedef struct
     float software_torque_limit_nm; /**< J4310的转矩上限，单位：牛米。 */
     motor_online_mit_t mit_tuner; /**< 用于在线调整 J4310 MIT 比例和微分增益的状态。 */
     uint32_t online_last_feedback_ms; /**< MIT 在线调参最近一次取得有效反馈的系统毫秒时刻。 */
-    volatile uint32_t sequence; /**< 用于匹配请求和响应的消息序号。 */
+    volatile uint32_t sequence; /**< 反馈快照每次更新时递增的无锁同步序号。 */
     volatile j4310_feedback_t feedback; /**< 最近一次有效电机反馈的快照。 */
 } j4310_context_t;
 
@@ -57,8 +45,8 @@ static volatile uint32_t j4310_rx_diagnostic_sequence;
 static volatile j4310_rx_diagnostics_t j4310_rx_diagnostics;
 
 /* 功能：记录达妙解析结果和最近一帧帧头；用途：区分物理收帧与协议匹配失败；无返回值表示诊断快照已更新。 */
-static void J4310_RecordRxDiagnostic(const can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */,
-                                     j4310_rx_result_t result /* 用于写出操作结果的对象 */)
+static void J4310_RecordRxDiagnostic(const can_frame_t *frame /**< 待解析的 CAN 接收帧 */,
+                                     j4310_rx_result_t result /**< 用于写出操作结果的对象 */)
 {
     uint32_t sequence;
 
@@ -89,13 +77,13 @@ static void J4310_RecordRxDiagnostic(const can_frame_t *frame /* 需要解析或
 }
 
 /* 功能：判断浮点数是否有限；用途：过滤 J4310 命令中的 NaN 和无穷值；返回 true 表示数值可用。 */
-static bool J4310_IsFinite(float value /* 需要检查、限幅或编码的输入值 */)
+static bool J4310_IsFinite(float value /**< 待检查有限性的 J4310 控制量 */)
 {
     return (value == value) && (value <= FLT_MAX) && (value >= -FLT_MAX);
 }
 
 /* 功能：把数值限制在给定区间；用途：约束位置、速度、转矩和增益；返回值表示限幅结果。 */
-static float J4310_Clamp(float value /* 需要检查、限幅或编码的输入值 */, float min /* 允许输出的下限 */, float max /* 允许输出的上限 */)
+static float J4310_Clamp(float value /**< 待限制到指定区间的 J4310 控制量 */, float min /**< 允许输出的下限 */, float max /**< 允许输出的上限 */)
 {
     if (value < min)
     {
@@ -109,7 +97,7 @@ static float J4310_Clamp(float value /* 需要检查、限幅或编码的输入�
 }
 
 /* 功能：检查 J4310 控制模式枚举；用途：拒绝驱动不支持的模式；返回 true 表示模式合法。 */
-static bool J4310_ModeValid(j4310_mode_t mode /* 需要设置或判断的工作模式 */)
+static bool J4310_ModeValid(j4310_mode_t mode /**< 待校验或设置的 J4310 控制模式 */)
 {
     return (mode == J4310_MODE_MIT) ||
            (mode == J4310_MODE_POSITION_VELOCITY) ||
@@ -117,10 +105,10 @@ static bool J4310_ModeValid(j4310_mode_t mode /* 需要设置或判断的工作�
 }
 
 /* 功能：将物理浮点量线性映射为指定比特的无符号整数；用途：编码 MIT 控制字段；返回值表示量化后的协议值。 */
-static uint16_t J4310_FloatToUint(float value /* 需要检查、限幅或编码的输入值 */,
-                                  float min /* 允许输出的下限 */,
-                                  float max /* 允许输出的上限 */,
-                                  uint8_t bits /* 需要检查或设置的状态位图 */)
+static uint16_t J4310_FloatToUint(float value /**< 待编码为 MIT 无符号字段的 J4310 物理量 */,
+                                  float min /**< 允许输出的下限 */,
+                                  float max /**< 允许输出的上限 */,
+                                  uint8_t bits /**< 需要检查或设置的状态位图 */)
 {
     uint32_t scale;
     float normalized;
@@ -132,7 +120,7 @@ static uint16_t J4310_FloatToUint(float value /* 需要检查、限幅或编码�
 }
 
 /* 功能：把单精度浮点数按小端位模式写入字节；用途：编码位置速度和速度模式帧；结果写入 data。 */
-static void J4310_WriteFloatLe(uint8_t *data /* 待处理数据的首地址 */, float value /* 需要检查、限幅或编码的输入值 */)
+static void J4310_WriteFloatLe(uint8_t *data /**< 用于写入J4310小端浮点字段的四字节缓冲区 */, float value /**< 待写入小端字段的 J4310 浮点值 */)
 {
     uint32_t raw;
 
@@ -144,10 +132,10 @@ static void J4310_WriteFloatLe(uint8_t *data /* 待处理数据的首地址 */, 
 }
 
 /* 功能：将协议无符号整数线性还原为物理浮点量；用途：解析 MIT 反馈；返回值表示对应的物理值。 */
-static float J4310_UintToFloat(uint16_t value /* 需要检查、限幅或编码的输入值 */,
-                               float min /* 允许输出的下限 */,
-                               float max /* 允许输出的上限 */,
-                               uint8_t bits /* 需要检查或设置的状态位图 */)
+static float J4310_UintToFloat(uint16_t value /**< 待映射为物理量的 MIT 无符号原始值 */,
+                               float min /**< 允许输出的下限 */,
+                               float max /**< 允许输出的上限 */,
+                               uint8_t bits /**< 需要检查或设置的状态位图 */)
 {
     uint32_t scale;
 
@@ -156,7 +144,7 @@ static float J4310_UintToFloat(uint16_t value /* 需要检查、限幅或编码�
 }
 
 /* 功能：按节点号查找已注册的 J4310 上下文；用途：访问模式、限制和反馈；返回 NULL 表示电机未注册。 */
-static j4310_context_t *J4310_Find(uint8_t motor_id /* DJI 电机编号 */)
+static j4310_context_t *J4310_Find(uint8_t motor_id /**< J4310 电机编号 */)
 {
     uint32_t index;
 
@@ -172,8 +160,8 @@ static j4310_context_t *J4310_Find(uint8_t motor_id /* DJI 电机编号 */)
 }
 
 /* 功能：根据电机限制配置 MIT 在线调参器；用途：建立刚度和阻尼的动态调整边界；返回 true 表示配置成功。 */
-static bool J4310_ConfigureOnlineMit(j4310_context_t *context /* 函数读取或写入的对象地址 */,
-                                     bool enabled /* 是否启用对应功能 */)
+static bool J4310_ConfigureOnlineMit(j4310_context_t *context /**< 需要更新的 J4310 驱动上下文 */,
+                                     bool enabled /**< 是否启用 J4310 在线 MIT 调参 */)
 {
     motor_online_mit_cfg_t cfg;
 
@@ -198,9 +186,9 @@ static bool J4310_ConfigureOnlineMit(j4310_context_t *context /* 函数读取或
 }
 
 /* 功能：构造 J4310 使能、停机、清错或置零特殊帧；用途：复用特殊命令格式；返回 true 表示构帧成功。 */
-static bool J4310_BuildSpecial(uint8_t motor_id /* DJI 电机编号 */,
-                               uint8_t command /* 需要识别或写入帧末尾的电机控制字节 */,
-                               can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */)
+static bool J4310_BuildSpecial(uint8_t motor_id /**< J4310 电机编号 */,
+                               uint8_t command /**< 待写入 J4310 特殊帧末字节的命令码 */,
+                               can_frame_t *frame /**< 用于写出待发送 CAN 帧的对象 */)
 {
     j4310_context_t *context;
 
@@ -229,11 +217,11 @@ void J4310_Init(void)
 }
 
 /* 功能：注册一台 J4310 及其模式和物理限制；用途：建立节点运行上下文；返回 true 表示注册成功。 */
-bool J4310_AddMotor(uint8_t motor_id,
-                    uint16_t master_id,
-                    uint8_t feedback_id,
-                    j4310_mode_t mode,
-                    const j4310_limits_t *limits)
+bool J4310_AddMotor(uint8_t motor_id /**< J4310 电机编号 */,
+                    uint16_t master_id /**< J4310 反馈帧发送给主控时使用的 CAN 标识符 */,
+                    uint8_t feedback_id /**< J4310 反馈帧首字节携带的电机编号 */,
+                    j4310_mode_t mode /**< 待校验或设置的 J4310 控制模式 */,
+                    const j4310_limits_t *limits /**< J4310 MIT 命令各物理量的映射范围 */)
 {
     uint32_t index;
 
@@ -280,7 +268,7 @@ bool J4310_AddMotor(uint8_t motor_id,
 }
 
 /* 功能：修改已注册 J4310 的控制模式；用途：切换 MIT、位置速度或速度控制；返回 true 表示模式已接受。 */
-bool J4310_SetMode(uint8_t motor_id, j4310_mode_t mode)
+bool J4310_SetMode(uint8_t motor_id /**< J4310 电机编号 */, j4310_mode_t mode /**< 待校验或设置的 J4310 控制模式 */)
 {
     j4310_context_t *context;
 
@@ -296,13 +284,13 @@ bool J4310_SetMode(uint8_t motor_id, j4310_mode_t mode)
 }
 
 /* 功能：构造 J4310 使能帧；用途：让目标节点进入可控状态；返回 true 表示构帧成功。 */
-bool J4310_BuildEnable(uint8_t motor_id, can_frame_t *frame)
+bool J4310_BuildEnable(uint8_t motor_id /**< J4310 电机编号 */, can_frame_t *frame /**< 用于写出待发送 CAN 帧的对象 */)
 {
     return J4310_BuildSpecial(motor_id, J4310_CMD_ENABLE, frame);
 }
 
 /* 功能：构造 J4310 失能帧并复位在线调参；用途：安全停止目标节点；返回 true 表示构帧成功。 */
-bool J4310_BuildDisable(uint8_t motor_id, can_frame_t *frame)
+bool J4310_BuildDisable(uint8_t motor_id /**< J4310 电机编号 */, can_frame_t *frame /**< 用于写出待发送 CAN 帧的对象 */)
 {
     j4310_context_t *context;
 
@@ -317,25 +305,25 @@ bool J4310_BuildDisable(uint8_t motor_id, can_frame_t *frame)
 }
 
 /* 功能：构造 J4310 清除故障帧；用途：请求节点退出故障状态；返回 true 表示构帧成功。 */
-bool J4310_BuildClearFault(uint8_t motor_id, can_frame_t *frame)
+bool J4310_BuildClearFault(uint8_t motor_id /**< J4310 电机编号 */, can_frame_t *frame /**< 用于写出待发送 CAN 帧的对象 */)
 {
     return J4310_BuildSpecial(motor_id, J4310_CMD_CLEAR_FAULT, frame);
 }
 
 /* 功能：构造 J4310 保存当前位置为零点的帧；用途：执行机械零点标定；返回 true 表示构帧成功。 */
-bool J4310_BuildSaveZero(uint8_t motor_id, can_frame_t *frame)
+bool J4310_BuildSaveZero(uint8_t motor_id /**< J4310 电机编号 */, can_frame_t *frame /**< 用于写出待发送 CAN 帧的对象 */)
 {
     return J4310_BuildSpecial(motor_id, J4310_CMD_SAVE_ZERO, frame);
 }
 
 /* 功能：构造 J4310 MIT 五参数控制帧；用途：发送位置、速度、刚度、阻尼和转矩目标；返回 true 表示参数有效并构帧完成。 */
-bool J4310_BuildMit(uint8_t motor_id,
-                    float position_rad,
-                    float velocity_rad_s,
-                    float kp,
-                    float kd,
-                    float torque_nm,
-                    can_frame_t *frame)
+bool J4310_BuildMit(uint8_t motor_id /**< J4310 电机编号 */,
+                    float position_rad /**< MIT 控制目标位置，单位：弧度 */,
+                    float velocity_rad_s /**< MIT 控制目标速度，单位：弧度每秒 */,
+                    float kp /**< 比例增益 */,
+                    float kd /**< 微分增益 */,
+                    float torque_nm /**< MIT 控制前馈转矩，单位：牛米 */,
+                    can_frame_t *frame /**< 用于写出待发送 CAN 帧的对象 */)
 {
     j4310_context_t *context;
     uint16_t position;
@@ -442,10 +430,10 @@ bool J4310_BuildMit(uint8_t motor_id,
 }
 
 /* 功能：构造 J4310 位置速度模式帧；用途：发送位置与速度上限目标；返回 true 表示构帧成功。 */
-bool J4310_BuildPositionVelocity(uint8_t motor_id,
-                                 float position_rad,
-                                 float velocity_rad_s,
-                                 can_frame_t *frame)
+bool J4310_BuildPositionVelocity(uint8_t motor_id /**< J4310 电机编号 */,
+                                 float position_rad /**< 位置速度模式的目标位置，单位：弧度 */,
+                                 float velocity_rad_s /**< 位置速度模式的目标速度，单位：弧度每秒 */,
+                                 can_frame_t *frame /**< 用于写出待发送 CAN 帧的对象 */)
 {
     j4310_context_t *context;
 
@@ -466,9 +454,9 @@ bool J4310_BuildPositionVelocity(uint8_t motor_id,
 }
 
 /* 功能：构造 J4310 纯速度模式帧；用途：发送目标转速；返回 true 表示构帧成功。 */
-bool J4310_BuildVelocity(uint8_t motor_id,
-                         float velocity_rad_s,
-                         can_frame_t *frame)
+bool J4310_BuildVelocity(uint8_t motor_id /**< J4310 电机编号 */,
+                         float velocity_rad_s /**< 速度模式的目标速度，单位：弧度每秒 */,
+                         can_frame_t *frame /**< 用于写出待发送 CAN 帧的对象 */)
 {
     j4310_context_t *context;
 
@@ -487,7 +475,7 @@ bool J4310_BuildVelocity(uint8_t motor_id,
 }
 
 /* 功能：设置 J4310 软件转矩限制；用途：在构造控制帧时进一步约束输出；返回 true 表示限制合法并已保存。 */
-bool J4310_SetTorqueLimit(uint8_t motor_id, float torque_limit_nm)
+bool J4310_SetTorqueLimit(uint8_t motor_id /**< J4310 电机编号 */, float torque_limit_nm /**< 允许设置的转矩上限，单位：牛米 */)
 {
     j4310_context_t *context;
 
@@ -503,7 +491,7 @@ bool J4310_SetTorqueLimit(uint8_t motor_id, float torque_limit_nm)
 }
 
 /* 功能：解析 J4310 CAN 反馈并更新时间和故障信息；用途：维护闭环反馈快照；返回 true 表示该帧属于已注册节点且解析成功。 */
-bool J4310_OnFrame(const can_frame_t *frame, uint32_t tick_ms)
+bool J4310_OnFrame(const can_frame_t *frame /**< 待解析的 CAN 接收帧 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     j4310_context_t *context;
     volatile j4310_feedback_t *feedback;
@@ -581,7 +569,7 @@ bool J4310_OnFrame(const can_frame_t *frame, uint32_t tick_ms)
 }
 
 /* 功能：读取指定 J4310 的最新反馈快照；用途：供控制、诊断和在线调参使用；返回 true 表示已有有效反馈。 */
-bool J4310_GetFeedback(uint8_t motor_id, j4310_feedback_t *feedback)
+bool J4310_GetFeedback(uint8_t motor_id /**< J4310 电机编号 */, j4310_feedback_t *feedback /**< 用于写出最新 J4310 反馈的对象 */)
 {
     const j4310_context_t *context;
     uint32_t before;
@@ -612,7 +600,7 @@ bool J4310_GetFeedback(uint8_t motor_id, j4310_feedback_t *feedback)
 }
 
 /* 功能：读取达妙接收诊断快照；用途：向上位机报告有效帧和具体拒绝原因；返回 true 表示参数有效。 */
-bool J4310_GetRxDiagnostics(j4310_rx_diagnostics_t *diagnostics)
+bool J4310_GetRxDiagnostics(j4310_rx_diagnostics_t *diagnostics /**< 用于写出 J4310 接收帧诊断统计的对象 */)
 {
     uint32_t before;
     uint32_t after;
@@ -650,7 +638,7 @@ bool J4310_GetRxDiagnostics(j4310_rx_diagnostics_t *diagnostics)
 }
 
 /* 功能：启用或关闭指定 J4310 的 MIT 在线调参；用途：切换固定和动态 kp、kd；返回 true 表示设置成功。 */
-bool J4310_SetOnlineMitEnabled(uint8_t motor_id, bool enabled)
+bool J4310_SetOnlineMitEnabled(uint8_t motor_id /**< J4310 电机编号 */, bool enabled /**< 是否启用 J4310 在线 MIT 调参 */)
 {
     j4310_context_t *context;
 
@@ -665,8 +653,8 @@ bool J4310_SetOnlineMitEnabled(uint8_t motor_id, bool enabled)
 }
 
 /* 功能：读取指定 J4310 的 MIT 在线调参状态；用途：诊断当前增益和收敛情况；返回 true 表示状态已写出。 */
-bool J4310_GetOnlineMitState(uint8_t motor_id,
-                             j4310_online_mit_state_t *state)
+bool J4310_GetOnlineMitState(uint8_t motor_id /**< J4310 电机编号 */,
+                             j4310_online_mit_state_t *state /**< 用于写出 J4310 在线 MIT 调参状态的对象 */)
 {
     const j4310_context_t *context;
 

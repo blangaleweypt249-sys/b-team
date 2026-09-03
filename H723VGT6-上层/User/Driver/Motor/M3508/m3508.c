@@ -11,37 +11,24 @@
 
 #include "motor_online_tune.h"
 
-/** 机械臂 M3508 输出轴转子编码器每圈的计数值。 */
-#define M3508_ENCODER_COUNTS         8192U
-/** 机械臂 M3508 输出轴转子到机构输出轴的减速比。 */
-#define M3508_REDUCTION_RATIO        (3591.0f / 187.0f)
-/** 机械臂 M3508 输出轴电流命令的协议原始值满量程。 */
-#define M3508_CURRENT_RAW_MAX        16384
-/** 机械臂 M3508 输出轴协议满量程对应的电流，单位：安培。 */
-#define M3508_CURRENT_MAX_A          20.0f
-/** 角度换算使用的二倍圆周率数值。 */
-#define M3508_TWO_PI                 6.28318530718f
-/** 五次平滑插值曲线的一阶导数最大系数，用于根据行程和速度计算轨迹时长。 */
-#define M3508_QUINTIC_MAX_SPEED      1.875f
-/** 五次平滑插值曲线的二阶导数最大系数，用于根据行程和加速度计算轨迹时长。 */
-#define M3508_QUINTIC_MAX_ACCEL      5.7735026919f
-/** 机械臂 M3508 输出轴平滑位置轨迹允许使用的最短时间，单位：秒。 */
-#define M3508_MIN_TRAJECTORY_S       0.01f
-/** M3508 速度环自动整定允许持续的最长时间，单位：毫秒。 */
-#define M3508_AUTOTUNE_TIMEOUT_MS    15000U
-/** 机械臂 M3508 输出轴速度环自动整定需要采集的完整振荡周期数。 */
-#define M3508_AUTOTUNE_CYCLES        5U
-/** 机械臂 M3508 输出轴建立软件零点前编码器必须连续稳定的反馈帧数。 */
-#define M3508_ZERO_STABLE_FRAMES     5U
-/** 机械臂 M3508 输出轴置零期间相邻反馈仍可视为静止的最大编码器计数差。 */
-#define M3508_ZERO_MAX_STEP_COUNTS   128
-/** 机械臂 M3508 输出轴允许建立软件零点的最大转子速度，单位：转每分。 */
-#define M3508_ZERO_MAX_SPEED_RPM     30
+#define M3508_ENCODER_COUNTS         8192U /**< 机械臂 M3508 输出轴转子编码器每圈的计数值。 */
+#define M3508_REDUCTION_RATIO        (3591.0f / 187.0f) /**< 机械臂 M3508 输出轴转子到机构输出轴的减速比。 */
+#define M3508_CURRENT_RAW_MAX        16384 /**< 机械臂 M3508 输出轴电流命令的协议原始值满量程。 */
+#define M3508_CURRENT_MAX_A          20.0f /**< 机械臂 M3508 输出轴协议满量程对应的电流，单位：安培。 */
+#define M3508_TWO_PI                 6.28318530718f /**< 角度换算使用的二倍圆周率数值。 */
+#define M3508_QUINTIC_MAX_SPEED      1.875f /**< 五次平滑插值曲线的一阶导数最大系数，用于根据行程和速度计算轨迹时长。 */
+#define M3508_QUINTIC_MAX_ACCEL      5.7735026919f /**< 五次平滑插值曲线的二阶导数最大系数，用于根据行程和加速度计算轨迹时长。 */
+#define M3508_MIN_TRAJECTORY_S       0.01f /**< 机械臂 M3508 输出轴平滑位置轨迹允许使用的最短时间，单位：秒。 */
+#define M3508_AUTOTUNE_TIMEOUT_MS    15000U /**< M3508 速度环自动整定允许持续的最长时间，单位：毫秒。 */
+#define M3508_AUTOTUNE_CYCLES        5U /**< 机械臂 M3508 输出轴速度环自动整定需要采集的完整振荡周期数。 */
+#define M3508_ZERO_STABLE_FRAMES     5U /**< 机械臂 M3508 输出轴建立软件零点前编码器必须连续稳定的反馈帧数。 */
+#define M3508_ZERO_MAX_STEP_COUNTS   128 /**< 机械臂 M3508 输出轴置零期间相邻反馈仍可视为静止的最大编码器计数差。 */
+#define M3508_ZERO_MAX_SPEED_RPM     30 /**< 机械臂 M3508 输出轴允许建立软件零点的最大转子速度，单位：转每分。 */
 
 /** 保存 M3508 运行过程中需要集中管理的数据。 */
 typedef struct
 {
-    m3508_pid_cfg_t cfg; /**< M3508当前使用的配置参数。 */
+    m3508_pid_cfg_t cfg; /**< M3508 单个 PID 控制环的增益和限幅配置。 */
     float integral; /**< 当前积分累计值。 */
     float previous_error; /**< 上一次更新使用的误差。 */
     float full_integral_error; /**< PID 积分完全生效的误差范围。 */
@@ -52,8 +39,8 @@ typedef struct
 /** 保存 M3508 运行过程中需要集中管理的数据。 */
 typedef struct
 {
-    m3508_autotune_state_t state; /**< 当前运行状态。 */
-    float safety_velocity_rad_s; /**< M3508的当前速度，单位：弧度每秒。 */
+    m3508_autotune_state_t state; /**< M3508 速度环自动整定的对外状态。 */
+    float safety_velocity_rad_s; /**< 自动整定允许的安全速度上限，单位：弧度每秒。 */
     float phase_max_rad_s; /**< 当前继电整定半周期测得的最高速度，单位：弧度每秒。 */
     float phase_min_rad_s; /**< 当前继电整定半周期测得的最低速度，单位：弧度每秒。 */
     float positive_peak_rad_s; /**< 最近一个正向半周期记录的速度峰值，单位：弧度每秒。 */
@@ -81,20 +68,20 @@ typedef struct
     float current_limit_a; /**< M3508的电流上限，单位：安培。 */
     float position_vel_limit_rad_s; /**< 位置轨迹允许的最大输出轴速度，单位：弧度每秒。 */
     float acceleration_limit_rad_s2; /**< M3508的轨迹加速度，单位：弧度每二次方秒。 */
-    float speed_ramp_start_rad_s; /**< M3508的当前速度，单位：弧度每秒。 */
+    float speed_ramp_start_rad_s; /**< M3508 速度斜坡启动时的参考速度，单位：弧度每秒。 */
     float trajectory_start_rad; /**< 当前平滑轨迹的起始输出轴位置，单位：弧度。 */
     float trajectory_delta_rad; /**< 当前轨迹从起点到目标的输出轴位移，单位：弧度。 */
     float trajectory_duration_s; /**< 当前轨迹计划执行的总时间，单位：秒。 */
     float trajectory_elapsed_s; /**< 当前轨迹已经执行的时间，单位：秒。 */
-    bool speed_reference_valid; /**< M3508的轨迹参考速度。 */
+    bool speed_reference_valid; /**< M3508 速度斜坡参考值是否已经初始化。 */
     bool trajectory_pending; /**< 位置目标改变后是否等待创建新的平滑轨迹。 */
     uint32_t command_updated_at_ms; /**< 最近一次更新电机目标的系统毫秒时刻。 */
     uint32_t feedback_monitor_started_at_ms; /**< 开始执行反馈超时监测的系统毫秒时刻。 */
     volatile m3508_timeout_stats_t timeout_stats; /**< 当前电机累计的命令和反馈超时状态。 */
-    m3508_pid_t speed_pid; /**< M3508对应控制环的 PID 参数或运行状态。 */
-    m3508_pid_cfg_t speed_pid_base; /**< M3508对应控制环的 PID 参数或运行状态。 */
-    motor_online_pid_t speed_online_pid; /**< M3508对应控制环的 PID 参数或运行状态。 */
-    m3508_pid_t position_pid; /**< M3508对应控制环的 PID 参数或运行状态。 */
+    m3508_pid_t speed_pid; /**< M3508 速度环 PID 运行状态。 */
+    m3508_pid_cfg_t speed_pid_base; /**< M3508 速度环在线调参前的基础 PID 配置。 */
+    motor_online_pid_t speed_online_pid; /**< M3508 速度环在线 PID 调参状态。 */
+    m3508_pid_t position_pid; /**< M3508 位置环 PID 运行状态。 */
     m3508_motion_state_t motion; /**< 当前速度斜坡和位置轨迹的诊断快照。 */
     m3508_autotune_t auto_tune; /**< 速度环继电自动整定的内部运行状态。 */
 } m3508_context_t;
@@ -104,20 +91,20 @@ static m3508_context_t
     m3508_context[M3508_CAN_BUS_COUNT][M3508_MOTOR_COUNT];
 
 /* 功能：判断浮点数是否有限；用途：过滤 M3508 配置和目标中的异常值；返回 true 表示数值可用。 */
-static bool M3508_IsFinite(float value /* 需要检查、限幅或编码的输入值 */)
+static bool M3508_IsFinite(float value /**< 待检查或限幅的 M3508 控制量 */)
 {
     return (value == value) && (value <= FLT_MAX) && (value >= -FLT_MAX);
 }
 
 /* 功能：检查 M3508 的 CAN 总线号和节点号；用途：保护上下文数组索引与分组路由；返回 true 表示地址合法。 */
-static bool M3508_IsValidAddress(uint8_t can_bus /* CAN 总线编号 */, uint8_t motor_id /* DJI 电机编号 */)
+static bool M3508_IsValidAddress(uint8_t can_bus /**< CAN 总线编号 */, uint8_t motor_id /**< DJI 电机编号 */)
 {
     return (can_bus >= 1U) && (can_bus <= M3508_CAN_BUS_COUNT) &&
            (motor_id >= 1U) && (motor_id <= M3508_MOTOR_COUNT);
 }
 
 /* 功能：校验 M3508 PID 增益及限幅参数；用途：防止非法控制参数进入闭环；返回 true 表示配置可用。 */
-static bool M3508_IsValidPid(const m3508_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */)
+static bool M3508_IsValidPid(const m3508_pid_cfg_t *cfg /**< 待设置或校验的 M3508 PID 配置 */)
 {
     return (cfg != NULL) && M3508_IsFinite(cfg->kp) &&
            M3508_IsFinite(cfg->ki) && M3508_IsFinite(cfg->kd) &&
@@ -128,8 +115,8 @@ static bool M3508_IsValidPid(const m3508_pid_cfg_t *cfg /* 初始化或更新时
 }
 
 /* 功能：按总线和节点定位 M3508 运行上下文；用途：访问目标、反馈、PID 和统计状态；返回 NULL 表示地址无效。 */
-static m3508_context_t *M3508_GetContext(uint8_t can_bus /* CAN 总线编号 */,
-                                         uint8_t motor_id /* DJI 电机编号 */)
+static m3508_context_t *M3508_GetContext(uint8_t can_bus /**< CAN 总线编号 */,
+                                         uint8_t motor_id /**< DJI 电机编号 */)
 {
     if (!M3508_IsValidAddress(can_bus, motor_id))
     {
@@ -139,7 +126,7 @@ static m3508_context_t *M3508_GetContext(uint8_t can_bus /* CAN 总线编号 */,
 }
 
 /* 功能：把浮点数限制在给定区间；用途：约束积分、电流、速度和轨迹量；返回值表示限幅结果。 */
-static float M3508_Clamp(float value /* 需要检查、限幅或编码的输入值 */, float min /* 允许输出的下限 */, float max /* 允许输出的上限 */)
+static float M3508_Clamp(float value /**< 待检查或限幅的 M3508 控制量 */, float min /**< 允许输出的下限 */, float max /**< 允许输出的上限 */)
 {
     if (value < min)
     {
@@ -153,14 +140,14 @@ static float M3508_Clamp(float value /* 需要检查、限幅或编码的输入�
 }
 
 /* 功能：读取大端 16 位无符号整数；用途：解析 DJI M3508 反馈字段；返回值表示解码结果。 */
-static uint16_t M3508_ReadU16Be(const uint8_t *data /* 待处理数据的首地址 */)
+static uint16_t M3508_ReadU16Be(const uint8_t *data /**< M3508反馈帧中大端16位字段的首地址 */)
 {
     return ((uint16_t)data[0] << 8U) | data[1];
 }
 
 /* 功能：计算跨越编码器零点后的最短计数差；用途：展开多圈转子位置；返回值表示带方向的增量计数。 */
-static int32_t M3508_EncoderDelta(uint16_t encoder /* 当前反馈的单圈编码器原始值 */,
-                                  uint16_t previous_encoder /* 上一帧反馈的单圈编码器原始值 */)
+static int32_t M3508_EncoderDelta(uint16_t encoder /**< 当前反馈的单圈编码器原始值 */,
+                                  uint16_t previous_encoder /**< 上一帧反馈的单圈编码器原始值 */)
 {
     int32_t delta;
 
@@ -177,7 +164,7 @@ static int32_t M3508_EncoderDelta(uint16_t encoder /* 当前反馈的单圈编�
 }
 
 /* 功能：清空 M3508 单个 PID 的积分和历史误差；用途：模式切换或停机后重新起算；无返回值表示运行状态已复位。 */
-static void M3508_ResetPid(m3508_pid_t *pid /* 需要操作的 PID 控制器 */)
+static void M3508_ResetPid(m3508_pid_t *pid /**< 需要操作的 PID 控制器 */)
 {
     pid->integral = 0.0f;
     pid->previous_error = 0.0f;
@@ -185,10 +172,10 @@ static void M3508_ResetPid(m3508_pid_t *pid /* 需要操作的 PID 控制器 */)
 }
 
 /* 功能：执行一次带积分和输出限幅的 PID 计算；用途：实现位置环或基础速度环；返回值表示限幅后的控制量。 */
-static float M3508_PidCalc(m3508_pid_t *pid /* 需要操作的 PID 控制器 */,
-                           float error /* 当前控制误差 */,
-                           float dt_s /* 本次计算的控制周期，单位：秒 */,
-                           float output_limit /* PID 控制器输出的绝对值上限 */)
+static float M3508_PidCalc(m3508_pid_t *pid /**< 需要操作的 PID 控制器 */,
+                           float error /**< 当前控制误差 */,
+                           float dt_s /**< 本次计算的控制周期，单位：秒 */,
+                           float output_limit /**< PID 控制器输出的绝对值上限 */)
 {
     float derivative;
     float previous_integral;
@@ -261,8 +248,8 @@ static float M3508_PidCalc(m3508_pid_t *pid /* 需要操作的 PID 控制器 */,
 }
 
 /* 功能：按当前速度 PID 配置在线调参器；用途：建立自适应增益边界和学习参数；返回 true 表示初始化成功。 */
-static bool M3508_ConfigureOnlinePid(m3508_context_t *context /* 函数读取或写入的对象地址 */,
-                                     bool enabled /* 是否启用对应功能 */)
+static bool M3508_ConfigureOnlinePid(m3508_context_t *context /**< 需要更新的 M3508 驱动上下文 */,
+                                     bool enabled /**< 是否启用 M3508 速度环在线 PID 调参 */)
 {
     motor_online_pid_cfg_t cfg;
     const m3508_pid_cfg_t *base;
@@ -295,10 +282,10 @@ static bool M3508_ConfigureOnlinePid(m3508_context_t *context /* 函数读取或
 }
 
 /* 功能：使用在线增益执行 M3508 速度环计算；用途：把目标转速转换为电流命令；返回值表示限幅后的电流安培值。 */
-static float M3508_SpeedPidCalc(m3508_context_t *context /* 函数读取或写入的对象地址 */,
-                                float error /* 当前控制误差 */,
-                                float dt_s /* 本次计算的控制周期，单位：秒 */,
-                                float output_limit /* PID 控制器输出的绝对值上限 */)
+static float M3508_SpeedPidCalc(m3508_context_t *context /**< 需要更新的 M3508 驱动上下文 */,
+                                float error /**< 当前控制误差 */,
+                                float dt_s /**< 本次计算的控制周期，单位：秒 */,
+                                float output_limit /**< PID 控制器输出的绝对值上限 */)
 {
     motor_online_gains_t gains;
 
@@ -317,7 +304,7 @@ static float M3508_SpeedPidCalc(m3508_context_t *context /* 函数读取或写�
 }
 
 /* 功能：将安培值换算并限制为 M3508 原始电流字段；用途：填充 DJI 分组帧；返回值表示协议电流值。 */
-static int16_t M3508_CurrentToRaw(float current_a /* 目标或限制电流，单位：安培 */)
+static int16_t M3508_CurrentToRaw(float current_a /**< 目标或限制电流，单位：安培 */)
 {
     float raw;
 
@@ -333,7 +320,7 @@ static int16_t M3508_CurrentToRaw(float current_a /* 目标或限制电流，单
 }
 
 /* 功能：复位 M3508 双环 PID、轨迹、斜坡和在线调参状态；用途：停机或控制模式改变时清除历史；无返回值表示状态已归零。 */
-static void M3508_ResetControl(m3508_context_t *context /* 函数读取或写入的对象地址 */)
+static void M3508_ResetControl(m3508_context_t *context /**< 需要更新的 M3508 驱动上下文 */)
 {
     M3508_ResetPid(&context->speed_pid);
     MotorOnlinePid_Reset(&context->speed_online_pid, true);
@@ -347,8 +334,8 @@ static void M3508_ResetControl(m3508_context_t *context /* 函数读取或写入
 }
 
 /* 功能：以当前反馈为起点建立新的位置轨迹；用途：让位置目标按限速和加速度平滑变化；无返回值表示轨迹状态已初始化。 */
-static void M3508_BeginPositionTrajectory(m3508_context_t *context /* 函数读取或写入的对象地址 */,
-                                           float position_rad /* 目标或反馈位置，单位：弧度 */)
+static void M3508_BeginPositionTrajectory(m3508_context_t *context /**< 需要更新的 M3508 驱动上下文 */,
+                                           float position_rad /**< 新轨迹起点的实测位置，单位：弧度 */)
 {
     float distance_rad;
     float speed_duration_s;
@@ -379,8 +366,8 @@ static void M3508_BeginPositionTrajectory(m3508_context_t *context /* 函数读�
 }
 
 /* 功能：推进一个周期的位置轨迹位置和速度；用途：生成受限的内部位置给定；无返回值表示轨迹状态已更新。 */
-static void M3508_UpdatePositionTrajectory(m3508_context_t *context /* 函数读取或写入的对象地址 */,
-                                            float dt_s /* 本次计算的控制周期，单位：秒 */)
+static void M3508_UpdatePositionTrajectory(m3508_context_t *context /**< 需要更新的 M3508 驱动上下文 */,
+                                            float dt_s /**< 本次计算的控制周期，单位：秒 */)
 {
     float tau;
     float tau2;
@@ -432,9 +419,9 @@ static void M3508_UpdatePositionTrajectory(m3508_context_t *context /* 函数读
 }
 
 /* 功能：按加速度限制推进速度给定；用途：避免速度命令阶跃；无返回值表示内部参考速度已更新。 */
-static void M3508_UpdateSpeedRamp(m3508_context_t *context /* 函数读取或写入的对象地址 */,
-                                  float actual_velocity_rad_s /* J4310 当前实测关节速度，单位：弧度每秒 */,
-                                  float dt_s /* 本次计算的控制周期，单位：秒 */)
+static void M3508_UpdateSpeedRamp(m3508_context_t *context /**< 需要更新的 M3508 驱动上下文 */,
+                                  float actual_velocity_rad_s /**< J4310 当前实测关节速度，单位：弧度每秒 */,
+                                  float dt_s /**< 本次计算的控制周期，单位：秒 */)
 {
     float delta_rad_s;
     float step_rad_s;
@@ -472,7 +459,7 @@ static void M3508_UpdateSpeedRamp(m3508_context_t *context /* 函数读取或写
 }
 
 /* 功能：将 M3508 自动整定标记为失败并清理测试输出；用途：统一处理超时或非法工况；无返回值表示整定已终止。 */
-static void M3508_FailAutoTune(m3508_context_t *context /* 函数读取或写入的对象地址 */)
+static void M3508_FailAutoTune(m3508_context_t *context /**< 需要更新的 M3508 驱动上下文 */)
 {
     context->auto_tune.state.status = M3508_AUTOTUNE_FAILED;
     context->mode = M3508_MODE_STOP;
@@ -481,9 +468,9 @@ static void M3508_FailAutoTune(m3508_context_t *context /* 函数读取或写入
 }
 
 /* 功能：执行 M3508 速度环自动整定的一步状态机；用途：施加测试激励并估算 PID；返回值表示本周期测试电流。 */
-static float M3508_AutoTuneStep(m3508_context_t *context /* 函数读取或写入的对象地址 */,
-                                float velocity_rad_s /* 目标或反馈速度，单位：弧度每秒 */,
-                                uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static float M3508_AutoTuneStep(m3508_context_t *context /**< 需要更新的 M3508 驱动上下文 */,
+                                float velocity_rad_s /**< M3508 当前实测速度，单位：弧度每秒 */,
+                                uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     m3508_autotune_t *tune;
 
@@ -577,10 +564,10 @@ static float M3508_AutoTuneStep(m3508_context_t *context /* 函数读取或写�
 }
 
 /* 功能：根据反馈新鲜度更新 M3508 超时统计；用途：累计连续丢帧、恢复和最大间隔；无返回值表示统计已刷新。 */
-static void M3508_UpdateTimeoutStats(m3508_context_t *context /* 函数读取或写入的对象地址 */,
-                                     bool feedback_valid /* 当前反馈快照是否有效 */,
-                                     const m3508_feedback_t *feedback /* 用于写出或读取最新反馈的对象 */,
-                                     uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void M3508_UpdateTimeoutStats(m3508_context_t *context /**< 需要更新的 M3508 驱动上下文 */,
+                                     bool feedback_valid /**< 当前反馈快照是否有效 */,
+                                     const m3508_feedback_t *feedback /**< 本周期用于更新 M3508 超时统计的反馈快照 */,
+                                     uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     bool command_timed_out;
     bool feedback_timed_out;
@@ -624,7 +611,7 @@ static void M3508_UpdateTimeoutStats(m3508_context_t *context /* 函数读取或
 }
 
 /* 功能：初始化全部 M3508 上下文和默认控制参数；用途：建立各 CAN 总线的反馈与双环控制状态；返回 true 表示配置被接受。 */
-bool M3508_Init(const m3508_cfg_t *cfg)
+bool M3508_Init(const m3508_cfg_t *cfg /**< M3508 电流限幅、轨迹及超时配置 */)
 {
     uint32_t bus_index;
     uint32_t motor_index;
@@ -679,11 +666,11 @@ bool M3508_Init(const m3508_cfg_t *cfg)
 }
 
 /* 功能：设置指定 M3508 的停止、电流、速度或位置目标；用途：更新下一控制周期的命令；返回 true 表示模式和目标合法。 */
-bool M3508_SetTarget(uint8_t can_bus,
-                     uint8_t motor_id,
-                     m3508_mode_t mode,
-                     float target,
-                     uint32_t tick_ms)
+bool M3508_SetTarget(uint8_t can_bus /**< CAN 总线编号 */,
+                     uint8_t motor_id /**< DJI 电机编号 */,
+                     m3508_mode_t mode /**< M3508 目标值采用的控制模式 */,
+                     float target /**< 按 M3508 控制模式解释的电流、速度或位置目标 */,
+                     uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     m3508_context_t *context;
     bool mode_changed;
@@ -747,9 +734,9 @@ bool M3508_SetTarget(uint8_t can_bus,
 }
 
 /* 功能：读取指定 M3508 的最新反馈；用途：获取编码器、速度、电流和温度；返回 true 表示已收到有效帧。 */
-bool M3508_GetFeedback(uint8_t can_bus,
-                       uint8_t motor_id,
-                       m3508_feedback_t *feedback)
+bool M3508_GetFeedback(uint8_t can_bus /**< CAN 总线编号 */,
+                       uint8_t motor_id /**< DJI 电机编号 */,
+                       m3508_feedback_t *feedback /**< 用于写出最新 M3508 反馈的对象 */)
 {
     const m3508_context_t *context;
     uint32_t before;
@@ -781,10 +768,10 @@ bool M3508_GetFeedback(uint8_t can_bus,
 }
 
 /* 功能：读取带零点和多圈位置的 M3508 反馈快照；用途：供诊断与位置显示使用；返回 true 表示快照有效。 */
-bool M3508_GetFeedbackSnapshot(uint8_t can_bus,
-                               uint8_t motor_id,
-                               m3508_feedback_t *feedback,
-                               bool *zero_valid)
+bool M3508_GetFeedbackSnapshot(uint8_t can_bus /**< CAN 总线编号 */,
+                               uint8_t motor_id /**< DJI 电机编号 */,
+                               m3508_feedback_t *feedback /**< 用于写出最新 M3508 反馈的对象 */,
+                               bool *zero_valid /**< 用于写出电机软件零点是否有效 */)
 {
     const m3508_context_t *context;
     uint32_t before;
@@ -816,9 +803,9 @@ bool M3508_GetFeedbackSnapshot(uint8_t can_bus,
 }
 
 /* 功能：读取指定 M3508 的通信超时统计；用途：诊断丢帧、恢复次数和帧间隔；返回 true 表示统计已写出。 */
-bool M3508_GetTimeoutStats(uint8_t can_bus,
-                           uint8_t motor_id,
-                           m3508_timeout_stats_t *stats)
+bool M3508_GetTimeoutStats(uint8_t can_bus /**< CAN 总线编号 */,
+                           uint8_t motor_id /**< DJI 电机编号 */,
+                           m3508_timeout_stats_t *stats /**< 用于写出 M3508 命令与反馈超时统计的对象 */)
 {
     const m3508_context_t *context;
 
@@ -838,10 +825,10 @@ bool M3508_GetTimeoutStats(uint8_t can_bus,
 }
 
 /* 功能：解析 M3508 DJI 反馈帧并展开位置；用途：更新闭环反馈、时间戳和通信统计；返回 true 表示帧地址有效。 */
-bool M3508_OnFrame(uint8_t can_bus,
-                    uint8_t motor_id,
-                    const can_frame_t *frame,
-                    uint32_t tick_ms)
+bool M3508_OnFrame(uint8_t can_bus /**< CAN 总线编号 */,
+                    uint8_t motor_id /**< DJI 电机编号 */,
+                    const can_frame_t *frame /**< 待解析的 CAN 接收帧 */,
+                    uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     m3508_context_t *context;
     volatile m3508_feedback_t *feedback;
@@ -940,10 +927,10 @@ bool M3508_OnFrame(uint8_t can_bus,
 }
 
 /* 功能：根据当前模式和反馈计算 M3508 原始电流命令；用途：驱动双环控制、轨迹和自动整定；返回 true 表示成功写出电流。 */
-bool M3508_CalcCurrentRaw(uint8_t can_bus,
-                          uint8_t motor_id,
-                          uint32_t tick_ms,
-                          int16_t *current_raw)
+bool M3508_CalcCurrentRaw(uint8_t can_bus /**< CAN 总线编号 */,
+                          uint8_t motor_id /**< DJI 电机编号 */,
+                          uint32_t tick_ms /**< 当前系统毫秒时刻 */,
+                          int16_t *current_raw /**< DJI 协议中的电流命令原始值 */)
 {
     m3508_context_t *context;
     m3508_feedback_t feedback;
@@ -1087,9 +1074,9 @@ bool M3508_CalcCurrentRaw(uint8_t can_bus,
 }
 
 /* 功能：设置指定 M3508 的速度环 PID；用途：调整速度响应并重新配置在线调参；返回 true 表示参数有效。 */
-bool M3508_SetSpeedPid(uint8_t can_bus,
-                       uint8_t motor_id,
-                       const m3508_pid_cfg_t *cfg)
+bool M3508_SetSpeedPid(uint8_t can_bus /**< CAN 总线编号 */,
+                       uint8_t motor_id /**< DJI 电机编号 */,
+                       const m3508_pid_cfg_t *cfg /**< 待设置或校验的 M3508 PID 配置 */)
 {
     m3508_context_t *context;
     bool enabled;
@@ -1111,9 +1098,9 @@ bool M3508_SetSpeedPid(uint8_t can_bus,
 }
 
 /* 功能：设置指定 M3508 的位置环 PID；用途：调整位置到速度的外环响应；返回 true 表示参数有效。 */
-bool M3508_SetPositionPid(uint8_t can_bus,
-                          uint8_t motor_id,
-                          const m3508_pid_cfg_t *cfg)
+bool M3508_SetPositionPid(uint8_t can_bus /**< CAN 总线编号 */,
+                          uint8_t motor_id /**< DJI 电机编号 */,
+                          const m3508_pid_cfg_t *cfg /**< 待设置或校验的 M3508 PID 配置 */)
 {
     m3508_context_t *context;
 
@@ -1128,9 +1115,9 @@ bool M3508_SetPositionPid(uint8_t can_bus,
 }
 
 /* 功能：设置指定 M3508 的软件电流限制；用途：约束所有闭环和直接控制输出；返回 true 表示限制合法。 */
-bool M3508_SetCurrentLimit(uint8_t can_bus,
-                           uint8_t motor_id,
-                           float current_limit_a)
+bool M3508_SetCurrentLimit(uint8_t can_bus /**< CAN 总线编号 */,
+                           uint8_t motor_id /**< DJI 电机编号 */,
+                           float current_limit_a /**< 允许输出的最大电流，单位：安培 */)
 {
     m3508_context_t *context;
 
@@ -1146,9 +1133,9 @@ bool M3508_SetCurrentLimit(uint8_t can_bus,
 }
 
 /* 功能：设置 M3508 位置模式的最大速度；用途：限制位置轨迹运动速度；返回 true 表示限制合法。 */
-bool M3508_SetPositionVelocityLimit(uint8_t can_bus,
-                                    uint8_t motor_id,
-                                    float velocity_limit_rad_s)
+bool M3508_SetPositionVelocityLimit(uint8_t can_bus /**< CAN 总线编号 */,
+                                    uint8_t motor_id /**< DJI 电机编号 */,
+                                    float velocity_limit_rad_s /**< 允许设置的速度上限，单位：弧度每秒 */)
 {
     m3508_context_t *context;
 
@@ -1163,9 +1150,9 @@ bool M3508_SetPositionVelocityLimit(uint8_t can_bus,
 }
 
 /* 功能：设置 M3508 速度变化的加速度限制；用途：平滑速度和位置轨迹；返回 true 表示限制合法。 */
-bool M3508_SetAccelerationLimit(uint8_t can_bus,
-                                uint8_t motor_id,
-                                float acceleration_limit_rad_s2)
+bool M3508_SetAccelerationLimit(uint8_t can_bus /**< CAN 总线编号 */,
+                                uint8_t motor_id /**< DJI 电机编号 */,
+                                float acceleration_limit_rad_s2 /**< 允许设置的加速度上限，单位：弧度每二次方秒 */)
 {
     m3508_context_t *context;
 
@@ -1180,9 +1167,9 @@ bool M3508_SetAccelerationLimit(uint8_t can_bus,
 }
 
 /* 功能：启用或关闭指定 M3508 的速度环在线调参；用途：切换固定与自适应 PID；返回 true 表示设置成功。 */
-bool M3508_SetOnlinePidEnabled(uint8_t can_bus,
-                               uint8_t motor_id,
-                               bool enabled)
+bool M3508_SetOnlinePidEnabled(uint8_t can_bus /**< CAN 总线编号 */,
+                               uint8_t motor_id /**< DJI 电机编号 */,
+                               bool enabled /**< 是否启用 M3508 速度环在线 PID 调参 */)
 {
     m3508_context_t *context;
 
@@ -1198,7 +1185,7 @@ bool M3508_SetOnlinePidEnabled(uint8_t can_bus,
 }
 
 /* 功能：把当前 M3508 多圈位置记录为软件零点；用途：建立输出轴相对位置基准；返回 true 表示已有反馈且置零成功。 */
-bool M3508_ZeroPosition(uint8_t can_bus, uint8_t motor_id)
+bool M3508_ZeroPosition(uint8_t can_bus /**< CAN 总线编号 */, uint8_t motor_id /**< DJI 电机编号 */)
 {
     m3508_context_t *context;
 
@@ -1218,9 +1205,9 @@ bool M3508_ZeroPosition(uint8_t can_bus, uint8_t motor_id)
 }
 
 /* 功能：读取指定 M3508 的在线 PID 调参状态；用途：观察当前增益、误差和活动规则；返回 true 表示状态已写出。 */
-bool M3508_GetOnlinePidState(uint8_t can_bus,
-                             uint8_t motor_id,
-                             m3508_online_pid_state_t *state)
+bool M3508_GetOnlinePidState(uint8_t can_bus /**< CAN 总线编号 */,
+                             uint8_t motor_id /**< DJI 电机编号 */,
+                             m3508_online_pid_state_t *state /**< 用于写出 M3508 在线 PID 调参状态的对象 */)
 {
     const m3508_context_t *context;
 
@@ -1241,9 +1228,9 @@ bool M3508_GetOnlinePidState(uint8_t can_bus,
 }
 
 /* 功能：读取 M3508 内部斜坡和位置轨迹状态；用途：诊断当前平滑给定及轨迹是否活动；返回 true 表示状态有效。 */
-bool M3508_GetMotionState(uint8_t can_bus,
-                          uint8_t motor_id,
-                          m3508_motion_state_t *state)
+bool M3508_GetMotionState(uint8_t can_bus /**< CAN 总线编号 */,
+                          uint8_t motor_id /**< DJI 电机编号 */,
+                          m3508_motion_state_t *state /**< 用于写出 M3508 斜坡与位置轨迹状态的对象 */)
 {
     const m3508_context_t *context;
 
@@ -1257,9 +1244,9 @@ bool M3508_GetMotionState(uint8_t can_bus,
 }
 
 /* 功能：读取指定 M3508 的速度环 PID 配置；用途：显示或保存当前控制参数；返回 true 表示配置已写出。 */
-bool M3508_GetSpeedPid(uint8_t can_bus,
-                       uint8_t motor_id,
-                       m3508_pid_cfg_t *cfg)
+bool M3508_GetSpeedPid(uint8_t can_bus /**< CAN 总线编号 */,
+                       uint8_t motor_id /**< DJI 电机编号 */,
+                       m3508_pid_cfg_t *cfg /**< 用于写出当前 M3508 PID 配置的对象 */)
 {
     const m3508_context_t *context;
 
@@ -1273,9 +1260,9 @@ bool M3508_GetSpeedPid(uint8_t can_bus,
 }
 
 /* 功能：读取指定 M3508 的位置环 PID 配置；用途：显示或保存当前控制参数；返回 true 表示配置已写出。 */
-bool M3508_GetPositionPid(uint8_t can_bus,
-                          uint8_t motor_id,
-                          m3508_pid_cfg_t *cfg)
+bool M3508_GetPositionPid(uint8_t can_bus /**< CAN 总线编号 */,
+                          uint8_t motor_id /**< DJI 电机编号 */,
+                          m3508_pid_cfg_t *cfg /**< 用于写出当前 M3508 PID 配置的对象 */)
 {
     const m3508_context_t *context;
 
@@ -1289,12 +1276,12 @@ bool M3508_GetPositionPid(uint8_t can_bus,
 }
 
 /* 功能：启动指定 M3508 的速度环自动整定；用途：通过继电反馈测试估算控制增益；返回 true 表示整定已进入运行态。 */
-bool M3508_StartSpeedAutoTune(uint8_t can_bus,
-                              uint8_t motor_id,
-                              float relay_current_a,
-                              float hysteresis_rad_s,
-                              float safety_velocity_rad_s,
-                              uint32_t tick_ms)
+bool M3508_StartSpeedAutoTune(uint8_t can_bus /**< CAN 总线编号 */,
+                              uint8_t motor_id /**< DJI 电机编号 */,
+                              float relay_current_a /**< 自动整定施加的继电测试电流，单位：安培 */,
+                              float hysteresis_rad_s /**< 自动整定切换电流方向的速度迟滞带，单位：弧度每秒 */,
+                              float safety_velocity_rad_s /**< 自动整定允许达到的安全速度上限，单位：弧度每秒 */,
+                              uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     m3508_context_t *context;
     m3508_feedback_t feedback;
@@ -1331,7 +1318,7 @@ bool M3508_StartSpeedAutoTune(uint8_t can_bus,
 }
 
 /* 功能：取消正在进行的 M3508 自动整定；用途：响应用户停止或安全条件变化；返回 true 表示地址有效并已取消。 */
-bool M3508_CancelAutoTune(uint8_t can_bus, uint8_t motor_id)
+bool M3508_CancelAutoTune(uint8_t can_bus /**< CAN 总线编号 */, uint8_t motor_id /**< DJI 电机编号 */)
 {
     m3508_context_t *context;
 
@@ -1348,9 +1335,9 @@ bool M3508_CancelAutoTune(uint8_t can_bus, uint8_t motor_id)
 }
 
 /* 功能：读取指定 M3508 的自动整定状态和结果；用途：向调试界面报告进度、参数或失败原因；返回 true 表示状态已写出。 */
-bool M3508_GetAutoTuneState(uint8_t can_bus,
-                            uint8_t motor_id,
-                            m3508_autotune_state_t *state)
+bool M3508_GetAutoTuneState(uint8_t can_bus /**< CAN 总线编号 */,
+                            uint8_t motor_id /**< DJI 电机编号 */,
+                            m3508_autotune_state_t *state /**< 用于写出 M3508 自动整定状态和结果的对象 */)
 {
     const m3508_context_t *context;
 

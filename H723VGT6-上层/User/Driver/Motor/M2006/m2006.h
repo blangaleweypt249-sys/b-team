@@ -4,20 +4,16 @@
  */
 
 #ifndef M2006_H
-/** 防止 m2006.h 被重复包含。 */
-#define M2006_H
+#define M2006_H /**< 防止 m2006.h 被重复包含。 */
 
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "can_frame.h"
 
-/** 驱动可同时管理的 CAN 总线数量。 */
-#define M2006_CAN_BUS_COUNT  3U
-/** 该模块可同时管理的M2006 输出轴数量。 */
-#define M2006_MOTOR_COUNT    8U
-/** M2006 输出轴默认使用的加速度上限，单位：弧度每二次方秒。 */
-#define M2006_DEFAULT_ACCEL_LIMIT_RAD_S2 31.41592654f
+#define M2006_CAN_BUS_COUNT  3U /**< M2006 驱动可同时管理的 CAN 总线数量。 */
+#define M2006_MOTOR_COUNT    8U /**< M2006 驱动可同时管理的电机数量。 */
+#define M2006_DEFAULT_ACCEL_LIMIT_RAD_S2 31.41592654f /**< M2006 输出轴默认使用的加速度上限，单位：弧度每二次方秒。 */
 
 /** 表示 M2006 可选择的工作模式。 */
 typedef enum
@@ -41,7 +37,7 @@ typedef struct
 /** 保存 M2006 当前运行状态和中间计算数据。 */
 typedef struct
 {
-    bool enabled; /**< 对应控制功能是否启用。 */
+    bool enabled; /**< M2006 速度环在线 PID 调参是否启用。 */
     uint8_t strategy; /**< 在线调参器当前采用的增益调整策略。 */
     uint8_t active_rule; /**< 本周期实际生效的专家调整规则。 */
     float applied_kp; /**< 本控制周期实际应用的比例增益。 */
@@ -76,7 +72,7 @@ typedef enum
 /** 保存 M2006 当前运行状态和中间计算数据。 */
 typedef struct
 {
-    m2006_autotune_status_t status; /**< 当前处理状态。 */
+    m2006_autotune_status_t status; /**< M2006 速度环自动整定状态。 */
     float relay_current_a; /**< 继电自动整定施加的测试电流幅值，单位：安培。 */
     float hysteresis_rad_s; /**< 继电自动整定切换电流方向的速度迟滞带，单位：弧度每秒。 */
     float oscillation_amplitude_rad_s; /**< 自动整定测得的稳态速度振荡幅值，单位：弧度每秒。 */
@@ -90,17 +86,17 @@ typedef struct
 {
     float current_limit_a; /**< M2006的电流上限，单位：安培。 */
     float position_vel_limit_rad_s; /**< 位置轨迹允许的最大输出轴速度，单位：弧度每秒。 */
-    float acceleration_limit_rad_s2; /**< M2006的轨迹加速度，单位：弧度每二次方秒。 */
-    uint32_t feedback_timeout_ms; /**< 判定对应通信或命令超时的时间，单位：毫秒。 */
-    uint32_t command_timeout_ms; /**< 判定对应通信或命令超时的时间，单位：毫秒。 */
-    m2006_pid_cfg_t speed_pid; /**< M2006对应控制环的 PID 参数或运行状态。 */
-    m2006_pid_cfg_t position_pid; /**< M2006对应控制环的 PID 参数或运行状态。 */
+    float acceleration_limit_rad_s2; /**< M2006 输出轴允许的最大加速度，单位：弧度每二次方秒。 */
+    uint32_t feedback_timeout_ms; /**< M2006 反馈离线判定时间，单位：毫秒。 */
+    uint32_t command_timeout_ms; /**< M2006 控制命令失效时间，单位：毫秒。 */
+    m2006_pid_cfg_t speed_pid; /**< M2006 速度环 PID 参数。 */
+    m2006_pid_cfg_t position_pid; /**< M2006 位置环 PID 参数。 */
 } m2006_cfg_t;
 
 /** 保存 M2006 最近一次有效反馈及其时间信息。 */
 typedef struct
 {
-    uint8_t can_bus; /**< 电机或数据帧所在的 CAN 总线编号。 */
+    uint8_t can_bus; /**< 该 M2006 反馈所属的 CAN 总线编号。 */
     uint8_t motor_id; /**< DJI 电机编号。 */
     uint16_t rotor_encoder; /**< 最近反馈的单圈转子编码器原始值。 */
     int16_t rotor_speed_rpm; /**< M2006的当前速度，单位：转每分。 */
@@ -124,90 +120,90 @@ typedef struct
 } m2006_timeout_stats_t;
 
 /* 功能：初始化全部 M2006 上下文和默认控制参数；用途：建立各 CAN 总线的反馈与双环控制状态；返回 true 表示配置被接受。 */
-bool M2006_Init(const m2006_cfg_t *cfg /* 初始化或更新时使用的配置参数 */);
+bool M2006_Init(const m2006_cfg_t *cfg /**< M2006 电流限幅、轨迹及超时配置 */);
 /* 功能：设置指定 M2006 的停止、电流、速度或位置目标；用途：更新下一控制周期的命令；返回 true 表示模式和目标合法。 */
-bool M2006_SetTarget(uint8_t can_bus /* CAN 总线编号 */,
-                     uint8_t motor_id /* DJI 电机编号 */,
-                     m2006_mode_t mode /* 需要设置或判断的工作模式 */,
-                     float target /* 本次需要应用的控制目标 */,
-                     uint32_t tick_ms /* 当前系统毫秒时刻 */);
+bool M2006_SetTarget(uint8_t can_bus /**< CAN 总线编号 */,
+                     uint8_t motor_id /**< DJI 电机编号 */,
+                     m2006_mode_t mode /**< M2006 目标值采用的控制模式 */,
+                     float target /**< 按 M2006 控制模式解释的电流、速度或位置目标 */,
+                     uint32_t tick_ms /**< 当前系统毫秒时刻 */);
 /* 功能：根据当前模式和反馈计算 M2006 原始电流命令；用途：驱动双环控制、轨迹和自动整定；返回 true 表示成功写出电流。 */
-bool M2006_CalcCurrentRaw(uint8_t can_bus /* CAN 总线编号 */,
-                          uint8_t motor_id /* DJI 电机编号 */,
-                          uint32_t tick_ms /* 当前系统毫秒时刻 */,
-                          int16_t *current_raw /* DJI 协议中的电流命令原始值 */);
+bool M2006_CalcCurrentRaw(uint8_t can_bus /**< CAN 总线编号 */,
+                          uint8_t motor_id /**< DJI 电机编号 */,
+                          uint32_t tick_ms /**< 当前系统毫秒时刻 */,
+                          int16_t *current_raw /**< DJI 协议中的电流命令原始值 */);
 /* 功能：解析 M2006 DJI 反馈帧并展开位置；用途：更新闭环反馈、时间戳和通信统计；返回 true 表示帧地址有效。 */
-bool M2006_OnFrame(uint8_t can_bus /* CAN 总线编号 */,
-                    uint8_t motor_id /* DJI 电机编号 */,
-                    const can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */,
-                    uint32_t tick_ms /* 当前系统毫秒时刻 */);
+bool M2006_OnFrame(uint8_t can_bus /**< CAN 总线编号 */,
+                    uint8_t motor_id /**< DJI 电机编号 */,
+                    const can_frame_t *frame /**< 待解析的 CAN 接收帧 */,
+                    uint32_t tick_ms /**< 当前系统毫秒时刻 */);
 /* 功能：读取指定 M2006 的最新反馈；用途：获取编码器、速度、电流和温度；返回 true 表示已收到有效帧。 */
-bool M2006_GetFeedback(uint8_t can_bus /* CAN 总线编号 */,
-                       uint8_t motor_id /* DJI 电机编号 */,
-                       m2006_feedback_t *feedback /* 用于写出或读取最新反馈的对象 */);
+bool M2006_GetFeedback(uint8_t can_bus /**< CAN 总线编号 */,
+                       uint8_t motor_id /**< DJI 电机编号 */,
+                       m2006_feedback_t *feedback /**< 用于写出最新 M2006 反馈的对象 */);
 /* 功能：读取带零点和多圈位置的 M2006 反馈快照；用途：供诊断与位置显示使用；返回 true 表示快照有效。 */
-bool M2006_GetFeedbackSnapshot(uint8_t can_bus /* CAN 总线编号 */,
-                               uint8_t motor_id /* DJI 电机编号 */,
-                               m2006_feedback_t *feedback /* 用于写出或读取最新反馈的对象 */,
-                               bool *zero_valid /* 函数读取或写入的对象地址 */);
+bool M2006_GetFeedbackSnapshot(uint8_t can_bus /**< CAN 总线编号 */,
+                               uint8_t motor_id /**< DJI 电机编号 */,
+                               m2006_feedback_t *feedback /**< 用于写出最新 M2006 反馈的对象 */,
+                               bool *zero_valid /**< 用于写出电机软件零点是否有效 */);
 /* 功能：读取指定 M2006 的通信超时统计；用途：诊断丢帧、恢复次数和帧间隔；返回 true 表示统计已写出。 */
-bool M2006_GetTimeoutStats(uint8_t can_bus /* CAN 总线编号 */,
-                           uint8_t motor_id /* DJI 电机编号 */,
-                           m2006_timeout_stats_t *stats /* 用于写出诊断统计的对象 */);
+bool M2006_GetTimeoutStats(uint8_t can_bus /**< CAN 总线编号 */,
+                           uint8_t motor_id /**< DJI 电机编号 */,
+                           m2006_timeout_stats_t *stats /**< 用于写出 M2006 命令与反馈超时统计的对象 */);
 /* 功能：设置指定 M2006 的速度环 PID；用途：调整速度响应并重新配置在线调参；返回 true 表示参数有效。 */
-bool M2006_SetSpeedPid(uint8_t can_bus /* CAN 总线编号 */,
-                       uint8_t motor_id /* DJI 电机编号 */,
-                       const m2006_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */);
+bool M2006_SetSpeedPid(uint8_t can_bus /**< CAN 总线编号 */,
+                       uint8_t motor_id /**< DJI 电机编号 */,
+                       const m2006_pid_cfg_t *cfg /**< 待设置或校验的 M2006 PID 配置 */);
 /* 功能：设置指定 M2006 的位置环 PID；用途：调整位置到速度的外环响应；返回 true 表示参数有效。 */
-bool M2006_SetPositionPid(uint8_t can_bus /* CAN 总线编号 */,
-                          uint8_t motor_id /* DJI 电机编号 */,
-                          const m2006_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */);
+bool M2006_SetPositionPid(uint8_t can_bus /**< CAN 总线编号 */,
+                          uint8_t motor_id /**< DJI 电机编号 */,
+                          const m2006_pid_cfg_t *cfg /**< 待设置或校验的 M2006 PID 配置 */);
 /* 功能：设置指定 M2006 的软件电流限制；用途：约束所有闭环和直接控制输出；返回 true 表示限制合法。 */
-bool M2006_SetCurrentLimit(uint8_t can_bus /* CAN 总线编号 */,
-                           uint8_t motor_id /* DJI 电机编号 */,
-                           float current_limit_a /* 允许输出的最大电流，单位：安培 */);
+bool M2006_SetCurrentLimit(uint8_t can_bus /**< CAN 总线编号 */,
+                           uint8_t motor_id /**< DJI 电机编号 */,
+                           float current_limit_a /**< 允许输出的最大电流，单位：安培 */);
 /* 功能：设置 M2006 位置模式的最大速度；用途：限制位置轨迹运动速度；返回 true 表示限制合法。 */
-bool M2006_SetPositionVelocityLimit(uint8_t can_bus /* CAN 总线编号 */,
-                                    uint8_t motor_id /* DJI 电机编号 */,
-                                    float velocity_limit_rad_s /* 允许设置的速度上限，单位：弧度每秒 */);
+bool M2006_SetPositionVelocityLimit(uint8_t can_bus /**< CAN 总线编号 */,
+                                    uint8_t motor_id /**< DJI 电机编号 */,
+                                    float velocity_limit_rad_s /**< 允许设置的速度上限，单位：弧度每秒 */);
 /* 功能：设置 M2006 速度变化的加速度限制；用途：平滑速度和位置轨迹；返回 true 表示限制合法。 */
-bool M2006_SetAccelerationLimit(uint8_t can_bus /* CAN 总线编号 */,
-                                uint8_t motor_id /* DJI 电机编号 */,
-                                float acceleration_limit_rad_s2 /* 允许设置的加速度上限，单位：弧度每二次方秒 */);
+bool M2006_SetAccelerationLimit(uint8_t can_bus /**< CAN 总线编号 */,
+                                uint8_t motor_id /**< DJI 电机编号 */,
+                                float acceleration_limit_rad_s2 /**< 允许设置的加速度上限，单位：弧度每二次方秒 */);
 /* 功能：启用或关闭指定 M2006 的速度环在线调参；用途：切换固定与自适应 PID；返回 true 表示设置成功。 */
-bool M2006_SetOnlinePidEnabled(uint8_t can_bus /* CAN 总线编号 */,
-                               uint8_t motor_id /* DJI 电机编号 */,
-                               bool enabled /* 是否启用对应功能 */);
+bool M2006_SetOnlinePidEnabled(uint8_t can_bus /**< CAN 总线编号 */,
+                               uint8_t motor_id /**< DJI 电机编号 */,
+                               bool enabled /**< 是否启用 M2006 速度环在线 PID 调参 */);
 /* 功能：把当前 M2006 多圈位置记录为软件零点；用途：建立输出轴相对位置基准；返回 true 表示已有反馈且置零成功。 */
-bool M2006_ZeroPosition(uint8_t can_bus /* CAN 总线编号 */, uint8_t motor_id /* DJI 电机编号 */);
+bool M2006_ZeroPosition(uint8_t can_bus /**< CAN 总线编号 */, uint8_t motor_id /**< DJI 电机编号 */);
 /* 功能：读取指定 M2006 的在线 PID 调参状态；用途：观察当前增益、误差和活动规则；返回 true 表示状态已写出。 */
-bool M2006_GetOnlinePidState(uint8_t can_bus /* CAN 总线编号 */,
-                             uint8_t motor_id /* DJI 电机编号 */,
-                             m2006_online_pid_state_t *state /* 需要检查或上报的当前状态 */);
+bool M2006_GetOnlinePidState(uint8_t can_bus /**< CAN 总线编号 */,
+                             uint8_t motor_id /**< DJI 电机编号 */,
+                             m2006_online_pid_state_t *state /**< 用于写出 M2006 在线 PID 调参状态的对象 */);
 /* 功能：读取 M2006 内部斜坡和位置轨迹状态；用途：诊断当前平滑给定及轨迹是否活动；返回 true 表示状态有效。 */
-bool M2006_GetMotionState(uint8_t can_bus /* CAN 总线编号 */,
-                          uint8_t motor_id /* DJI 电机编号 */,
-                          m2006_motion_state_t *state /* 需要检查或上报的当前状态 */);
+bool M2006_GetMotionState(uint8_t can_bus /**< CAN 总线编号 */,
+                          uint8_t motor_id /**< DJI 电机编号 */,
+                          m2006_motion_state_t *state /**< 用于写出 M2006 斜坡与位置轨迹状态的对象 */);
 /* 功能：读取指定 M2006 的速度环 PID 配置；用途：显示或保存当前控制参数；返回 true 表示配置已写出。 */
-bool M2006_GetSpeedPid(uint8_t can_bus /* CAN 总线编号 */,
-                       uint8_t motor_id /* DJI 电机编号 */,
-                       m2006_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */);
+bool M2006_GetSpeedPid(uint8_t can_bus /**< CAN 总线编号 */,
+                       uint8_t motor_id /**< DJI 电机编号 */,
+                       m2006_pid_cfg_t *cfg /**< 用于写出当前 M2006 PID 配置的对象 */);
 /* 功能：读取指定 M2006 的位置环 PID 配置；用途：显示或保存当前控制参数；返回 true 表示配置已写出。 */
-bool M2006_GetPositionPid(uint8_t can_bus /* CAN 总线编号 */,
-                          uint8_t motor_id /* DJI 电机编号 */,
-                          m2006_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */);
+bool M2006_GetPositionPid(uint8_t can_bus /**< CAN 总线编号 */,
+                          uint8_t motor_id /**< DJI 电机编号 */,
+                          m2006_pid_cfg_t *cfg /**< 用于写出当前 M2006 PID 配置的对象 */);
 /* 功能：启动指定 M2006 的速度环自动整定；用途：通过继电反馈测试估算控制增益；返回 true 表示整定已进入运行态。 */
-bool M2006_StartSpeedAutoTune(uint8_t can_bus /* CAN 总线编号 */,
-                              uint8_t motor_id /* DJI 电机编号 */,
-                              float relay_current_a /* 自动整定施加的继电测试电流，单位：安培 */,
-                              float hysteresis_rad_s /* 自动整定切换电流方向的速度迟滞带，单位：弧度每秒 */,
-                              float safety_velocity_rad_s /* 自动整定允许达到的安全速度上限，单位：弧度每秒 */,
-                              uint32_t tick_ms /* 当前系统毫秒时刻 */);
+bool M2006_StartSpeedAutoTune(uint8_t can_bus /**< CAN 总线编号 */,
+                              uint8_t motor_id /**< DJI 电机编号 */,
+                              float relay_current_a /**< 自动整定施加的继电测试电流，单位：安培 */,
+                              float hysteresis_rad_s /**< 自动整定切换电流方向的速度迟滞带，单位：弧度每秒 */,
+                              float safety_velocity_rad_s /**< 自动整定允许达到的安全速度上限，单位：弧度每秒 */,
+                              uint32_t tick_ms /**< 当前系统毫秒时刻 */);
 /* 功能：取消正在进行的 M2006 自动整定；用途：响应用户停止或安全条件变化；返回 true 表示地址有效并已取消。 */
-bool M2006_CancelAutoTune(uint8_t can_bus /* CAN 总线编号 */, uint8_t motor_id /* DJI 电机编号 */);
+bool M2006_CancelAutoTune(uint8_t can_bus /**< CAN 总线编号 */, uint8_t motor_id /**< DJI 电机编号 */);
 /* 功能：读取指定 M2006 的自动整定状态和结果；用途：向调试界面报告进度、参数或失败原因；返回 true 表示状态已写出。 */
-bool M2006_GetAutoTuneState(uint8_t can_bus /* CAN 总线编号 */,
-                            uint8_t motor_id /* DJI 电机编号 */,
-                            m2006_autotune_state_t *state /* 需要检查或上报的当前状态 */);
+bool M2006_GetAutoTuneState(uint8_t can_bus /**< CAN 总线编号 */,
+                            uint8_t motor_id /**< DJI 电机编号 */,
+                            m2006_autotune_state_t *state /**< 用于写出 M2006 自动整定状态和结果的对象 */);
 
 #endif

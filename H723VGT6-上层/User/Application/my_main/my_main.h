@@ -4,8 +4,7 @@
  */
 
 #ifndef MY_MAIN_H
-/** 防止 my_main.h 被重复包含。 */
-#define MY_MAIN_H
+#define MY_MAIN_H /**< 防止 my_main.h 被重复包含。 */
 
 #include "main.h"
 
@@ -20,4 +19,4 @@ void My_Init(void);
 }
 #endif
 
-#endif /* MY_MAIN_H */
+#endif /* 用户主程序头文件保护宏 */

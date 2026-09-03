@@ -4,8 +4,7 @@
  */
 
 #ifndef ROBOT_STATE_H
-/** 防止 robot_state.h 被重复包含。 */
-#define ROBOT_STATE_H
+#define ROBOT_STATE_H /**< 防止 robot_state.h 被重复包含。 */
 
 /** 表示 模块 当前所处的运行状态。 */
 typedef enum

@@ -8,7 +8,7 @@
 #include <string.h>
 
 /* 功能：检查电机表的数量、地址和调度参数；用途：在管理器启动前验证拓扑；返回 true 表示配置可用。 */
-static bool MotorManager_CheckCfg(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */, size_t motor_count /* 调用方提供的电机配置数量 */)
+static bool MotorManager_CheckCfg(const motor_cfg_t *cfg /**< 当前电机的型号、总线及节点配置 */, size_t motor_count /**< 调用方提供的电机配置数量 */)
 {
     size_t index;
 
@@ -33,11 +33,11 @@ static bool MotorManager_CheckCfg(const motor_cfg_t *cfg /* 初始化或更新�
 }
 
 /* 功能：初始化电机管理器；用途：绑定电机配置、发送回调和用户上下文；返回 true 表示初始化成功。 */
-bool MotorManager_Init(motor_manager_t *manager,
-                       const motor_cfg_t *cfg,
-                       size_t motor_count,
-                       motor_send_t send,
-                       void *user_data)
+bool MotorManager_Init(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                       const motor_cfg_t *cfg /**< 当前电机的型号、总线及节点配置 */,
+                       size_t motor_count /**< 调用方提供的电机配置数量 */,
+                       motor_send_t send /**< 电机管理器用于下发电机命令的回调函数 */,
+                       void *user_data /**< 调用回调函数时传递的用户上下文 */)
 {
     if ((manager == NULL) || (send == NULL) ||
         !MotorManager_CheckCfg(cfg, motor_count))
@@ -54,9 +54,9 @@ bool MotorManager_Init(motor_manager_t *manager,
 }
 
 /* 功能：保存指定电机的最新控制命令；用途：为周期调度暂存目标；返回 true 表示索引和参数有效。 */
-bool MotorManager_SetCmd(motor_manager_t *manager,
-                         size_t motor_index,
-                         const motor_cmd_t *cmd)
+bool MotorManager_SetCmd(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                         size_t motor_index /**< 电机在管理器配置表中的下标 */,
+                         const motor_cmd_t *cmd /**< 待暂存的普通电机控制命令 */)
 {
     if ((manager == NULL) || (cmd == NULL) ||
         (motor_index >= manager->motor_count))
@@ -69,9 +69,9 @@ bool MotorManager_SetCmd(motor_manager_t *manager,
 }
 
 /* 功能：设置指定电机的使能状态；用途：控制其是否参与周期发送，并在关闭时立即发送停止命令；返回 true 表示设置成功。 */
-bool MotorManager_SetEnabled(motor_manager_t *manager,
-                             size_t motor_index,
-                             bool enabled)
+bool MotorManager_SetEnabled(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                             size_t motor_index /**< 电机在管理器配置表中的下标 */,
+                             bool enabled /**< 是否启用指定电机的管理器输出 */)
 {
     motor_cmd_t stop_cmd;
 
@@ -104,9 +104,9 @@ bool MotorManager_SetEnabled(motor_manager_t *manager,
 }
 
 /* 功能：为指定电机设置临时覆盖命令；用途：允许调试或特殊流程绕过常规目标；返回 true 表示覆盖已生效。 */
-bool MotorManager_SetOverride(motor_manager_t *manager,
-                              size_t motor_index,
-                              const motor_cmd_t *cmd)
+bool MotorManager_SetOverride(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                              size_t motor_index /**< 电机在管理器配置表中的下标 */,
+                              const motor_cmd_t *cmd /**< 待暂存的电机覆盖命令 */)
 {
     if ((manager == NULL) || (cmd == NULL) ||
         (motor_index >= manager->motor_count))
@@ -119,8 +119,8 @@ bool MotorManager_SetOverride(motor_manager_t *manager,
 }
 
 /* 功能：清除指定电机的临时覆盖命令；用途：恢复常规应用目标控制；返回 true 表示覆盖已清除。 */
-bool MotorManager_ClearOverride(motor_manager_t *manager,
-                                size_t motor_index)
+bool MotorManager_ClearOverride(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                                size_t motor_index /**< 电机在管理器配置表中的下标 */)
 {
     motor_cmd_t stop_cmd;
 
@@ -152,7 +152,7 @@ bool MotorManager_ClearOverride(motor_manager_t *manager,
 }
 
 /* 功能：按周期和相位调度所有已使能电机；用途：在控制循环中发送到期命令并统计结果；无返回值表示结果记录在计数器中。 */
-void MotorManager_Process(motor_manager_t *manager, uint32_t tick_ms)
+void MotorManager_Process(motor_manager_t *manager /**< 需要操作的电机管理器 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     size_t index;
 
@@ -195,7 +195,7 @@ void MotorManager_Process(motor_manager_t *manager, uint32_t tick_ms)
 }
 
 /* 功能：向所有可用电机发送全局停止并清除使能；用途：正常停机或急停；无返回值表示发送结果写入统计计数。 */
-void MotorManager_StopAll(motor_manager_t *manager)
+void MotorManager_StopAll(motor_manager_t *manager /**< 需要操作的电机管理器 */)
 {
     size_t index;
 

@@ -13,7 +13,7 @@
 #include "upper_motor_port.h"
 
 /* 功能：校验夹爪 PID 参数；用途：阻止非法增益进入 M2006 控制器；返回 true 表示配置有效。 */
-static bool Gripper_PidValid(const upper_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */)
+static bool Gripper_PidValid(const upper_pid_cfg_t *cfg /**< 待校验的机构 PID 配置 */)
 {
     return (cfg != NULL) && isfinite(cfg->kp) && isfinite(cfg->ki) &&
            isfinite(cfg->kd) && isfinite(cfg->integral_limit) &&
@@ -23,14 +23,14 @@ static bool Gripper_PidValid(const upper_pid_cfg_t *cfg /* 初始化或更新时
 }
 
 /* 功能：比较两组夹爪 PID 配置；用途：判断是否需要重复下发参数；返回 true 表示两者相同。 */
-static bool Gripper_PidEqual(const upper_pid_cfg_t *left /* 函数读取或写入的对象地址 */,
-                             const upper_pid_cfg_t *right /* 函数读取或写入的对象地址 */)
+static bool Gripper_PidEqual(const upper_pid_cfg_t *left /**< 待比较的左侧机构 PID 配置 */,
+                             const upper_pid_cfg_t *right /**< 待比较的右侧机构 PID 配置 */)
 {
     return memcmp(left, right, sizeof(*left)) == 0;
 }
 
 /* 功能：将数值限制在给定上下界内；用途：约束夹爪控制量和积分状态；返回值表示限幅后的数值。 */
-static float Gripper_Clamp(float value /* 需要检查、限幅或编码的输入值 */, float lower /* 允许输出的下限 */, float upper /* 允许输出的上限 */)
+static float Gripper_Clamp(float value /**< 待限幅的夹爪控制量 */, float lower /**< 允许输出的下限 */, float upper /**< 允许输出的上限 */)
 {
     if (value < lower)
     {
@@ -44,8 +44,8 @@ static float Gripper_Clamp(float value /* 需要检查、限幅或编码的输�
 }
 
 /* 功能：校验夹爪目标并生成 M2006 命令；用途：把位置或速度目标转换为驱动输入；返回 true 表示转换完成。 */
-bool Gripper_Calc(const gripper_target_t *target,
-                  gripper_output_t *output)
+bool Gripper_Calc(const gripper_target_t *target /**< 本周期夹爪机构控制目标 */,
+                  gripper_output_t *output /**< 用于写出夹爪 M2006 命令的对象 */)
 {
     if ((target == NULL) || (output == NULL))
     {
@@ -103,8 +103,8 @@ bool Gripper_Calc(const gripper_target_t *target,
 }
 
 /* 功能：应用夹爪命令和可选 PID 参数；用途：向电机管理器提交目标与使能状态；返回 true 表示全部设置成功。 */
-bool Gripper_Apply(motor_manager_t *manager,
-                   const gripper_output_t *output)
+bool Gripper_Apply(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                   const gripper_output_t *output /**< 待下发的夹爪 M2006 电机命令 */)
 {
     bool success;
     static bool pid_applied;

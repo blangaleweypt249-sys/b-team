@@ -1,6 +1,8 @@
 /**
  * @file upper_entry.c
  * @brief 实现上层应用入口，协调通信、遥控、电机和周期任务。
+ * @details 所属层：Application/Task；作用：集中处理 UART/CAN 分发、遥控动作、
+ *          电机控制和 1 ms 周期调度；上位机协议服务由 Driver/PcLink 提供。
  */
 
 #include "upper_entry.h"
@@ -11,101 +13,62 @@
 #include "bsp_can.h"
 #include "cmsis_os2.h"
 #include "comm_runtime.h"
-#include "j4310_auto_return.h"
-#include "j4310_position_control.h"
 #include "position_stall_monitor.h"
 #include "upper_motor_port.h"
 #include "upper_pc_link.h"
+#include "upper_pc_service.h"
 #include "upper_remote_link.h"
 #include "upper_robot.h"
 #include "W25Qxx.h"
 
-/** 上位机控制命令队列可同时等待处理的消息数量。 */
-#define UPPER_CMD_QUEUE_DEPTH  4U
-/** 机器人基础状态帧的发送周期，单位：毫秒。 */
-#define UPPER_STATE_PERIOD_MS  50U
-/** DJI 电机诊断遥测帧的发送周期，单位：毫秒。 */
-#define UPPER_DJI_TELEMETRY_PERIOD_MS 10U
-/** 上层链路编码待发送协议帧的缓冲区字节数。 */
-#define UPPER_TX_BUFFER_SIZE   160U
-/** 收到握手请求后等待链路稳定再发送确认帧的保护时间，单位：毫秒。 */
-#define UPPER_HANDSHAKE_ACK_GUARD_MS 20U
-/** 控制命令中用于启用对应功能的标志位。 */
-#define UPPER_J4310_STARTUP_ENABLE_RETRY_MS 20U
-/** 遥控帧中对应按键或开关的位标志。 */
-#define UPPER_REMOTE_KEY_PD13        (1U << 0U)
-/** 遥控帧中对应按键或开关的位标志。 */
-#define UPPER_REMOTE_KEY_PD12        (1U << 1U)
-/** 遥控帧中对应按键或开关的位标志。 */
-#define UPPER_REMOTE_KEY_PD11        (1U << 2U)
-/** 遥控帧中对应按键或开关的位标志。 */
-#define UPPER_REMOTE_KEY_PD8         (1U << 3U)
-/** 遥控帧中对应按键或开关的位标志。 */
-#define UPPER_REMOTE_KEY_PD9         (1U << 4U)
-/** 遥控帧中对应按键或开关的位标志。 */
-#define UPPER_REMOTE_KEY_PD10        (1U << 5U)
-/** 遥控帧中对应按键或开关的位标志。 */
-#define UPPER_REMOTE_SWITCH_PE4      (1U << 0U)
-/** 辅助控制板输出字节中控制 PE4 的位标志。 */
-#define UPPER_AUX_OUTPUT_PE4         (1U << 0U)
-/** 从状态字中筛选对应位的掩码。 */
-#define UPPER_AUX_OUTPUT_MASK        0x0FU
-/** 辅助控制更新掩码在单字节载荷中的左移位数。 */
-#define UPPER_AUX_UPDATE_SHIFT       4U
-/** 将角度值从度换算为弧度的比例系数。 */
-#define UPPER_REMOTE_ANGLE_DEG_TO_RAD 0.017453292519943295f
-/** 遥控自动流程夹爪机构的目标角度，单位：度。 */
-#define UPPER_REMOTE_GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG 2.0f
-/** 该通信帧完整编码后的固定字节数。 */
-#define UPPER_AUX_UART_FRAME_SIZE       8U
-/** 辅助 UART 控制帧指定的目标接收板编号。 */
-#define UPPER_AUX_UART_TARGET_RECEIVER  0x01U
-/** 辅助 UART 帧中表示输出控制命令的消息类型值。 */
-#define UPPER_AUX_UART_TYPE_CONTROL     0x02U
-/** 辅助输出控制帧载荷占用的字节数。 */
-#define UPPER_AUX_UART_PAYLOAD_SIZE     1U
-/** 每次辅助输出变化时连续发送相同控制帧的次数。 */
-#define UPPER_AUX_UART_REPEAT_COUNT     3U
-/** 上层电机控制状态机的执行周期，单位：毫秒。 */
-#define UPPER_CONTROL_PERIOD_MS          1U
-/** 遥控模式组合的总数量。 */
-#define UPPER_REMOTE_MODE_COUNT          4U
+#define UPPER_CMD_QUEUE_DEPTH  4U /**< 上位机控制命令队列可同时等待处理的消息数量。 */
+#define UPPER_STATE_PERIOD_MS  50U /**< 机器人基础状态帧的发送周期，单位：毫秒。 */
+#define UPPER_DJI_TELEMETRY_PERIOD_MS 10U /**< DJI 电机诊断遥测帧的发送周期，单位：毫秒。 */
+#define UPPER_TX_BUFFER_SIZE   160U /**< 上层链路编码待发送协议帧的缓冲区字节数。 */
+#define UPPER_HANDSHAKE_ACK_GUARD_MS 20U /**< 收到握手请求后等待链路稳定再发送确认帧的保护时间，单位：毫秒。 */
+#define UPPER_J4310_STARTUP_ENABLE_RETRY_MS 20U /**< 上电初始化时 J4310 使能命令失败后的重试间隔，单位：毫秒。 */
+#define UPPER_REMOTE_KEY_PD13        (1U << 0U) /**< 遥控PD13开关标志位。 */
+#define UPPER_REMOTE_KEY_PD12        (1U << 1U) /**< 遥控PD12开关标志位。 */
+#define UPPER_REMOTE_KEY_PD11        (1U << 2U) /**< 遥控PD11开关标志位。 */
+#define UPPER_REMOTE_KEY_PD8         (1U << 3U) /**< 遥控PD8开关标志位。 */
+#define UPPER_REMOTE_KEY_PD9         (1U << 4U) /**< 遥控PD9开关标志位。 */
+#define UPPER_REMOTE_KEY_PD10        (1U << 5U) /**< 遥控PD10开关标志位。 */
+#define UPPER_REMOTE_SWITCH_PE4      (1U << 0U) /**< 遥控PE4开关标志位。 */
+#define UPPER_AUX_OUTPUT_PE4         (1U << 0U) /**< 辅助控制板输出字节中控制 PE4 的位标志。 */
+#define UPPER_AUX_OUTPUT_MASK        0x0FU /**< 辅助控制板四路输出位掩码。 */
+#define UPPER_AUX_UPDATE_SHIFT       4U /**< 辅助控制更新掩码在单字节载荷中的左移位数。 */
+#define UPPER_REMOTE_ANGLE_DEG_TO_RAD 0.017453292519943295f /**< 将角度值从度换算为弧度的比例系数。 */
+#define UPPER_REMOTE_GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG 2.0f /**< 夹爪电机角度与夹爪输出轴角度的传动比。 */
+#define UPPER_AUX_UART_FRAME_SIZE       8U /**< 辅助控制板 UART 控制帧的固定字节数。 */
+#define UPPER_AUX_UART_TARGET_RECEIVER  0x01U /**< 辅助 UART 控制帧指定的目标接收板编号。 */
+#define UPPER_AUX_UART_TYPE_CONTROL     0x02U /**< 辅助 UART 帧中表示输出控制命令的消息类型值。 */
+#define UPPER_AUX_UART_PAYLOAD_SIZE     1U /**< 辅助输出控制帧载荷占用的字节数。 */
+#define UPPER_AUX_UART_REPEAT_COUNT     3U /**< 每次辅助输出变化时连续发送相同控制帧的次数。 */
+#define UPPER_CONTROL_PERIOD_MS          1U /**< 上层电机控制状态机的执行周期，单位：毫秒。 */
+#define UPPER_REMOTE_MODE_COUNT          4U /**< 遥控模式组合的总数量。 */
 
-/** 机械臂 J4310 关节轨迹规划使用的最大速度，单位：弧度每秒。 */
-#define UPPER_J4310_TRAJECTORY_MAX_VEL_RAD_S       3.7f
-/** 机械臂 J4310 关节轨迹规划使用的最大加速度，单位：弧度每二次方秒。 */
-#define UPPER_J4310_TRAJECTORY_MAX_ACCEL_RAD_S2   15.0f
-/** J4310 重力模型允许估计的最大补偿转矩，单位：牛米。 */
-#define UPPER_J4310_GRAVITY_MODEL_LIMIT_NM          8.0f
-/** 每个稳定反馈样本更新 J4310 重力模型参数的步长。 */
-#define UPPER_J4310_GRAVITY_LEARNING_RATE           0.01f
-/** J4310 重力模型估计转矩施加到命令的比例。 */
-#define UPPER_J4310_GRAVITY_COMPENSATION_GAIN       1.0f
-/** J4310 零位附近关闭重力补偿区域的半宽，单位：弧度。 */
-#define UPPER_J4310_GRAVITY_DISABLE_HALF_WIDTH_RAD  0.0872664626f
-/** 允许重力模型采样的 J4310 最大位置误差，单位：弧度。 */
-#define UPPER_J4310_GRAVITY_SETTLE_ERROR_RAD         0.01745329252f
-/** 开始更新 J4310 重力模型前位置必须连续稳定的反馈帧数。 */
-#define UPPER_J4310_GRAVITY_SETTLE_FEEDBACK_COUNT  100U
-/** J4310 重力补偿转矩允许的最大变化率，单位：牛米每秒。 */
-#define UPPER_J4310_GRAVITY_TORQUE_RATE_NM_S         3.0f
+#define UPPER_J4310_TRAJECTORY_MAX_VEL_RAD_S       3.7f /**< 机械臂 J4310 关节轨迹规划使用的最大速度，单位：弧度每秒。 */
+#define UPPER_J4310_TRAJECTORY_MAX_ACCEL_RAD_S2   15.0f /**< 机械臂 J4310 关节轨迹规划使用的最大加速度，单位：弧度每二次方秒。 */
+#define UPPER_J4310_GRAVITY_MODEL_LIMIT_NM          8.0f /**< J4310 重力模型允许估计的最大补偿转矩，单位：牛米。 */
+#define UPPER_J4310_GRAVITY_LEARNING_RATE           0.01f /**< 每个稳定反馈样本更新 J4310 重力模型参数的步长。 */
+#define UPPER_J4310_GRAVITY_COMPENSATION_GAIN       1.0f /**< J4310 重力模型估计转矩施加到命令的比例。 */
+#define UPPER_J4310_GRAVITY_DISABLE_HALF_WIDTH_RAD  0.0872664626f /**< J4310 零位附近关闭重力补偿区域的半宽，单位：弧度。 */
+#define UPPER_J4310_GRAVITY_SETTLE_ERROR_RAD         0.01745329252f /**< 允许重力模型采样的 J4310 最大位置误差，单位：弧度。 */
+#define UPPER_J4310_GRAVITY_SETTLE_FEEDBACK_COUNT  100U /**< 开始更新 J4310 重力模型前位置必须连续稳定的反馈帧数。 */
+#define UPPER_J4310_GRAVITY_TORQUE_RATE_NM_S         3.0f /**< J4310 重力补偿转矩允许的最大变化率，单位：牛米每秒。 */
 
-/** PD13 动作完成后需要清除按下历史的按键集合。 */
 #define UPPER_REMOTE_PD13_RESET_KEYS \
     (UPPER_REMOTE_KEY_PD12 | UPPER_REMOTE_KEY_PD11 | \
-     UPPER_REMOTE_KEY_PD8)
-/** PD12 动作完成后需要清除按下历史的按键集合。 */
+     UPPER_REMOTE_KEY_PD8) /**< PD13 动作完成后需要清除按下历史的按键集合。 */
 #define UPPER_REMOTE_PD12_RESET_KEYS \
     (UPPER_REMOTE_KEY_PD13 | UPPER_REMOTE_KEY_PD11 | \
-     UPPER_REMOTE_KEY_PD8)
-/** PD8 动作完成后需要清除按下历史的按键集合。 */
+     UPPER_REMOTE_KEY_PD8) /**< PD12 动作完成后需要清除按下历史的按键集合。 */
 #define UPPER_REMOTE_PD8_RESET_KEYS \
     (UPPER_REMOTE_KEY_PD13 | UPPER_REMOTE_KEY_PD12 | \
-     UPPER_REMOTE_KEY_PD11)
-/** PD11 动作完成后需要清除按下历史的按键集合。 */
+     UPPER_REMOTE_KEY_PD11) /**< PD8 动作完成后需要清除按下历史的按键集合。 */
 #define UPPER_REMOTE_PD11_RESET_KEYS \
     (UPPER_REMOTE_KEY_PD13 | UPPER_REMOTE_KEY_PD12 | \
-     UPPER_REMOTE_KEY_PD8)
+     UPPER_REMOTE_KEY_PD8) /**< PD11 动作完成后需要清除按下历史的按键集合。 */
 
 /** 表示 遥控链路 当前所处的运行状态。 */
 typedef enum
@@ -227,31 +190,30 @@ static const motor_cfg_t upper_motor_cfg[UPPER_MOTOR_COUNT] =
         UPPER_CONTROL_PERIOD_MS, 0U, true
     }
 };
-
-static upper_robot_t upper_robot;
-static upper_pc_link_t upper_pc_link;
+upper_robot_t upper_robot;
+upper_pc_link_t upper_pc_link;
 static upper_remote_link_t upper_remote_link;
-static osMessageQueueId_t upper_cmd_queue;
-static volatile bool upper_estop_pending;
-static volatile bool upper_motor_action_pending;
-static uint8_t upper_motor_action;
-static uint8_t upper_motor_action_can_bus;
-static uint8_t upper_motor_action_node_id;
-static uint8_t upper_motor_action_value;
-static bool upper_motor_action_result_pending;
-static uint8_t upper_motor_action_result_action;
-static uint8_t upper_motor_action_result_can_bus;
-static uint8_t upper_motor_action_result_node_id;
-static uint8_t upper_motor_action_result_status;
-static uint32_t upper_motor_action_result_tick_ms;
+osMessageQueueId_t upper_cmd_queue;
+volatile bool upper_estop_pending;
+volatile bool upper_motor_action_pending;
+uint8_t upper_motor_action;
+uint8_t upper_motor_action_can_bus;
+uint8_t upper_motor_action_node_id;
+uint8_t upper_motor_action_value;
+bool upper_motor_action_result_pending;
+uint8_t upper_motor_action_result_action;
+uint8_t upper_motor_action_result_can_bus;
+uint8_t upper_motor_action_result_node_id;
+uint8_t upper_motor_action_result_status;
+uint32_t upper_motor_action_result_tick_ms;
 static uint32_t upper_motor_offline_latched_mask;
-static uint32_t upper_cmd_drop_count;
-static uint32_t upper_state_last_sent_tick_ms;
-static uint32_t upper_dji_telemetry_last_sent_tick_ms;
-static size_t upper_dji_telemetry_next_index;
-static j4310_auto_return_t upper_j4310_auto_return;
+uint32_t upper_cmd_drop_count;
+uint32_t upper_state_last_sent_tick_ms;
+uint32_t upper_dji_telemetry_last_sent_tick_ms;
+size_t upper_dji_telemetry_next_index;
+j4310_auto_return_t upper_j4310_auto_return;
 static j4310_position_control_t upper_j4310_position_control;
-static bool upper_j4310_auto_return_enabled;
+bool upper_j4310_auto_return_enabled;
 static bool upper_j4310_startup_enable_pending;
 static bool upper_j4310_startup_enable_attempted;
 static uint32_t upper_j4310_startup_enable_last_tick_ms;
@@ -300,9 +262,9 @@ static uint32_t upper_remote_pd8_first_due_tick_ms;
 static bool upper_remote_pd9_zero_pending;
 static bool upper_remote_pd9_second;
 static bool upper_remote_pd10_second;
-static volatile uint8_t upper_aux_uart5_pending_count;
-static volatile uint8_t upper_aux_output_bits;
-static volatile uint8_t upper_aux_update_mask;
+volatile uint8_t upper_aux_uart5_pending_count;
+volatile uint8_t upper_aux_output_bits;
+volatile uint8_t upper_aux_update_mask;
 static uint8_t upper_aux_uart5_sequence;
 static uint8_t upper_aux_uart5_frame[UPPER_AUX_UART_FRAME_SIZE];
 volatile uint32_t upper_handshake_ack_sent_count;
@@ -316,233 +278,111 @@ volatile uint32_t upper_dji_telemetry_busy_count;
 volatile uint32_t upper_dji_telemetry_fail_count;
 volatile uint32_t upper_aux_uart5_sent_count;
 volatile uint32_t upper_aux_uart5_fail_count;
-__ALIGNED(32) static uint8_t upper_tx_buffer[UPPER_TX_BUFFER_SIZE];
+__ALIGNED(32) uint8_t upper_tx_buffer[UPPER_TX_BUFFER_SIZE];
 
-/* 内部函数声明：仅用于按功能分类排列本文件中的函数实现。 */
+/* 内部函数声明：入口文件内的通信、遥控、电机和周期任务私有服务。 */
 static upper_pid_cfg_t UpperEntry_ConvertPcPid(
-    const upper_pc_pid_cfg_t *source);
-static void UpperEntry_ConvertPcTarget(const upper_pc_target_t *source,
-                                       upper_target_t *target);
-static void UpperEntry_OnPcCmd(const upper_pc_target_t *source,
-                               void *user_data);
-static void UpperEntry_OnPcEStop(void *user_data);
-static void UpperEntry_OnPcAuxControl(uint8_t output_bits,
-                                      uint8_t update_mask,
-                                      void *user_data);
-static uint8_t UpperEntry_Crc8(const uint8_t *data, size_t size);
+    const upper_pc_pid_cfg_t *source /**< 上位机下发的PID配置 */);
+static void UpperEntry_ConvertPcTarget(const upper_pc_target_t *source /**< 上位机下发的机构控制目标 */,
+                                       upper_target_t *target /**< 用于写出转换后上层机器人目标的对象 */);
+static uint8_t UpperEntry_Crc8(const uint8_t *data /**< 待计算CRC8的辅助UART帧数据 */, size_t size /**< 参与CRC8计算的数据字节数 */);
 static void UpperEntry_ProcessAuxUart5(void);
-static void UpperEntry_OnUart(comm_uart_channel_t channel,
-                              const uint8_t *data,
-                              size_t size,
-                              void *user_data);
-static void UpperEntry_OnCan(uint8_t can_bus,
-                             const can_frame_t *frame,
-                             void *user_data);
-static void UpperEntry_OnPcMotorAction(uint8_t action,
-                                       uint8_t can_bus,
-                                       uint8_t node_id,
-                                       uint8_t value,
-                                       void *user_data);
-static void UpperEntry_SendHandshakeAck(uint32_t tick_ms);
+static void UpperEntry_OnUart(comm_uart_channel_t channel /**< 产生本次接收数据的 UART 通道 */,
+                              const uint8_t *data /**< 通信层收到的UART数据块 */,
+                              size_t size /**< 本次UART接收的数据字节数 */,
+                              void *user_data /**< 调用回调函数时传递的用户上下文 */);
+static void UpperEntry_OnCan(uint8_t can_bus /**< CAN 总线编号 */,
+                             const can_frame_t *frame /**< 待解析的 CAN 接收帧 */,
+                             void *user_data /**< 调用回调函数时传递的用户上下文 */);
+static void UpperEntry_SendHandshakeAck(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
 static void UpperEntry_SendFlashInfo(void);
-static void UpperEntry_ProcessPcEvents(uint32_t tick_ms);
-static void UpperEntry_SendState(uint32_t tick_ms);
-static void UpperEntry_SendDjiTelemetry(uint32_t tick_ms);
 static void UpperEntry_CancelJ4310AutoReturn(void);
 static bool UpperEntry_ResetJ4310PositionControl(void);
-static void UpperEntry_StartJ4310Trajectory(uint32_t tick_ms,
-                                             float target_position_rad);
-static void UpperEntry_ServiceJ4310StartupEnable(uint32_t tick_ms);
-static void UpperEntry_ServiceJ4310Control(uint32_t tick_ms);
+static void UpperEntry_StartJ4310Trajectory(uint32_t tick_ms /**< 当前系统毫秒时刻 */,
+                                             float target_position_rad /**< 轨迹目标关节角，单位：弧度 */);
+static void UpperEntry_ServiceJ4310StartupEnable(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ServiceJ4310Control(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
 static bool UpperEntry_InitStallRecovery(void);
-static void UpperEntry_ServiceStallRecovery(uint32_t tick_ms);
+static void UpperEntry_ServiceStallRecovery(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
 static void UpperEntry_ConfigureGripperStallProtection(
-    const gripper_target_t *target,
-    bool protection_enabled);
+    const gripper_target_t *target /**< 本周期夹爪机构控制目标 */,
+    bool protection_enabled /**< 本次动作是否启用堵转保护 */);
 static void UpperEntry_ServiceRemoteGateDisable(void);
-static float UpperEntry_RemoteDegreesToRadians(float degrees);
-static void UpperEntry_ApplyRemoteArm(float m3508_angle_deg,
-                                      float j4310_angle_deg,
-                                      uint32_t tick_ms);
-static void UpperEntry_ApplyRemoteM3508(float angle_deg);
-static void UpperEntry_ApplyRemoteJ4310(float angle_deg, uint32_t tick_ms);
-static void UpperEntry_ApplyRemoteGate(float angle_deg);
+static float UpperEntry_RemoteDegreesToRadians(float degrees /**< 需要换算为弧度的角度，单位：度 */);
+static void UpperEntry_ApplyRemoteArm(float m3508_angle_deg /**< 机械臂 M3508 输出轴目标角度，单位：度 */,
+                                      float j4310_angle_deg /**< 机械臂 J4310 关节目标角度，单位：度 */,
+                                      uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ApplyRemoteM3508(float angle_deg /**< 机械臂M3508输出轴目标角度，单位：度 */);
+static void UpperEntry_ApplyRemoteJ4310(float angle_deg /**< 机械臂J4310关节目标角度，单位：度 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ApplyRemoteGate(float angle_deg /**< 挡板机构目标角度，单位：度 */);
 static void UpperEntry_HandleRemotePc1(void);
 static void UpperEntry_ResetRemotePc0Sequence(void);
 static void UpperEntry_ResetRemotePc0ToFirstBranch(void);
 static bool UpperEntry_IsRemoteJ4310AtStore2FinalTarget(void);
-static void UpperEntry_StartRemotePc0GlobalFinish(uint32_t tick_ms);
-static void UpperEntry_HandleRemotePc0Press(uint32_t tick_ms);
-static bool UpperEntry_HandleRemotePc0Pe4(bool pe4_closed,
-                                          uint32_t tick_ms);
-static void UpperEntry_ServiceRemotePc0Sequence(uint32_t tick_ms);
-static void UpperEntry_ApplyRemoteGripper(float angle_deg,
-                                           bool stall_protection_enabled);
+static void UpperEntry_StartRemotePc0GlobalFinish(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_HandleRemotePc0Press(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static bool UpperEntry_HandleRemotePc0Pe4(bool pe4_closed /**< PE4 辅助输出当前是否处于关闭状态 */,
+                                          uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ServiceRemotePc0Sequence(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ApplyRemoteGripper(float angle_deg /**< 夹爪机构目标角度，单位：度 */,
+                                           bool stall_protection_enabled /**< 夹爪本次动作是否启用堵转保护 */);
 static void UpperEntry_ConfigureRemoteStallSensitivity(void);
-static void UpperEntry_ProcessCmd(uint32_t tick_ms);
-static void UpperEntry_ProcessMotorAction(uint32_t tick_ms);
-static void UpperEntry_CheckMotorHealth(uint32_t tick_ms);
-static void UpperEntry_ProcessRemote(uint32_t tick_ms);
-static void UpperEntry_ResetRemoteModeState(bool clear_history);
+static void UpperEntry_ProcessCmd(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ProcessMotorAction(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_CheckMotorHealth(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ProcessRemote(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ResetRemoteModeState(bool clear_history /**< 是否同时清除各模式已经执行过的历史标志 */);
 static void UpperEntry_OpenRemotePe4Output(void);
 static void UpperEntry_CloseRemotePe4Output(void);
-static void UpperEntry_HandleRemoteAutomaticPe4(bool pe4_closed,
-                                                 uint32_t tick_ms);
+static void UpperEntry_HandleRemoteAutomaticPe4(bool pe4_closed /**< PE4 辅助输出当前是否处于关闭状态 */,
+                                                 uint32_t tick_ms /**< 当前系统毫秒时刻 */);
 static void UpperEntry_ApplyRemoteAutomaticStartOutputs(
-    bool first_storage_press);
+    bool first_storage_press /**< 本次是否为存储动作的第一次按下 */);
 static bool UpperEntry_IsFirstRemoteAutomaticStoragePress(
-    const upper_remote_mode_history_t *history);
+    const upper_remote_mode_history_t *history /**< 当前遥控模式的自动动作历史 */);
 static void UpperEntry_StartRemoteFlipAction(
-    upper_remote_flip_action_t action,
-    uint32_t tick_ms);
+    upper_remote_flip_action_t action /**< 待启动的遥控翻转动作 */,
+    uint32_t tick_ms /**< 当前系统毫秒时刻 */);
 static void UpperEntry_HandleRemoteFlipPress(
-    upper_remote_flip_action_t action,
-    uint32_t tick_ms);
-static void UpperEntry_FinishRemoteFlipAction(uint32_t tick_ms);
-static void UpperEntry_StartRemoteAutoFlipReset(uint32_t tick_ms);
-static void UpperEntry_ServiceRemoteFlipSequence(uint32_t tick_ms);
+    upper_remote_flip_action_t action /**< 本次按键触发的遥控翻转动作 */,
+    uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_FinishRemoteFlipAction(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_StartRemoteAutoFlipReset(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ServiceRemoteFlipSequence(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
 static void UpperEntry_ResetRemoteAutoPd13Sequence(void);
 static void UpperEntry_ResetRemoteAutoPd12Sequence(void);
 static void UpperEntry_ResetRemoteAutoPd11Sequence(void);
 static void UpperEntry_ResetRemoteAutomaticProgress(void);
 static void UpperEntry_ResetRemoteAutomaticSequences(void);
-static void UpperEntry_StartRemoteAutoPd13DirectSecond(uint32_t tick_ms);
-static void UpperEntry_StartRemoteAutoPd12DirectSecond(uint32_t tick_ms);
-static void UpperEntry_HandleRemoteAutoPd13Press(uint32_t tick_ms);
-static void UpperEntry_HandleRemoteAutoPd12Press(uint32_t tick_ms);
-static void UpperEntry_HandleRemoteAutoPd11Press(uint32_t tick_ms);
-static void UpperEntry_ServiceRemoteAutomaticSequences(uint32_t tick_ms);
-static void UpperEntry_PrepareRemoteActions(uint8_t action_bits);
-static void UpperEntry_ApplyRemotePd13First(uint32_t tick_ms);
-static void UpperEntry_ApplyRemotePd13Second(uint32_t tick_ms);
-static void UpperEntry_HandleRemotePd13(uint32_t tick_ms);
-static void UpperEntry_ApplyRemotePd12First(uint32_t tick_ms);
-static void UpperEntry_ApplyRemotePd12Second(uint32_t tick_ms);
-static void UpperEntry_HandleRemotePd12(uint32_t tick_ms);
-static void UpperEntry_StartRemotePd11(float m3508_angle_deg,
-                                       float j4310_angle_deg,
-                                       uint32_t tick_ms);
-static void UpperEntry_StartRemotePd11First(uint32_t tick_ms);
-static void UpperEntry_HandleRemotePd11(uint32_t tick_ms);
-static void UpperEntry_ApplyRemotePd8Second(float j4310_angle_deg,
-                                             uint32_t tick_ms);
-static void UpperEntry_HandleRemotePd8(uint32_t tick_ms);
+static void UpperEntry_StartRemoteAutoPd13DirectSecond(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_StartRemoteAutoPd12DirectSecond(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_HandleRemoteAutoPd13Press(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_HandleRemoteAutoPd12Press(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_HandleRemoteAutoPd11Press(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ServiceRemoteAutomaticSequences(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_PrepareRemoteActions(uint8_t action_bits /**< 本周期检测到的遥控动作位图 */);
+static void UpperEntry_ApplyRemotePd13First(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ApplyRemotePd13Second(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_HandleRemotePd13(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ApplyRemotePd12First(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ApplyRemotePd12Second(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_HandleRemotePd12(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_StartRemotePd11(float m3508_angle_deg /**< PD11动作的机械臂M3508输出轴目标角度，单位：度 */,
+                                       float j4310_angle_deg /**< PD11动作的机械臂J4310关节目标角度，单位：度 */,
+                                       uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_StartRemotePd11First(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_HandleRemotePd11(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_ApplyRemotePd8Second(float j4310_angle_deg /**< PD8第二阶段的J4310关节目标角度，单位：度 */,
+                                             uint32_t tick_ms /**< 当前系统毫秒时刻 */);
+static void UpperEntry_HandleRemotePd8(uint32_t tick_ms /**< 当前系统毫秒时刻 */);
 static void UpperEntry_HandleRemotePd9(void);
 static void UpperEntry_HandleRemotePd10(void);
-static void UpperEntry_HandleRemotePd9Pd10(uint8_t rising_bits);
+static void UpperEntry_HandleRemotePd9Pd10(uint8_t rising_bits /**< 本周期检测到上升沿的遥控按键位图 */);
 
 /* ==================== UART、CAN 与回调 ==================== */
 
-/* 功能：把 PC 协议中的 PID 配置转换为上层应用格式；参数 source 为源配置；返回转换后的 PID 配置。 */
-static upper_pid_cfg_t UpperEntry_ConvertPcPid(
-    const upper_pc_pid_cfg_t *source)
-{
-    return (upper_pid_cfg_t)
-    {
-        source->kp,
-        source->ki,
-        source->kd,
-        source->integral_limit,
-        source->output_limit
-    };
-}
-
-/* 功能：把 PC 下发的整机目标转换为机器人控制目标；参数 source 为 PC 目标，target 用于接收转换结果。 */
-static void UpperEntry_ConvertPcTarget(const upper_pc_target_t *source /* 规则调整前的原始 PID 增益 */,
-                                       upper_target_t *target /* 本次需要应用的控制目标 */)
-{
-    size_t index;
-
-    (void)memset(target, 0, sizeof(*target));
-    target->position_mode = source->position_mode;
-    target->arm.enabled = source->arm.enabled;
-    target->arm.j4310_commanded = source->arm.j4310_commanded;
-    target->arm.m3508_enabled = source->arm.m3508_enabled;
-    target->arm.position_mode = source->arm.position_mode;
-    target->arm.grip_pos_rad = source->arm.grip_pos_rad;
-    target->arm.grip_vel_rad_s = source->arm.grip_vel_rad_s;
-    target->arm.grip_kp = source->arm.grip_kp;
-    target->arm.grip_kd = source->arm.grip_kd;
-    target->arm.grip_torque_nm = source->arm.grip_torque_nm;
-    target->arm.grip_torque_limit_nm = source->arm.grip_torque_limit_nm;
-    target->arm.pid_update = source->arm.pid_update;
-    target->arm.m3508_speed_pid =
-        UpperEntry_ConvertPcPid(&source->arm.m3508_speed_pid);
-    target->arm.m3508_position_pid =
-        UpperEntry_ConvertPcPid(&source->arm.m3508_position_pid);
-    for (index = 0U; index < UPPER_ARM_M3508_COUNT; index++)
-    {
-        target->arm.m3508_vel_rad_s[index] =
-            source->arm.m3508_vel_rad_s[index];
-        target->arm.m3508_pos_rad[index] =
-            source->arm.m3508_pos_rad[index];
-    }
-
-    target->gate.enabled = source->gate.enabled;
-    target->gate.position_mode = source->gate.position_mode;
-    target->gate.m2006_vel_rad_s = source->gate.m2006_vel_rad_s;
-    target->gate.m2006_pos_rad = source->gate.m2006_pos_rad;
-    target->gate.pid_update = source->gate.pid_update;
-    target->gate.m2006_speed_pid =
-        UpperEntry_ConvertPcPid(&source->gate.m2006_speed_pid);
-    target->gate.m2006_position_pid =
-        UpperEntry_ConvertPcPid(&source->gate.m2006_position_pid);
-
-    target->gripper.enabled = source->gripper.enabled;
-    target->gripper.position_mode = source->gripper.position_mode;
-    target->gripper.m2006_vel_rad_s = source->gripper.m2006_vel_rad_s;
-    target->gripper.m2006_pos_rad = source->gripper.m2006_pos_rad;
-    target->gripper.pid_update = source->gripper.pid_update;
-    target->gripper.m2006_speed_pid =
-        UpperEntry_ConvertPcPid(&source->gripper.m2006_speed_pid);
-    target->gripper.m2006_position_pid =
-        UpperEntry_ConvertPcPid(&source->gripper.m2006_position_pid);
-}
-
-/* 功能：接收上位机目标回调并暂存命令；用途：把通信上下文的数据安全移交给控制周期；无返回值表示设置待处理标志。 */
-static void UpperEntry_OnPcCmd(const upper_pc_target_t *source /* 规则调整前的原始 PID 增益 */,
-                               void *user_data /* 调用回调函数时传递的用户上下文 */)
-{
-    upper_target_t target;
-
-    (void)user_data;
-    UpperEntry_ConvertPcTarget(source, &target);
-    if (osMessageQueuePut(upper_cmd_queue, &target, 0U, 0U) != osOK)
-    {
-        upper_cmd_drop_count++;
-    }
-}
-
-/* 功能：接收上位机急停回调；用途：延迟到控制周期执行急停；无返回值表示设置急停待处理标志。 */
-static void UpperEntry_OnPcEStop(void *user_data /* 调用回调函数时传递的用户上下文 */)
-{
-    (void)user_data;
-    upper_estop_pending = true;
-}
-
-/* 功能：保存 PC 下发的辅助输出位；用途：由周期任务通过 UART5 转发到抬升 H723。 */
-static void UpperEntry_OnPcAuxControl(uint8_t output_bits /* 需要写入辅助控制板的输出位 */,
-                                      uint8_t update_mask /* 指定本次允许改变哪些辅助输出位的掩码 */,
-                                      void *user_data /* 调用回调函数时传递的用户上下文 */)
-{
-    (void)user_data;
-    output_bits &= UPPER_AUX_OUTPUT_MASK;
-    update_mask &= UPPER_AUX_OUTPUT_MASK;
-    if (update_mask == 0U)
-    {
-        /* Legacy GUI: PB3 was explicit; the other channels were edge-based. */
-        update_mask = (upper_aux_output_bits ^ output_bits) |
-                      UPPER_AUX_OUTPUT_PE4;
-    }
-    upper_aux_output_bits =
-        (upper_aux_output_bits & (uint8_t)~update_mask) |
-        (output_bits & update_mask);
-    upper_aux_update_mask |= update_mask;
-    upper_aux_uart5_pending_count = UPPER_AUX_UART_REPEAT_COUNT;
-}
-
 /* 功能：计算辅助帧 CRC8；用途：保护 UART 桥接数据；多项式为 0x07、初值为 0。 */
-static uint8_t UpperEntry_Crc8(const uint8_t *data /* 待处理数据的首地址 */, size_t size /* 待处理数据的字节数 */)
+static uint8_t UpperEntry_Crc8(const uint8_t *data /**< 待计算CRC8的辅助UART帧数据 */, size_t size /**< 参与CRC8计算的数据字节数 */)
 {
     uint8_t crc = 0U;
     size_t index;
@@ -610,10 +450,10 @@ static void UpperEntry_ProcessAuxUart5(void)
 }
 
 /* 功能：处理通信层转交的 UART 数据；用途：仅将选定控制通道数据送入上位机协议；无返回值表示数据已消费或忽略。 */
-static void UpperEntry_OnUart(comm_uart_channel_t channel /* 需要选择或上报的 UART 通道 */,
-                              const uint8_t *data /* 待处理数据的首地址 */,
-                              size_t size /* 待处理数据的字节数 */,
-                              void *user_data /* 调用回调函数时传递的用户上下文 */)
+static void UpperEntry_OnUart(comm_uart_channel_t channel /**< 产生本次接收数据的 UART 通道 */,
+                              const uint8_t *data /**< 通信层收到的UART数据块 */,
+                              size_t size /**< 本次UART接收的数据字节数 */,
+                              void *user_data /**< 调用回调函数时传递的用户上下文 */)
 {
     /* UART4 用于 PC 链路；UART5 传输固定 10 字节的遥控帧。 */
     (void)user_data;
@@ -631,347 +471,31 @@ static void UpperEntry_OnUart(comm_uart_channel_t channel /* 需要选择或上�
 }
 
 /* 功能：处理通信层转交的 CAN 帧；用途：把反馈同时送给电机端口和 VOFA 桥；无返回值表示完成分发。 */
-static void UpperEntry_OnCan(uint8_t can_bus /* CAN 总线编号 */,
-                             const can_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */,
-                             void *user_data /* 调用回调函数时传递的用户上下文 */)
+static void UpperEntry_OnCan(uint8_t can_bus /**< CAN 总线编号 */,
+                             const can_frame_t *frame /**< 待解析的 CAN 接收帧 */,
+                             void *user_data /**< 调用回调函数时传递的用户上下文 */)
 {
     (void)user_data;
     UpperEntry_OnCanFrame(can_bus, frame, CommRuntime_GetTickMs());
 }
 
-/* 功能：接收上位机电机维护动作；用途：暂存 J4310 保存零点等请求供控制周期执行；无返回值表示记录待处理动作。 */
-static void UpperEntry_OnPcMotorAction(uint8_t action /* 需要执行的电机或遥控动作 */,
-                                       uint8_t can_bus /* CAN 总线编号 */,
-                                       uint8_t node_id /* 电机协议节点编号 */,
-                                       uint8_t value /* 需要检查、限幅或编码的输入值 */,
-                                       void *user_data /* 调用回调函数时传递的用户上下文 */)
-{
-    (void)user_data;
-    upper_motor_action = action;
-    upper_motor_action_can_bus = can_bus;
-    upper_motor_action_node_id = node_id;
-    upper_motor_action_value = value;
-    upper_motor_action_pending = true;
-}
-
-/* 功能：在保护延时后发送待处理握手确认；用途：建立上位机控制会话；无返回值表示发送状态写入链路和统计。 */
-static void UpperEntry_SendHandshakeAck(uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    size_t frame_size;
-    uint16_t sequence;
-
-    if (!UpperPcLink_IsHandshakeAckDue(&upper_pc_link,
-                                       tick_ms,
-                                       UPPER_HANDSHAKE_ACK_GUARD_MS))
-    {
-        return;
-    }
-
-    if (!CommRuntime_PcTxReady())
-    {
-        upper_handshake_ack_busy_count++;
-        return;
-    }
-
-    sequence = UpperPcLink_GetHandshakeSequence(&upper_pc_link);
-    frame_size = UpperPcLink_BuildHandshakeAck(&upper_pc_link,
-                                               upper_tx_buffer,
-                                               sizeof(upper_tx_buffer));
-    if ((frame_size > 0U) &&
-        CommRuntime_PcTransmit(upper_tx_buffer, (uint16_t)frame_size))
-    {
-        UpperPcLink_MarkHandshakeAckSent(&upper_pc_link, sequence);
-        upper_handshake_ack_sent_count++;
-    }
-    else
-    {
-        upper_handshake_ack_fail_count++;
-    }
-}
-
-/* Flash 诊断独立于电机控制会话。 */
-/* 功能：在请求待处理时构造并发送 Flash 信息；用途：响应 PC 对外部 Flash 状态的查询；无返回值表示发送流程已处理。 */
-static void UpperEntry_SendFlashInfo(void)
-{
-    size_t frame_size;
-    uint16_t sequence;
-    w25q_handle_t *flash_device;
-
-    if (!UpperPcLink_HasFlashInfoPending(&upper_pc_link) ||
-        !CommRuntime_PcTxReady())
-    {
-        return;
-    }
-
-    sequence = UpperPcLink_GetFlashInfoSequence(&upper_pc_link);
-    flash_device = W25Q_PortGetDevice();
-    frame_size = UpperPcLink_BuildFlashInfo(
-                     &upper_pc_link,
-                     (uint8_t)W25Q_PortGetInitStatus(),
-                     flash_device->is_initialized,
-                     flash_device->flash_id,
-                     flash_device->capacity_kb,
-                     flash_device->sector_count,
-                     flash_device->page_size_byte,
-                     W25Q_SECTOR_SIZE_BYTE,
-                     upper_tx_buffer,
-                     sizeof(upper_tx_buffer));
-    if ((frame_size > 0U) &&
-        CommRuntime_PcTransmit(upper_tx_buffer, (uint16_t)frame_size))
-    {
-        UpperPcLink_MarkFlashInfoSent(&upper_pc_link, sequence);
-    }
-}
-
-/* 功能：处理上位机事件响应；用途：发送握手、维护结果、故障和 Flash 信息。 */
-static void UpperEntry_ProcessPcEvents(uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    size_t frame_size;
-    upper_motor_fault_t fault;
-
-    UpperEntry_SendHandshakeAck(tick_ms);
-    if (!UpperPcLink_IsSessionActive(&upper_pc_link, tick_ms))
-    {
-        UpperEntry_SendFlashInfo();
-        return;
-    }
-    if (upper_motor_action_result_pending && CommRuntime_PcTxReady())
-    {
-        frame_size = UpperPcLink_BuildMotorActionResult(
-                         &upper_pc_link,
-                         upper_motor_action_result_action,
-                         upper_motor_action_result_can_bus,
-                         upper_motor_action_result_node_id,
-                         upper_motor_action_result_status,
-                         upper_motor_action_result_tick_ms,
-                         upper_tx_buffer,
-                         sizeof(upper_tx_buffer));
-        if ((frame_size > 0U) &&
-            CommRuntime_PcTransmit(upper_tx_buffer, (uint16_t)frame_size))
-        {
-            upper_motor_action_result_pending = false;
-        }
-    }
-    if (UpperMotorPort_GetPendingFault(&fault) && CommRuntime_PcTxReady())
-    {
-        frame_size = UpperPcLink_BuildMotorFault(
-                         &upper_pc_link,
-                         (uint8_t)fault.model,
-                         fault.can_bus,
-                         fault.node_id,
-                         fault.error_code,
-                         fault.tick_ms,
-                         upper_tx_buffer,
-                         sizeof(upper_tx_buffer));
-        if ((frame_size > 0U) &&
-            CommRuntime_PcTransmit(upper_tx_buffer, (uint16_t)frame_size))
-        {
-            UpperMotorPort_MarkFaultSent(fault.sequence);
-        }
-    }
-    UpperEntry_SendFlashInfo();
-}
-
-/* 周期上报机器人状态和 J4310 反馈；事件帧在本周期中拥有更高优先级。 */
-static void UpperEntry_SendState(uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    size_t frame_size;
-    upper_j4310_rx_diagnostic_t j4310_rx_diagnostic;
-    upper_j4310_tx_diagnostic_t j4310_tx_diagnostic;
-    upper_pc_state_t pc_state;
-    float j4310_position_rad;
-    bool j4310_position_valid;
-    bool j4310_diagnostic_valid;
-    bool j4310_tx_diagnostic_valid;
-
-    if (!UpperPcLink_IsSessionActive(&upper_pc_link, tick_ms) ||
-        ((tick_ms - upper_state_last_sent_tick_ms) < UPPER_STATE_PERIOD_MS))
-    {
-        return;
-    }
-    if (!CommRuntime_PcTxReady())
-    {
-        upper_state_busy_count++;
-        return;
-    }
-
-    j4310_position_valid = UpperMotorPort_GetJ4310OutputPosition(
-                               CAN_BUS_ARM_J4310,
-                               NODE_ARM_J4310,
-                               &j4310_position_rad);
-    j4310_diagnostic_valid = UpperMotorPort_GetJ4310RxDiagnostic(
-                                 CAN_BUS_ARM_J4310,
-                                 NODE_ARM_J4310,
-                                 &j4310_rx_diagnostic);
-    j4310_tx_diagnostic_valid = UpperMotorPort_GetJ4310TxDiagnostic(
-                                    CAN_BUS_ARM_J4310,
-                                    NODE_ARM_J4310,
-                                    &j4310_tx_diagnostic);
-    (void)memset(&pc_state, 0, sizeof(pc_state));
-    pc_state.robot_state = (uint8_t)upper_robot.state;
-    pc_state.motor_sent_count = upper_robot.motor_manager.sent_count;
-    pc_state.motor_send_fail_count =
-        upper_robot.motor_manager.send_fail_count;
-    pc_state.motor_protocol_block_count =
-        upper_robot.motor_manager.protocol_block_count;
-    pc_state.j4310_position_valid = j4310_position_valid;
-    pc_state.j4310_position_rad = j4310_position_valid ?
-                                  j4310_position_rad : 0.0f;
-    pc_state.j4310_bus_rx_frames =
-        comm_fdcan_rx_count[CAN_BUS_ARM_J4310 - 1U];
-    pc_state.j4310_rx_valid = j4310_diagnostic_valid;
-    if (j4310_diagnostic_valid)
-    {
-        pc_state.j4310_rx.accepted_frames =
-            j4310_rx_diagnostic.accepted_frames;
-        pc_state.j4310_rx.rejected_format_frames =
-            j4310_rx_diagnostic.rejected_format_frames;
-        pc_state.j4310_rx.rejected_master_id_frames =
-            j4310_rx_diagnostic.rejected_master_id_frames;
-        pc_state.j4310_rx.rejected_feedback_id_frames =
-            j4310_rx_diagnostic.rejected_feedback_id_frames;
-        pc_state.j4310_rx.last_can_id = j4310_rx_diagnostic.last_can_id;
-        pc_state.j4310_rx.last_dlc = j4310_rx_diagnostic.last_dlc;
-        pc_state.j4310_rx.last_data0 = j4310_rx_diagnostic.last_data0;
-        pc_state.j4310_rx.last_result = j4310_rx_diagnostic.last_result;
-    }
-    pc_state.j4310_tx_valid = j4310_tx_diagnostic_valid;
-    if (j4310_tx_diagnostic_valid)
-    {
-        pc_state.j4310_tx.attempted_frames =
-            j4310_tx_diagnostic.attempted_frames;
-        pc_state.j4310_tx.queued_frames =
-            j4310_tx_diagnostic.queued_frames;
-        pc_state.j4310_tx.failed_frames =
-            j4310_tx_diagnostic.failed_frames;
-        pc_state.j4310_tx.enable_frames =
-            j4310_tx_diagnostic.enable_frames;
-        pc_state.j4310_tx.mit_frames = j4310_tx_diagnostic.mit_frames;
-        pc_state.j4310_tx.disable_frames =
-            j4310_tx_diagnostic.disable_frames;
-        pc_state.j4310_tx.last_can_id = j4310_tx_diagnostic.last_can_id;
-        pc_state.j4310_tx.last_dlc = j4310_tx_diagnostic.last_dlc;
-        pc_state.j4310_tx.last_data7 = j4310_tx_diagnostic.last_data7;
-        pc_state.j4310_tx.enable_confirmed =
-            j4310_tx_diagnostic.enable_confirmed;
-        pc_state.j4310_tx.feedback_state =
-            j4310_tx_diagnostic.feedback_state;
-    }
-    pc_state.j4310_auto_return.available = true;
-    pc_state.j4310_auto_return.enabled = upper_j4310_auto_return_enabled;
-    pc_state.j4310_auto_return.active =
-        J4310AutoReturn_IsActive(&upper_j4310_auto_return);
-    pc_state.j4310_auto_return.stage =
-        (uint8_t)upper_j4310_auto_return.stage;
-    frame_size = UpperPcLink_BuildState(&upper_pc_link,
-                                        &pc_state,
-                                        tick_ms,
-                                        upper_tx_buffer,
-                                        sizeof(upper_tx_buffer));
-    if ((frame_size > 0U) &&
-        CommRuntime_PcTransmit(upper_tx_buffer, (uint16_t)frame_size))
-    {
-        upper_state_last_sent_tick_ms = tick_ms;
-        upper_state_sent_count++;
-    }
-    else
-    {
-        upper_state_fail_count++;
-    }
-}
-
-/* 分时上报各 DJI 电机的实时位置、零点状态和反馈新鲜度。 */
-static void UpperEntry_SendDjiTelemetry(uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    upper_dji_diagnostic_t diagnostics[UPPER_PC_DJI_DIAGNOSTIC_COUNT];
-    uint32_t fdcan_rx_counts[UPPER_PC_FDCAN_COUNT];
-    upper_pc_dji_telemetry_t telemetry;
-    size_t diagnostic_count;
-    size_t index;
-    size_t frame_size;
-
-    if (!UpperPcLink_IsSessionActive(&upper_pc_link, tick_ms) ||
-        ((tick_ms - upper_dji_telemetry_last_sent_tick_ms) <
-         UPPER_DJI_TELEMETRY_PERIOD_MS))
-    {
-        return;
-    }
-    if (!CommRuntime_PcTxReady())
-    {
-        upper_dji_telemetry_busy_count++;
-        return;
-    }
-
-    diagnostic_count = UpperMotorPort_GetDjiDiagnostics(
-                           tick_ms,
-                           diagnostics,
-                           UPPER_PC_DJI_DIAGNOSTIC_COUNT);
-    if (diagnostic_count == 0U)
-    {
-        return;
-    }
-    if (upper_dji_telemetry_next_index >= diagnostic_count)
-    {
-        upper_dji_telemetry_next_index = 0U;
-    }
-    for (index = 0U; index < UPPER_PC_FDCAN_COUNT; index++)
-    {
-        fdcan_rx_counts[index] = comm_fdcan_rx_count[index];
-    }
-    telemetry.model =
-        (uint8_t)diagnostics[upper_dji_telemetry_next_index].model;
-    telemetry.can_bus =
-        diagnostics[upper_dji_telemetry_next_index].can_bus;
-    telemetry.node_id =
-        diagnostics[upper_dji_telemetry_next_index].node_id;
-    telemetry.feedback_received =
-        diagnostics[upper_dji_telemetry_next_index].feedback_received;
-    telemetry.zero_valid =
-        diagnostics[upper_dji_telemetry_next_index].zero_valid;
-    telemetry.feedback_fresh =
-        diagnostics[upper_dji_telemetry_next_index].feedback_fresh;
-    telemetry.rotor_position_rad =
-        diagnostics[upper_dji_telemetry_next_index].rotor_position_rad;
-    telemetry.zero_rotor_position_rad =
-        diagnostics[upper_dji_telemetry_next_index].zero_rotor_position_rad;
-    telemetry.relative_output_position_rad =
-        diagnostics[upper_dji_telemetry_next_index].relative_output_position_rad;
-    frame_size = UpperPcLink_BuildDjiTelemetry(
-                     &upper_pc_link,
-                     &telemetry,
-                     fdcan_rx_counts,
-                     upper_tx_buffer,
-                     sizeof(upper_tx_buffer));
-    if ((frame_size > 0U) &&
-        CommRuntime_PcTransmit(upper_tx_buffer, (uint16_t)frame_size))
-    {
-        upper_dji_telemetry_last_sent_tick_ms = tick_ms;
-        upper_dji_telemetry_next_index++;
-        upper_dji_telemetry_sent_count++;
-    }
-    else
-    {
-        upper_dji_telemetry_fail_count++;
-    }
-}
-
 /* 功能：接收上位机原始字节流；用途：作为外部入口推进链路解析；无返回值表示数据已交给 UpperPcLink。 */
-void UpperEntry_OnPcData(const uint8_t *data,
-                         size_t size,
-                         uint32_t tick_ms)
+void UpperEntry_OnPcData(const uint8_t *data /**< 上位机链路收到的原始字节流 */,
+                         size_t size /**< 本次上位机字节流长度 */,
+                         uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperPcLink_Push(&upper_pc_link, data, size, tick_ms);
 }
 
 /* 功能：接收外部 CAN 帧入口；用途：把电机反馈交给上层电机端口解析；无返回值表示帧已分发。 */
-void UpperEntry_OnCanFrame(uint8_t can_bus,
-                           const can_frame_t *frame,
-                           uint32_t tick_ms)
+void UpperEntry_OnCanFrame(uint8_t can_bus /**< CAN 总线编号 */,
+                           const can_frame_t *frame /**< 待解析的 CAN 接收帧 */,
+                           uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperMotorPort_OnFrame(can_bus, frame, tick_ms);
 }
-/* ==================== 底层电机控制 ==================== */
 
+/* ==================== 底层电机控制 ==================== */
 
 /* 功能：取消 J4310 自动回零并释放其控制权；用途：切换到遥控或 PC 主动控制；无返回值表示回零状态已清除。 */
 static void UpperEntry_CancelJ4310AutoReturn(void)
@@ -998,8 +522,8 @@ static bool UpperEntry_ResetJ4310PositionControl(void)
 }
 
 /* 功能：为 J4310 启动到指定角度的位置轨迹；用途：将离散目标转换为平滑运动；无返回值表示启动请求已处理。 */
-static void UpperEntry_StartJ4310Trajectory(uint32_t tick_ms /* 当前系统毫秒时刻 */,
-                                             float target_position_rad /* 轨迹目标关节角，单位：弧度 */)
+static void UpperEntry_StartJ4310Trajectory(uint32_t tick_ms /**< 当前系统毫秒时刻 */,
+                                             float target_position_rad /**< 轨迹目标关节角，单位：弧度 */)
 {
     upper_j4310_feedback_t feedback;
     float start_position_rad;
@@ -1029,7 +553,7 @@ static void UpperEntry_StartJ4310Trajectory(uint32_t tick_ms /* 当前系统毫�
 }
 
 /* 功能：上电使能 J4310 并锁存首个有效角度；用途：确认使能后直接保持当时位置。 */
-static void UpperEntry_ServiceJ4310StartupEnable(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ServiceJ4310StartupEnable(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_j4310_tx_diagnostic_t diagnostic;
     upper_j4310_feedback_t feedback;
@@ -1081,7 +605,7 @@ static void UpperEntry_ServiceJ4310StartupEnable(uint32_t tick_ms /* 当前系�
 }
 
 /* 功能：执行 J4310 位置轨迹和自动回零的周期服务；用途：更新目标并合成关节控制命令；无返回值表示本周期控制已完成。 */
-static void UpperEntry_ServiceJ4310Control(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ServiceJ4310Control(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     const size_t index = UPPER_MOTOR_ARM_J4310;
     upper_j4310_feedback_t feedback;
@@ -1145,12 +669,6 @@ static void UpperEntry_ServiceJ4310Control(uint32_t tick_ms /* 当前系统毫�
     UpperRobot_Start(&upper_robot);
 }
 
-/* 功能：把遥控协议中的角度从度转换为弧度；用途：统一应用层内部角度单位；返回值表示弧度值。 */
-static float UpperEntry_RemoteDegreesToRadians(float degrees /* 需要换算为弧度的角度，单位：度 */)
-{
-    return degrees * UPPER_REMOTE_ANGLE_DEG_TO_RAD;
-}
-
 /* 为 J4310、闸门和夹爪设置特意偏保守的堵转阈值。 */
 static bool UpperEntry_InitStallRecovery(void)
 {
@@ -1194,8 +712,8 @@ static bool UpperEntry_InitStallRecovery(void)
 }
 
 static void UpperEntry_SetStallMinimumEffort(
-    position_stall_monitor_t *monitor /* 函数读取或写入的对象地址 */,
-    float minimum_effort /* 判定堵转所需的最小转矩或电流绝对值 */)
+    position_stall_monitor_t *monitor /**< 需要初始化或更新的位置堵转监视器 */,
+    float minimum_effort /**< 判定堵转所需的最小转矩或电流绝对值 */)
 {
     if ((monitor == NULL) ||
         (monitor->cfg.minimum_effort == minimum_effort))
@@ -1223,8 +741,8 @@ static void UpperEntry_ConfigureRemoteStallSensitivity(void)
 }
 
 static void UpperEntry_ConfigureGripperStallProtection(
-    const gripper_target_t *target /* 本次需要应用的控制目标 */,
-    bool protection_enabled /* 本次动作是否启用堵转保护 */)
+    const gripper_target_t *target /**< 本周期夹爪机构控制目标 */,
+    bool protection_enabled /**< 本次动作是否启用堵转保护 */)
 {
     if ((target == NULL) || !target->enabled || !target->position_mode)
     {
@@ -1244,7 +762,7 @@ static void UpperEntry_ConfigureGripperStallProtection(
 }
 
 /* 中止过期的遥控流程阶段，并仅下发一次请求的恢复位置。 */
-static void UpperEntry_ServiceStallRecovery(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ServiceStallRecovery(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_j4310_feedback_t j4310_feedback;
     upper_m2006_feedback_t gate_feedback;
@@ -1359,347 +877,8 @@ static void UpperEntry_ServiceRemoteGateDisable(void)
     UpperRobot_SetTarget(&upper_robot, &target);
 }
 
-/* 应用完整的机械臂目标，使两台 M3508 与 J4310 同步运动。 */
-/* 功能：应用遥控器给出的机械臂双电机角度目标；用途：同步更新 M3508 与 J4310 关节命令；无返回值表示目标已提交。 */
-static void UpperEntry_ApplyRemoteArm(float m3508_angle_deg /* 机械臂 M3508 输出轴目标角度，单位：度 */,
-                                      float j4310_angle_deg /* 机械臂 J4310 关节目标角度，单位：度 */,
-                                      uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    upper_target_t target;
-    float m3508_angle_rad;
-
-    target = upper_robot.target;
-    m3508_angle_rad = UpperEntry_RemoteDegreesToRadians(m3508_angle_deg);
-    target.position_mode = true;
-    target.arm.enabled = true;
-    target.arm.j4310_commanded = true;
-    target.arm.m3508_enabled = true;
-    target.arm.position_mode = true;
-    target.arm.grip_pos_rad =
-        UpperEntry_RemoteDegreesToRadians(j4310_angle_deg);
-    target.arm.grip_vel_rad_s = 0.0f;
-    target.arm.grip_kp = UPPER_J4310_POSITION_KP;
-    target.arm.grip_kd = UPPER_J4310_POSITION_KD;
-    target.arm.grip_torque_nm = 0.0f;
-    target.arm.grip_torque_limit_nm = UPPER_J4310_TORQUE_MAP_MAX_NM;
-    target.arm.pid_update = false;
-    target.arm.m3508_pos_rad[0] = m3508_angle_rad;
-    target.arm.m3508_pos_rad[1] = m3508_angle_rad;
-
-    upper_j4310_startup_enable_pending = false;
-    UpperEntry_CancelJ4310AutoReturn();
-    UpperEntry_StartJ4310Trajectory(tick_ms,
-                                     target.arm.grip_pos_rad);
-    PositionStallMonitor_Arm(&upper_j4310_stall_monitor,
-                             target.arm.grip_pos_rad,
-                             tick_ms);
-    UpperRobot_SetTarget(&upper_robot, &target);
-    UpperRobot_Start(&upper_robot);
-}
-
-/* 保持当前 J4310 目标，仅运动两台 M3508。 */
-/* 功能：应用遥控器给出的机械臂 M3508 角度目标；用途：单独控制机械臂前级关节；无返回值表示目标已提交。 */
-static void UpperEntry_ApplyRemoteM3508(float angle_deg /* 对应机构的目标输出角度，单位：度 */)
-{
-    upper_target_t target;
-    float angle_rad;
-
-    target = upper_robot.target;
-    angle_rad = UpperEntry_RemoteDegreesToRadians(angle_deg);
-    target.position_mode = true;
-    target.arm.enabled = true;
-    target.arm.j4310_commanded = false;
-    target.arm.m3508_enabled = true;
-    target.arm.position_mode = true;
-    target.arm.pid_update = false;
-    target.arm.m3508_pos_rad[0] = angle_rad;
-    target.arm.m3508_pos_rad[1] = angle_rad;
-
-    upper_j4310_startup_enable_pending = false;
-    UpperEntry_CancelJ4310AutoReturn();
-    UpperRobot_SetTarget(&upper_robot, &target);
-    UpperRobot_Start(&upper_robot);
-}
-
-/* 保持两台 M3508 目标不变，仅运动 J4310。 */
-/* 功能：应用遥控器给出的 J4310 角度目标；用途：启动末端关节的平滑位置轨迹；无返回值表示目标已提交。 */
-static void UpperEntry_ApplyRemoteJ4310(float angle_deg /* 对应机构的目标输出角度，单位：度 */, uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    upper_target_t target;
-
-    target = upper_robot.target;
-    target.position_mode = true;
-    target.arm.enabled = true;
-    target.arm.j4310_commanded = true;
-    target.arm.position_mode = true;
-    target.arm.grip_pos_rad = UpperEntry_RemoteDegreesToRadians(angle_deg);
-    target.arm.grip_vel_rad_s = 0.0f;
-    target.arm.grip_kp = UPPER_J4310_POSITION_KP;
-    target.arm.grip_kd = UPPER_J4310_POSITION_KD;
-    target.arm.grip_torque_nm = 0.0f;
-    target.arm.grip_torque_limit_nm = UPPER_J4310_TORQUE_MAP_MAX_NM;
-
-    upper_j4310_startup_enable_pending = false;
-    UpperEntry_CancelJ4310AutoReturn();
-    UpperEntry_StartJ4310Trajectory(tick_ms, target.arm.grip_pos_rad);
-    PositionStallMonitor_Arm(&upper_j4310_stall_monitor,
-                             target.arm.grip_pos_rad,
-                             tick_ms);
-    UpperRobot_SetTarget(&upper_robot, &target);
-    UpperRobot_Start(&upper_robot);
-}
-
-/* 功能：应用遥控器给出的闸门角度目标；用途：更新闸门位置和使能状态；无返回值表示目标已提交。 */
-static void UpperEntry_ApplyRemoteGate(float angle_deg /* 对应机构的目标输出角度，单位：度 */)
-{
-    upper_target_t target;
-
-    upper_remote_gate_disable_pending = false;
-    target = upper_robot.target;
-    target.position_mode = true;
-    target.gate.enabled = true;
-    target.gate.position_mode = true;
-    target.gate.pid_update = false;
-    target.gate.m2006_pos_rad =
-        UpperEntry_RemoteDegreesToRadians(angle_deg);
-    upper_gate_stall_rearm_pending = true;
-    UpperRobot_SetTarget(&upper_robot, &target);
-    UpperRobot_Start(&upper_robot);
-}
-
-/* PC1 将闸门移动到 80 度，随后反馈服务将其禁用。 */
-static void UpperEntry_HandleRemotePc1(void)
-{
-    UpperEntry_ApplyRemoteGate(UPPER_REMOTE_PC1_GATE_DEG);
-    upper_remote_gate_disable_pending = true;
-}
-
-static void UpperEntry_ResetRemotePc0Sequence(void)
-{
-    upper_remote_pc0_state = UPPER_REMOTE_PC0_IDLE;
-    upper_remote_pc0_active_branch = UPPER_REMOTE_PC0_BRANCH_ONE;
-    upper_remote_pc0_due_tick_ms = 0U;
-    upper_remote_pc0_global_finish_active = false;
-}
-
-static void UpperEntry_ResetRemotePc0ToFirstBranch(void)
-{
-    UpperEntry_ResetRemotePc0Sequence();
-    upper_remote_mode_history[upper_remote_mode].auto_pc0_next_branch =
-        (uint8_t)UPPER_REMOTE_PC0_BRANCH_ONE;
-}
-
-/* 以当前下发目标判断 J4310 是否处于自动存二的 180 度收尾指令。 */
-static bool UpperEntry_IsRemoteJ4310AtStore2FinalTarget(void)
-{
-    float target_position_rad;
-    float expected_position_rad;
-    float tolerance_rad;
-
-    if (!upper_robot.target.arm.enabled ||
-        !upper_robot.target.arm.position_mode)
-    {
-        return false;
-    }
-
-    target_position_rad = upper_robot.target.arm.grip_pos_rad;
-    expected_position_rad = UpperEntry_RemoteDegreesToRadians(
-        UPPER_REMOTE_STORE2_FINAL_J4310_DEG);
-    tolerance_rad = UpperEntry_RemoteDegreesToRadians(
-        UPPER_REMOTE_PC0_J4310_MATCH_TOLERANCE_DEG);
-    return (target_position_rad >= expected_position_rad - tolerance_rad) &&
-           (target_position_rad <= expected_position_rad + tolerance_rad);
-}
-
-/* 自动存二在 J4310=180 且 PE4 关闭时，从 PC0 的闸门收尾阶段直接启动。 */
-static void UpperEntry_StartRemotePc0GlobalFinish(uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    UpperEntry_ResetRemotePc0Sequence();
-    upper_remote_pd11_pending = false;
-    upper_remote_pd8_first_pending = false;
-    upper_remote_auto_pe4_state = UPPER_REMOTE_AUTO_PE4_IDLE;
-    upper_remote_flip_action = UPPER_REMOTE_FLIP_ACTION_NONE;
-    upper_remote_flip_pending_action = UPPER_REMOTE_FLIP_ACTION_NONE;
-    upper_remote_flip_first_stage = false;
-    upper_remote_flip_due_tick_ms = 0U;
-    UpperEntry_ResetRemoteAutomaticProgress();
-    upper_remote_gate_disable_pending = false;
-
-    upper_remote_pc0_global_finish_active = true;
-    UpperEntry_ApplyRemoteGate(UPPER_REMOTE_PC0_GATE_FIRST_DEG);
-    upper_remote_pc0_due_tick_ms =
-        tick_ms + UPPER_REMOTE_PC0_PD8_DELAY_MS;
-    upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_PD8_SECOND;
-}
-
-static float UpperEntry_RemotePc0BranchM3508Deg(
-    upper_remote_pc0_branch_t branch /* PC0 自动流程本次需要执行的分支 */)
-{
-    if (branch == UPPER_REMOTE_PC0_BRANCH_ONE)
-    {
-        return UPPER_REMOTE_PD13_FIRST_M3508_DEG;
-    }
-    if (branch == UPPER_REMOTE_PC0_BRANCH_TWO)
-    {
-        return UPPER_REMOTE_PC0_SECOND_BRANCH_M3508_DEG;
-    }
-    return UPPER_REMOTE_PC0_THIRD_BRANCH_M3508_DEG;
-}
-
-static void UpperEntry_AdvanceRemotePc0Branch(void)
-{
-    upper_remote_mode_history_t *history;
-
-    history = &upper_remote_mode_history[upper_remote_mode];
-    history->auto_pc0_next_branch =
-        (uint8_t)(((uint8_t)upper_remote_pc0_active_branch + 1U) %
-                  (uint8_t)UPPER_REMOTE_PC0_BRANCH_COUNT);
-}
-
-static void UpperEntry_StartRemotePc0Branch(uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    upper_remote_mode_history_t *history;
-    uint8_t next_branch;
-    bool first_storage_press;
-
-    history = &upper_remote_mode_history[upper_remote_mode];
-    next_branch = history->auto_pc0_next_branch;
-    if (next_branch >= (uint8_t)UPPER_REMOTE_PC0_BRANCH_COUNT)
-    {
-        next_branch = (uint8_t)UPPER_REMOTE_PC0_BRANCH_ONE;
-        history->auto_pc0_next_branch = next_branch;
-    }
-    upper_remote_pc0_active_branch =
-        (upper_remote_pc0_branch_t)next_branch;
-
-    upper_remote_pd11_pending = false;
-    upper_remote_pd8_first_pending = false;
-    upper_remote_auto_pe4_state = UPPER_REMOTE_AUTO_PE4_IDLE;
-    UpperEntry_ResetRemoteAutomaticProgress();
-    upper_remote_gate_disable_pending = false;
-    upper_remote_pc0_due_tick_ms = 0U;
-
-    first_storage_press =
-        UpperEntry_IsFirstRemoteAutomaticStoragePress(history);
-    history->auto_pc0_has_pressed = true;
-    UpperEntry_ApplyRemoteArm(
-        UpperEntry_RemotePc0BranchM3508Deg(upper_remote_pc0_active_branch),
-        UPPER_REMOTE_PC0_FIRST_J4310_DEG,
-        tick_ms);
-
-    UpperEntry_ApplyRemoteAutomaticStartOutputs(first_storage_press);
-
-    upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_FIRST_PE4_CLOSE;
-}
-
-/* PC0 在三个自动分支间循环，并独立于普通 PD9 的单双次状态。 */
-static void UpperEntry_HandleRemotePc0Press(uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    if (upper_remote_pc0_state == UPPER_REMOTE_PC0_IDLE)
-    {
-        UpperEntry_StartRemotePc0Branch(tick_ms);
-    }
-    else if (upper_remote_pc0_state ==
-             UPPER_REMOTE_PC0_WAIT_FIRST_PE4_CLOSE)
-    {
-        UpperEntry_AdvanceRemotePc0Branch();
-        UpperEntry_StartRemotePc0Branch(tick_ms);
-    }
-    else if (upper_remote_pc0_state ==
-             UPPER_REMOTE_PC0_WAIT_SECOND_PRESS)
-    {
-        upper_remote_pd11_pending = false;
-        upper_remote_pd8_first_pending = false;
-        UpperEntry_ApplyRemoteGate(UPPER_REMOTE_PC0_GATE_FIRST_DEG);
-        upper_remote_pc0_due_tick_ms =
-            tick_ms + UPPER_REMOTE_PC0_PD8_DELAY_MS;
-        upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_PD8_SECOND;
-    }
-}
-
-/* 返回 true 表示 PC0 正在等待 PE4，本次边沿不能再被其他流程消费。 */
-static bool UpperEntry_HandleRemotePc0Pe4(bool pe4_closed /* PE4 辅助输出当前是否处于关闭状态 */,
-                                          uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    if (upper_remote_pc0_state == UPPER_REMOTE_PC0_IDLE)
-    {
-        return false;
-    }
-
-    if ((upper_remote_pc0_state ==
-         UPPER_REMOTE_PC0_WAIT_FIRST_PE4_CLOSE) && pe4_closed)
-    {
-        upper_remote_pd11_pending = false;
-        upper_remote_pd8_first_pending = false;
-        UpperEntry_ApplyRemoteArm(UPPER_REMOTE_PC0_CLOSE_M3508_DEG,
-                                  UPPER_REMOTE_PC0_CLOSE_J4310_DEG,
-                                  tick_ms);
-        upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_SECOND_PRESS;
-    }
-    else if ((upper_remote_pc0_state ==
-              UPPER_REMOTE_PC0_WAIT_FINAL_PE4_OPEN) && !pe4_closed)
-    {
-        upper_remote_pd11_pending = false;
-        upper_remote_pd8_first_pending = false;
-        /* 打开 PE4 后立即执行 PC0 收尾动作。 */
-        upper_remote_pc0_due_tick_ms =
-            tick_ms + UPPER_REMOTE_PC0_FINAL_DELAY_MS;
-        upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_FINAL_DELAY;
-    }
-
-    return true;
-}
-
-static void UpperEntry_ServiceRemotePc0Sequence(uint32_t tick_ms /* 当前系统毫秒时刻 */)
-{
-    if ((upper_remote_pc0_state == UPPER_REMOTE_PC0_WAIT_PD8_SECOND) &&
-        ((int32_t)(tick_ms - upper_remote_pc0_due_tick_ms) >= 0))
-    {
-        UpperEntry_ApplyRemotePd8Second(
-            UPPER_REMOTE_PC0_SECOND_J4310_DEG, tick_ms);
-        upper_remote_pc0_due_tick_ms = 0U;
-        upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_FINAL_PE4_OPEN;
-    }
-    else if ((upper_remote_pc0_state == UPPER_REMOTE_PC0_WAIT_FINAL_DELAY) &&
-             ((int32_t)(tick_ms - upper_remote_pc0_due_tick_ms) >= 0))
-    {
-        UpperEntry_ApplyRemoteGate(UPPER_REMOTE_PC0_GATE_FINAL_DEG);
-        UpperEntry_ApplyRemoteArm(UPPER_REMOTE_PC0_FINAL_M3508_DEG,
-                                  UPPER_REMOTE_PC0_FINAL_J4310_DEG,
-                                  tick_ms);
-        /* PC0 完成后，普通 PD9 的下一次动作固定从 180 度开始。 */
-        upper_remote_pd9_zero_pending = false;
-        upper_remote_pd9_second = false;
-        if (!upper_remote_pc0_global_finish_active)
-        {
-            UpperEntry_AdvanceRemotePc0Branch();
-        }
-        UpperEntry_ResetRemotePc0Sequence();
-    }
-}
-
-/* 功能：应用遥控器给出的夹爪角度目标；用途：更新夹爪位置和使能状态；无返回值表示目标已提交。 */
-static void UpperEntry_ApplyRemoteGripper(float angle_deg /* 对应机构的目标输出角度，单位：度 */,
-                                           bool stall_protection_enabled /* 夹爪本次动作是否启用堵转保护 */)
-{
-    upper_target_t target;
-
-    target = upper_robot.target;
-    target.position_mode = true;
-    target.gripper.enabled = true;
-    target.gripper.position_mode = true;
-    target.gripper.pid_update = false;
-    target.gripper.m2006_pos_rad =
-        UpperEntry_RemoteDegreesToRadians(
-            angle_deg * UPPER_REMOTE_GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG);
-    UpperEntry_ConfigureGripperStallProtection(
-        &target.gripper, stall_protection_enabled);
-    UpperRobot_SetTarget(&upper_robot, &target);
-    UpperRobot_Start(&upper_robot);
-}
-
 /* 功能：处理待执行的上位机整机目标；用途：更新机器人目标并按需启动运行；无返回值表示待处理标志被消费。 */
-static void UpperEntry_ProcessCmd(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ProcessCmd(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_target_t target;
     upper_target_t next_target;
@@ -1780,7 +959,7 @@ static void UpperEntry_ProcessCmd(uint32_t tick_ms /* 当前系统毫秒时刻 *
 }
 
 /* 功能：执行待处理的电机维护动作并发送结果；用途：完成保存零点等异步请求；无返回值表示结果已发送或计数失败。 */
-static void UpperEntry_ProcessMotorAction(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ProcessMotorAction(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     uint8_t action;
     uint8_t can_bus;
@@ -1846,7 +1025,7 @@ static void UpperEntry_ProcessMotorAction(uint32_t tick_ms /* 当前系统毫秒
 }
 
 /* 功能：检查电机健康状态并处理新故障；用途：触发安全停机并向上位机上报故障；无返回值表示完成本周期巡检。 */
-static void UpperEntry_CheckMotorHealth(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_CheckMotorHealth(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_motor_health_t health;
     upper_motor_fault_t pending_fault;
@@ -1876,8 +1055,8 @@ static void UpperEntry_CheckMotorHealth(uint32_t tick_ms /* 当前系统毫秒�
         }
     }
 }
-/* ==================== 任务入口 ==================== */
 
+/* ==================== 任务入口 ==================== */
 
 /* 功能：初始化上层入口、机器人、链路和通信回调；用途：完成用户应用启动；返回 true 表示所有子模块初始化成功。 */
 bool UpperEntry_Init(void)
@@ -1946,7 +1125,7 @@ bool UpperEntry_Init(void)
 }
 
 /* 功能：执行上层应用的 1 ms 主控制周期；用途：处理命令、控制电机、检查故障和通信事件；无返回值表示完成一次调度。 */
-void UpperEntry_Control1ms(uint32_t tick_ms)
+void UpperEntry_Control1ms(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperMotorPort_BeginCycle(tick_ms);
     UpperEntry_ProcessCmd(tick_ms);
@@ -1994,12 +1173,356 @@ void App_Control1ms(void)
 {
     UpperEntry_Control1ms(CommRuntime_GetTickMs());
 }
+
 /* ==================== 遥控接收与总处理 ==================== */
 
+/* 功能：把遥控协议中的角度从度转换为弧度；用途：统一应用层内部角度单位；返回值表示弧度值。 */
+static float UpperEntry_RemoteDegreesToRadians(float degrees /**< 需要换算为弧度的角度，单位：度 */)
+{
+    return degrees * UPPER_REMOTE_ANGLE_DEG_TO_RAD;
+}
 
+/* 应用完整的机械臂目标，使两台 M3508 与 J4310 同步运动。 */
+/* 功能：应用遥控器给出的机械臂双电机角度目标；用途：同步更新 M3508 与 J4310 关节命令；无返回值表示目标已提交。 */
+static void UpperEntry_ApplyRemoteArm(float m3508_angle_deg /**< 机械臂 M3508 输出轴目标角度，单位：度 */,
+                                      float j4310_angle_deg /**< 机械臂 J4310 关节目标角度，单位：度 */,
+                                      uint32_t tick_ms /**< 当前系统毫秒时刻 */)
+{
+    upper_target_t target;
+    float m3508_angle_rad;
+
+    target = upper_robot.target;
+    m3508_angle_rad = UpperEntry_RemoteDegreesToRadians(m3508_angle_deg);
+    target.position_mode = true;
+    target.arm.enabled = true;
+    target.arm.j4310_commanded = true;
+    target.arm.m3508_enabled = true;
+    target.arm.position_mode = true;
+    target.arm.grip_pos_rad =
+        UpperEntry_RemoteDegreesToRadians(j4310_angle_deg);
+    target.arm.grip_vel_rad_s = 0.0f;
+    target.arm.grip_kp = UPPER_J4310_POSITION_KP;
+    target.arm.grip_kd = UPPER_J4310_POSITION_KD;
+    target.arm.grip_torque_nm = 0.0f;
+    target.arm.grip_torque_limit_nm = UPPER_J4310_TORQUE_MAP_MAX_NM;
+    target.arm.pid_update = false;
+    target.arm.m3508_pos_rad[0] = m3508_angle_rad;
+    target.arm.m3508_pos_rad[1] = m3508_angle_rad;
+
+    upper_j4310_startup_enable_pending = false;
+    UpperEntry_CancelJ4310AutoReturn();
+    UpperEntry_StartJ4310Trajectory(tick_ms,
+                                     target.arm.grip_pos_rad);
+    PositionStallMonitor_Arm(&upper_j4310_stall_monitor,
+                             target.arm.grip_pos_rad,
+                             tick_ms);
+    UpperRobot_SetTarget(&upper_robot, &target);
+    UpperRobot_Start(&upper_robot);
+}
+
+/* 保持当前 J4310 目标，仅运动两台 M3508。 */
+/* 功能：应用遥控器给出的机械臂 M3508 角度目标；用途：单独控制机械臂前级关节；无返回值表示目标已提交。 */
+static void UpperEntry_ApplyRemoteM3508(float angle_deg /**< 机械臂M3508输出轴目标角度，单位：度 */)
+{
+    upper_target_t target;
+    float angle_rad;
+
+    target = upper_robot.target;
+    angle_rad = UpperEntry_RemoteDegreesToRadians(angle_deg);
+    target.position_mode = true;
+    target.arm.enabled = true;
+    target.arm.j4310_commanded = false;
+    target.arm.m3508_enabled = true;
+    target.arm.position_mode = true;
+    target.arm.pid_update = false;
+    target.arm.m3508_pos_rad[0] = angle_rad;
+    target.arm.m3508_pos_rad[1] = angle_rad;
+
+    upper_j4310_startup_enable_pending = false;
+    UpperEntry_CancelJ4310AutoReturn();
+    UpperRobot_SetTarget(&upper_robot, &target);
+    UpperRobot_Start(&upper_robot);
+}
+
+/* 保持两台 M3508 目标不变，仅运动 J4310。 */
+/* 功能：应用遥控器给出的 J4310 角度目标；用途：启动末端关节的平滑位置轨迹；无返回值表示目标已提交。 */
+static void UpperEntry_ApplyRemoteJ4310(float angle_deg /**< 机械臂J4310关节目标角度，单位：度 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */)
+{
+    upper_target_t target;
+
+    target = upper_robot.target;
+    target.position_mode = true;
+    target.arm.enabled = true;
+    target.arm.j4310_commanded = true;
+    target.arm.position_mode = true;
+    target.arm.grip_pos_rad = UpperEntry_RemoteDegreesToRadians(angle_deg);
+    target.arm.grip_vel_rad_s = 0.0f;
+    target.arm.grip_kp = UPPER_J4310_POSITION_KP;
+    target.arm.grip_kd = UPPER_J4310_POSITION_KD;
+    target.arm.grip_torque_nm = 0.0f;
+    target.arm.grip_torque_limit_nm = UPPER_J4310_TORQUE_MAP_MAX_NM;
+
+    upper_j4310_startup_enable_pending = false;
+    UpperEntry_CancelJ4310AutoReturn();
+    UpperEntry_StartJ4310Trajectory(tick_ms, target.arm.grip_pos_rad);
+    PositionStallMonitor_Arm(&upper_j4310_stall_monitor,
+                             target.arm.grip_pos_rad,
+                             tick_ms);
+    UpperRobot_SetTarget(&upper_robot, &target);
+    UpperRobot_Start(&upper_robot);
+}
+
+/* 功能：应用遥控器给出的闸门角度目标；用途：更新闸门位置和使能状态；无返回值表示目标已提交。 */
+static void UpperEntry_ApplyRemoteGate(float angle_deg /**< 挡板机构目标角度，单位：度 */)
+{
+    upper_target_t target;
+
+    upper_remote_gate_disable_pending = false;
+    target = upper_robot.target;
+    target.position_mode = true;
+    target.gate.enabled = true;
+    target.gate.position_mode = true;
+    target.gate.pid_update = false;
+    target.gate.m2006_pos_rad =
+        UpperEntry_RemoteDegreesToRadians(angle_deg);
+    upper_gate_stall_rearm_pending = true;
+    UpperRobot_SetTarget(&upper_robot, &target);
+    UpperRobot_Start(&upper_robot);
+}
+
+/* PC1 将闸门移动到 80 度，随后反馈服务将其禁用。 */
+static void UpperEntry_HandleRemotePc1(void)
+{
+    UpperEntry_ApplyRemoteGate(UPPER_REMOTE_PC1_GATE_DEG);
+    upper_remote_gate_disable_pending = true;
+}
+
+static void UpperEntry_ResetRemotePc0Sequence(void)
+{
+    upper_remote_pc0_state = UPPER_REMOTE_PC0_IDLE;
+    upper_remote_pc0_active_branch = UPPER_REMOTE_PC0_BRANCH_ONE;
+    upper_remote_pc0_due_tick_ms = 0U;
+    upper_remote_pc0_global_finish_active = false;
+}
+
+static void UpperEntry_ResetRemotePc0ToFirstBranch(void)
+{
+    UpperEntry_ResetRemotePc0Sequence();
+    upper_remote_mode_history[upper_remote_mode].auto_pc0_next_branch =
+        (uint8_t)UPPER_REMOTE_PC0_BRANCH_ONE;
+}
+
+/* 以当前下发目标判断 J4310 是否处于自动存二的 180 度收尾指令。 */
+static bool UpperEntry_IsRemoteJ4310AtStore2FinalTarget(void)
+{
+    float target_position_rad;
+    float expected_position_rad;
+    float tolerance_rad;
+
+    if (!upper_robot.target.arm.enabled ||
+        !upper_robot.target.arm.position_mode)
+    {
+        return false;
+    }
+
+    target_position_rad = upper_robot.target.arm.grip_pos_rad;
+    expected_position_rad = UpperEntry_RemoteDegreesToRadians(
+        UPPER_REMOTE_STORE2_FINAL_J4310_DEG);
+    tolerance_rad = UpperEntry_RemoteDegreesToRadians(
+        UPPER_REMOTE_PC0_J4310_MATCH_TOLERANCE_DEG);
+    return (target_position_rad >= expected_position_rad - tolerance_rad) &&
+           (target_position_rad <= expected_position_rad + tolerance_rad);
+}
+
+/* 自动存二在 J4310=180 且 PE4 关闭时，从 PC0 的闸门收尾阶段直接启动。 */
+static void UpperEntry_StartRemotePc0GlobalFinish(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
+{
+    UpperEntry_ResetRemotePc0Sequence();
+    upper_remote_pd11_pending = false;
+    upper_remote_pd8_first_pending = false;
+    upper_remote_auto_pe4_state = UPPER_REMOTE_AUTO_PE4_IDLE;
+    upper_remote_flip_action = UPPER_REMOTE_FLIP_ACTION_NONE;
+    upper_remote_flip_pending_action = UPPER_REMOTE_FLIP_ACTION_NONE;
+    upper_remote_flip_first_stage = false;
+    upper_remote_flip_due_tick_ms = 0U;
+    UpperEntry_ResetRemoteAutomaticProgress();
+    upper_remote_gate_disable_pending = false;
+
+    upper_remote_pc0_global_finish_active = true;
+    UpperEntry_ApplyRemoteGate(UPPER_REMOTE_PC0_GATE_FIRST_DEG);
+    upper_remote_pc0_due_tick_ms =
+        tick_ms + UPPER_REMOTE_PC0_PD8_DELAY_MS;
+    upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_PD8_SECOND;
+}
+
+static float UpperEntry_RemotePc0BranchM3508Deg(
+    upper_remote_pc0_branch_t branch /**< PC0 自动流程本次需要执行的分支 */)
+{
+    if (branch == UPPER_REMOTE_PC0_BRANCH_ONE)
+    {
+        return UPPER_REMOTE_PD13_FIRST_M3508_DEG;
+    }
+    if (branch == UPPER_REMOTE_PC0_BRANCH_TWO)
+    {
+        return UPPER_REMOTE_PC0_SECOND_BRANCH_M3508_DEG;
+    }
+    return UPPER_REMOTE_PC0_THIRD_BRANCH_M3508_DEG;
+}
+
+static void UpperEntry_AdvanceRemotePc0Branch(void)
+{
+    upper_remote_mode_history_t *history;
+
+    history = &upper_remote_mode_history[upper_remote_mode];
+    history->auto_pc0_next_branch =
+        (uint8_t)(((uint8_t)upper_remote_pc0_active_branch + 1U) %
+                  (uint8_t)UPPER_REMOTE_PC0_BRANCH_COUNT);
+}
+
+static void UpperEntry_StartRemotePc0Branch(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
+{
+    upper_remote_mode_history_t *history;
+    uint8_t next_branch;
+    bool first_storage_press;
+
+    history = &upper_remote_mode_history[upper_remote_mode];
+    next_branch = history->auto_pc0_next_branch;
+    if (next_branch >= (uint8_t)UPPER_REMOTE_PC0_BRANCH_COUNT)
+    {
+        next_branch = (uint8_t)UPPER_REMOTE_PC0_BRANCH_ONE;
+        history->auto_pc0_next_branch = next_branch;
+    }
+    upper_remote_pc0_active_branch =
+        (upper_remote_pc0_branch_t)next_branch;
+
+    upper_remote_pd11_pending = false;
+    upper_remote_pd8_first_pending = false;
+    upper_remote_auto_pe4_state = UPPER_REMOTE_AUTO_PE4_IDLE;
+    UpperEntry_ResetRemoteAutomaticProgress();
+    upper_remote_gate_disable_pending = false;
+    upper_remote_pc0_due_tick_ms = 0U;
+
+    first_storage_press =
+        UpperEntry_IsFirstRemoteAutomaticStoragePress(history);
+    history->auto_pc0_has_pressed = true;
+    UpperEntry_ApplyRemoteArm(
+        UpperEntry_RemotePc0BranchM3508Deg(upper_remote_pc0_active_branch),
+        UPPER_REMOTE_PC0_FIRST_J4310_DEG,
+        tick_ms);
+
+    UpperEntry_ApplyRemoteAutomaticStartOutputs(first_storage_press);
+
+    upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_FIRST_PE4_CLOSE;
+}
+
+/* PC0 在三个自动分支间循环，并独立于普通 PD9 的单双次状态。 */
+static void UpperEntry_HandleRemotePc0Press(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
+{
+    if (upper_remote_pc0_state == UPPER_REMOTE_PC0_IDLE)
+    {
+        UpperEntry_StartRemotePc0Branch(tick_ms);
+    }
+    else if (upper_remote_pc0_state ==
+             UPPER_REMOTE_PC0_WAIT_FIRST_PE4_CLOSE)
+    {
+        UpperEntry_AdvanceRemotePc0Branch();
+        UpperEntry_StartRemotePc0Branch(tick_ms);
+    }
+    else if (upper_remote_pc0_state ==
+             UPPER_REMOTE_PC0_WAIT_SECOND_PRESS)
+    {
+        upper_remote_pd11_pending = false;
+        upper_remote_pd8_first_pending = false;
+        UpperEntry_ApplyRemoteGate(UPPER_REMOTE_PC0_GATE_FIRST_DEG);
+        upper_remote_pc0_due_tick_ms =
+            tick_ms + UPPER_REMOTE_PC0_PD8_DELAY_MS;
+        upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_PD8_SECOND;
+    }
+}
+
+/* 返回 true 表示 PC0 正在等待 PE4，本次边沿不能再被其他流程消费。 */
+static bool UpperEntry_HandleRemotePc0Pe4(bool pe4_closed /**< PE4 辅助输出当前是否处于关闭状态 */,
+                                          uint32_t tick_ms /**< 当前系统毫秒时刻 */)
+{
+    if (upper_remote_pc0_state == UPPER_REMOTE_PC0_IDLE)
+    {
+        return false;
+    }
+
+    if ((upper_remote_pc0_state ==
+         UPPER_REMOTE_PC0_WAIT_FIRST_PE4_CLOSE) && pe4_closed)
+    {
+        upper_remote_pd11_pending = false;
+        upper_remote_pd8_first_pending = false;
+        UpperEntry_ApplyRemoteArm(UPPER_REMOTE_PC0_CLOSE_M3508_DEG,
+                                  UPPER_REMOTE_PC0_CLOSE_J4310_DEG,
+                                  tick_ms);
+        upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_SECOND_PRESS;
+    }
+    else if ((upper_remote_pc0_state ==
+              UPPER_REMOTE_PC0_WAIT_FINAL_PE4_OPEN) && !pe4_closed)
+    {
+        upper_remote_pd11_pending = false;
+        upper_remote_pd8_first_pending = false;
+        /* 打开 PE4 后立即执行 PC0 收尾动作。 */
+        upper_remote_pc0_due_tick_ms =
+            tick_ms + UPPER_REMOTE_PC0_FINAL_DELAY_MS;
+        upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_FINAL_DELAY;
+    }
+
+    return true;
+}
+
+static void UpperEntry_ServiceRemotePc0Sequence(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
+{
+    if ((upper_remote_pc0_state == UPPER_REMOTE_PC0_WAIT_PD8_SECOND) &&
+        ((int32_t)(tick_ms - upper_remote_pc0_due_tick_ms) >= 0))
+    {
+        UpperEntry_ApplyRemotePd8Second(
+            UPPER_REMOTE_PC0_SECOND_J4310_DEG, tick_ms);
+        upper_remote_pc0_due_tick_ms = 0U;
+        upper_remote_pc0_state = UPPER_REMOTE_PC0_WAIT_FINAL_PE4_OPEN;
+    }
+    else if ((upper_remote_pc0_state == UPPER_REMOTE_PC0_WAIT_FINAL_DELAY) &&
+             ((int32_t)(tick_ms - upper_remote_pc0_due_tick_ms) >= 0))
+    {
+        UpperEntry_ApplyRemoteGate(UPPER_REMOTE_PC0_GATE_FINAL_DEG);
+        UpperEntry_ApplyRemoteArm(UPPER_REMOTE_PC0_FINAL_M3508_DEG,
+                                  UPPER_REMOTE_PC0_FINAL_J4310_DEG,
+                                  tick_ms);
+        /* PC0 完成后，普通 PD9 的下一次动作固定从 180 度开始。 */
+        upper_remote_pd9_zero_pending = false;
+        upper_remote_pd9_second = false;
+        if (!upper_remote_pc0_global_finish_active)
+        {
+            UpperEntry_AdvanceRemotePc0Branch();
+        }
+        UpperEntry_ResetRemotePc0Sequence();
+    }
+}
+
+/* 功能：应用遥控器给出的夹爪角度目标；用途：更新夹爪位置和使能状态；无返回值表示目标已提交。 */
+static void UpperEntry_ApplyRemoteGripper(float angle_deg /**< 夹爪机构目标角度，单位：度 */,
+                                           bool stall_protection_enabled /**< 夹爪本次动作是否启用堵转保护 */)
+{
+    upper_target_t target;
+
+    target = upper_robot.target;
+    target.position_mode = true;
+    target.gripper.enabled = true;
+    target.gripper.position_mode = true;
+    target.gripper.pid_update = false;
+    target.gripper.m2006_pos_rad =
+        UpperEntry_RemoteDegreesToRadians(
+            angle_deg * UPPER_REMOTE_GRIPPER_MOTOR_DEG_PER_OUTPUT_DEG);
+    UpperEntry_ConfigureGripperStallProtection(
+        &target.gripper, stall_protection_enabled);
+    UpperRobot_SetTarget(&upper_robot, &target);
+    UpperRobot_Start(&upper_robot);
+}
 
 /* 模式变化时取消流程和延时；首次自动联动历史按需保留。 */
-static void UpperEntry_ResetRemoteModeState(bool clear_history /* 是否同时清除各模式已经执行过的历史标志 */)
+static void UpperEntry_ResetRemoteModeState(bool clear_history /**< 是否同时清除各模式已经执行过的历史标志 */)
 {
     upper_remote_flip_mode = false;
     upper_remote_auto_pe4_state = UPPER_REMOTE_AUTO_PE4_IDLE;
@@ -2033,7 +1556,7 @@ static void UpperEntry_ResetRemoteModeState(bool clear_history /* 是否同时�
 
 /* 从 UART5 固定帧遥控电平快照中处理按键上升沿和开关状态。 */
 /* 功能：解析遥控按键和摇杆并更新机器人目标；用途：实现遥控动作映射、边沿触发和超时处理；无返回值表示本周期遥控输入已处理。 */
-static void UpperEntry_ProcessRemote(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ProcessRemote(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_remote_control_t control;
     upper_remote_mode_t remote_mode;
@@ -2338,20 +1861,18 @@ static void UpperEntry_ProcessRemote(uint32_t tick_ms /* 当前系统毫秒时�
 }
 
 /* 功能：取得遥控第二组控制快照；用途：向上层机构逻辑提供按键、开关和在线状态。 */
-bool UpperEntry_GetSecondaryRemoteControl(upper_remote_control_t *control,
-                                          uint32_t tick_ms)
+bool UpperEntry_GetSecondaryRemoteControl(upper_remote_control_t *control /**< 用于写出当前遥控按键、开关和在线状态的对象 */,
+                                          uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     return UpperRemoteLink_GetControl(&upper_remote_link, tick_ms, control);
 }
 
 /* 功能：读取副遥控链路诊断信息；用途：向监控或调试模块提供收帧统计；无返回值表示诊断数据已复制。 */
 void UpperEntry_GetSecondaryRemoteDiagnostics(
-    upper_remote_diagnostics_t *diagnostics)
+    upper_remote_diagnostics_t *diagnostics /**< 用于写出遥控收帧、丢帧及重同步统计的对象 */)
 {
     UpperRemoteLink_GetDiagnostics(&upper_remote_link, diagnostics);
 }
-/* ==================== PE4、PE3、PE1、PE0、PD6、PD5 拨动开关 ==================== */
-
 
 /* PE4 辅助状态使用 0=打开、1=关闭，不改变其余辅助输出位。 */
 static void UpperEntry_OpenRemotePe4Output(void)
@@ -2370,8 +1891,8 @@ static void UpperEntry_CloseRemotePe4Output(void)
 }
 
 /* PD13、PD12 的等待状态只接受手动关闭 PE4 的边沿。 */
-static void UpperEntry_HandleRemoteAutomaticPe4(bool pe4_closed /* PE4 辅助输出当前是否处于关闭状态 */,
-                                                uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_HandleRemoteAutomaticPe4(bool pe4_closed /**< PE4 辅助输出当前是否处于关闭状态 */,
+                                                uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     if (pe4_closed &&
         (upper_remote_auto_pd13_state ==
@@ -2447,11 +1968,9 @@ static void UpperEntry_HandleRemoteAutomaticPe4(bool pe4_closed /* PE4 辅助输
             UPPER_REMOTE_AUTO_PD12_WAIT_BRANCH_TWO_FINAL_J4310;
     }
 }
-/* ==================== 遥控自动控制 ==================== */
-
 
 static bool UpperEntry_IsFirstRemoteAutomaticStoragePress(
-    const upper_remote_mode_history_t *history /* 函数读取或写入的对象地址 */)
+    const upper_remote_mode_history_t *history /**< 当前遥控模式的自动动作历史 */)
 {
     return (history != NULL) && UPPER_REMOTE_AUTO_START_IS_AVAILABLE(
                history->auto_pd13_has_pressed,
@@ -2461,7 +1980,7 @@ static bool UpperEntry_IsFirstRemoteAutomaticStoragePress(
 
 /* 本轮 PD13、PD12、PC0 的首次按下共享 PE4 起始动作；存二自动同时复用 PD10 首段。 */
 static void UpperEntry_ApplyRemoteAutomaticStartOutputs(
-    bool first_storage_press /* 本次是否为存储动作的第一次按下 */)
+    bool first_storage_press /**< 本次是否为存储动作的第一次按下 */)
 {
     if (!first_storage_press)
     {
@@ -2484,8 +2003,8 @@ static void UpperEntry_ApplyRemoteAutomaticStartOutputs(
 
 /* 启动翻转子流程：下发首段机械臂目标并自动打开 PE4。 */
 static void UpperEntry_StartRemoteFlipAction(
-    upper_remote_flip_action_t action /* 需要执行的电机或遥控动作 */,
-    uint32_t tick_ms /* 当前系统毫秒时刻 */)
+    upper_remote_flip_action_t action /**< 待启动的遥控翻转动作 */,
+    uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_remote_flip_action = action;
     upper_remote_flip_pending_action = UPPER_REMOTE_FLIP_ACTION_NONE;
@@ -2512,7 +2031,7 @@ static void UpperEntry_StartRemoteFlipAction(
 }
 
 /* 翻转子流程收尾：确认键到达后执行 J4310=40 度，首段延时后再打开 PE4。 */
-static void UpperEntry_FinishRemoteFlipAction(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_FinishRemoteFlipAction(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_remote_flip_pending_action = UPPER_REMOTE_FLIP_ACTION_NONE;
     UpperEntry_PrepareRemoteActions(UPPER_REMOTE_KEY_PD8);
@@ -2543,8 +2062,8 @@ static void UpperEntry_FinishRemoteFlipAction(uint32_t tick_ms /* 当前系统�
 
 /* 翻转模式按键处理：存二锁存定时窗口按键，并允许关闭后两键确认。 */
 static void UpperEntry_HandleRemoteFlipPress(
-    upper_remote_flip_action_t action /* 需要执行的电机或遥控动作 */,
-    uint32_t tick_ms /* 当前系统毫秒时刻 */)
+    upper_remote_flip_action_t action /**< 本次按键触发的遥控翻转动作 */,
+    uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     if (action == UPPER_REMOTE_FLIP_ACTION_PD13)
     {
@@ -2622,7 +2141,7 @@ static void UpperEntry_HandleRemoteFlipPress(
 }
 
 /* 翻转模式的 PE4 关闭阶段：存二保持闸门目标，随后复位机械臂并等待确认。 */
-static void UpperEntry_StartRemoteAutoFlipReset(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_StartRemoteAutoFlipReset(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     if (upper_remote_mode != UPPER_REMOTE_MODE_STORE2_AUTO)
     {
@@ -2642,7 +2161,7 @@ static void UpperEntry_StartRemoteAutoFlipReset(uint32_t tick_ms /* 当前系统
 }
 
 /* 翻转首段的两个定时阶段：关闭后延时复位机械臂，以及 J4310=40 后延时打开 PE4。 */
-static void UpperEntry_ServiceRemoteFlipSequence(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ServiceRemoteFlipSequence(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_remote_flip_action_t pending_action;
 
@@ -2725,7 +2244,7 @@ static void UpperEntry_ResetRemoteAutomaticSequences(void)
 }
 
 /* 同键第二次按下或分支一结束后的已锁存按下，都从这里进入 PD13 分支二。 */
-static void UpperEntry_StartRemoteAutoPd13DirectSecond(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_StartRemoteAutoPd13DirectSecond(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_remote_mode_history[upper_remote_mode].
         auto_pd13_branch_two_armed = false;
@@ -2738,7 +2257,7 @@ static void UpperEntry_StartRemoteAutoPd13DirectSecond(uint32_t tick_ms /* 当�
 }
 
 /* 同键第二次按下或分支一结束后的已锁存按下，都从这里进入 PD12 分支二。 */
-static void UpperEntry_StartRemoteAutoPd12DirectSecond(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_StartRemoteAutoPd12DirectSecond(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_remote_mode_history[upper_remote_mode].
         auto_pd12_branch_two_armed = false;
@@ -2752,7 +2271,7 @@ static void UpperEntry_StartRemoteAutoPd12DirectSecond(uint32_t tick_ms /* 当�
 }
 
 /* 自动 PD13 按既定存块时序运行，内部仍使用手动按键的固定动作段。 */
-static void UpperEntry_HandleRemoteAutoPd13Press(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_HandleRemoteAutoPd13Press(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_remote_mode_history_t *history;
     bool first_storage_press;
@@ -2800,7 +2319,7 @@ static void UpperEntry_HandleRemoteAutoPd13Press(uint32_t tick_ms /* 当前系�
 }
 
 /* 自动 PD12 根据第二次按键前是否出现 PE4 关闭边沿选择两条分支。 */
-static void UpperEntry_HandleRemoteAutoPd12Press(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_HandleRemoteAutoPd12Press(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_remote_mode_history_t *history;
     bool first_storage_press;
@@ -2854,7 +2373,7 @@ static void UpperEntry_HandleRemoteAutoPd12Press(uint32_t tick_ms /* 当前系�
 }
 
 /* 在双击窗口内检测到第二次 PD11 上升沿时，启动存二双击流程。 */
-static void UpperEntry_StartRemoteStore2Pd11DoubleClick(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_StartRemoteStore2Pd11DoubleClick(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperEntry_ResetRemoteAutoPd13Sequence();
     UpperEntry_ResetRemoteAutoPd12Sequence();
@@ -2870,7 +2389,7 @@ static void UpperEntry_StartRemoteStore2Pd11DoubleClick(uint32_t tick_ms /* 当�
 }
 
 /* 启动原有的自动 PD11 单击流程。存二由双击窗口超时调用，存三按下后立即调用。 */
-static void UpperEntry_StartRemoteAutoPd11SinglePress(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_StartRemoteAutoPd11SinglePress(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperEntry_PrepareRemoteActions(UPPER_REMOTE_KEY_PD11);
     UpperEntry_ApplyRemoteArm(UPPER_REMOTE_PD13_FIRST_M3508_DEG,
@@ -2891,7 +2410,7 @@ static void UpperEntry_StartRemoteAutoPd11SinglePress(uint32_t tick_ms /* 当前
 }
 
 /* 自动存二在 200 ms 窗口内区分单击/双击；自动存三保持原来的立即单击逻辑。 */
-static void UpperEntry_HandleRemoteAutoPd11Press(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_HandleRemoteAutoPd11Press(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     if (upper_remote_mode == UPPER_REMOTE_MODE_STORE2_AUTO)
     {
@@ -2917,7 +2436,7 @@ static void UpperEntry_HandleRemoteAutoPd11Press(uint32_t tick_ms /* 当前系�
 }
 
 /* 功能：推进遥控自动动作状态机；用途：到达预定时刻后执行 PD13、PD12 和 J4310 的后续分步动作。 */
-static void UpperEntry_ServiceRemoteAutomaticSequences(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ServiceRemoteAutomaticSequences(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     if ((upper_remote_auto_pd13_state ==
          UPPER_REMOTE_AUTO_PD13_WAIT_BRANCH_ONE_FINAL_J4310) &&
@@ -3065,11 +2584,9 @@ static void UpperEntry_ServiceRemoteAutomaticSequences(uint32_t tick_ms /* 当�
         UpperEntry_ResetRemoteAutoPd11Sequence();
     }
 }
-/* ==================== 遥控手动控制 ==================== */
-
 
 /* 新机械臂动作会取消与其冲突的延时动作，并更新各按键的单双次状态。 */
-static void UpperEntry_PrepareRemoteActions(uint8_t action_bits /* 本周期检测到的遥控动作位图 */)
+static void UpperEntry_PrepareRemoteActions(uint8_t action_bits /**< 本周期检测到的遥控动作位图 */)
 {
     if ((action_bits & (UPPER_REMOTE_KEY_PD13 |
                         UPPER_REMOTE_KEY_PD12 |
@@ -3109,7 +2626,7 @@ static void UpperEntry_PrepareRemoteActions(uint8_t action_bits /* 本周期检�
 }
 
 /* 功能：执行 PD13 的第一组机械臂姿态；用途：完成对应阶段动作并将 PD13 状态切到第二组。 */
-static void UpperEntry_ApplyRemotePd13First(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ApplyRemotePd13First(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperEntry_ApplyRemoteArm(
         UPPER_REMOTE_PD13_FIRST_M3508_DEG,
@@ -3119,7 +2636,7 @@ static void UpperEntry_ApplyRemotePd13First(uint32_t tick_ms /* 当前系统毫�
 }
 
 /* 功能：执行 PD13 的第二组机械臂姿态；用途：完成对应阶段动作并将 PD13 状态切回第一组。 */
-static void UpperEntry_ApplyRemotePd13Second(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ApplyRemotePd13Second(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperEntry_ApplyRemoteArm(
         UPPER_REMOTE_PD13_SECOND_M3508_DEG,
@@ -3129,7 +2646,7 @@ static void UpperEntry_ApplyRemotePd13Second(uint32_t tick_ms /* 当前系统毫
 }
 
 /* 功能：处理遥控器 PD13 按键动作；用途：在 PD13 两组机械臂预设姿态之间交替切换。 */
-static void UpperEntry_HandleRemotePd13(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_HandleRemotePd13(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     if (upper_remote_pd13_second)
     {
@@ -3150,7 +2667,7 @@ static void UpperEntry_HandleRemotePd13(uint32_t tick_ms /* 当前系统毫秒�
 }
 
 /* 功能：执行 PD12 的第一组机械臂姿态；用途：下发首段目标并将下一次动作切换到第二组。 */
-static void UpperEntry_ApplyRemotePd12First(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ApplyRemotePd12First(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperEntry_ApplyRemoteArm(
         UPPER_REMOTE_PD12_FIRST_M3508_DEG,
@@ -3160,7 +2677,7 @@ static void UpperEntry_ApplyRemotePd12First(uint32_t tick_ms /* 当前系统毫�
 }
 
 /* 功能：执行 PD12 的第二组机械臂姿态；用途：下发次段目标并将下一次动作切回第一组。 */
-static void UpperEntry_ApplyRemotePd12Second(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ApplyRemotePd12Second(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperEntry_ApplyRemoteArm(
         UPPER_REMOTE_PD12_SECOND_M3508_DEG,
@@ -3170,7 +2687,7 @@ static void UpperEntry_ApplyRemotePd12Second(uint32_t tick_ms /* 当前系统毫
 }
 
 /* 功能：处理遥控器 PD12 按键动作；用途：根据当前阶段选择并执行第一或第二组预设姿态。 */
-static void UpperEntry_HandleRemotePd12(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_HandleRemotePd12(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     if (upper_remote_pd12_second)
     {
@@ -3183,9 +2700,9 @@ static void UpperEntry_HandleRemotePd12(uint32_t tick_ms /* 当前系统毫秒�
 }
 
 /* 功能：启动 PD11 分步机械臂动作；用途：先设置 M3508 角度，再登记 500 ms 后执行的 J4310 目标。 */
-static void UpperEntry_StartRemotePd11(float m3508_angle_deg /* 机械臂 M3508 输出轴目标角度，单位：度 */,
-                                       float j4310_angle_deg /* 机械臂 J4310 关节目标角度，单位：度 */,
-                                       uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_StartRemotePd11(float m3508_angle_deg /**< PD11动作的机械臂M3508输出轴目标角度，单位：度 */,
+                                       float j4310_angle_deg /**< PD11动作的机械臂J4310关节目标角度，单位：度 */,
+                                       uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperEntry_ApplyRemoteM3508(m3508_angle_deg);
     upper_remote_pd11_pending = true;
@@ -3194,7 +2711,7 @@ static void UpperEntry_StartRemotePd11(float m3508_angle_deg /* 机械臂 M3508 
 }
 
 /* 功能：启动 PD11 的第一组分步动作；用途：使用第一组 M3508 和 J4310 预设角度建立延时任务。 */
-static void UpperEntry_StartRemotePd11First(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_StartRemotePd11First(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     UpperEntry_StartRemotePd11(UPPER_REMOTE_PD11_FIRST_M3508_DEG,
                                UPPER_REMOTE_PD11_FIRST_J4310_DEG,
@@ -3202,7 +2719,7 @@ static void UpperEntry_StartRemotePd11First(uint32_t tick_ms /* 当前系统毫�
 }
 
 /* 功能：处理遥控器 PD11 按键动作；用途：在两组分步姿态间切换并更新单双次状态。 */
-static void UpperEntry_HandleRemotePd11(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_HandleRemotePd11(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     if (upper_remote_pd11_second)
     {
@@ -3218,8 +2735,8 @@ static void UpperEntry_HandleRemotePd11(uint32_t tick_ms /* 当前系统毫秒�
 }
 
 /* 功能：执行 PD8 的第二组机械臂姿态；用途：取消 PD9 归零请求、恢复其切换状态并完成第二段动作。 */
-static void UpperEntry_ApplyRemotePd8Second(float j4310_angle_deg /* 机械臂 J4310 关节目标角度，单位：度 */,
-                                             uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_ApplyRemotePd8Second(float j4310_angle_deg /**< PD8第二阶段的J4310关节目标角度，单位：度 */,
+                                             uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     upper_remote_pd9_zero_pending = false;
     upper_remote_pd9_second = false;
@@ -3231,7 +2748,7 @@ static void UpperEntry_ApplyRemotePd8Second(float j4310_angle_deg /* 机械臂 J
 }
 
 /* 功能：处理遥控器 PD8 按键动作；用途：首按启动延时分步动作，次按直接执行第二组姿态。 */
-static void UpperEntry_HandleRemotePd8(uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperEntry_HandleRemotePd8(uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     if (upper_remote_pd8_second)
     {
@@ -3279,7 +2796,7 @@ static void UpperEntry_HandleRemotePd10(void)
 }
 
 /* PD9、PD10 独立于自动存取状态机，PC0 等待期间也必须响应。 */
-static void UpperEntry_HandleRemotePd9Pd10(uint8_t rising_bits /* 本周期检测到上升沿的遥控按键位图 */)
+static void UpperEntry_HandleRemotePd9Pd10(uint8_t rising_bits /**< 本周期检测到上升沿的遥控按键位图 */)
 {
     UpperEntry_PrepareRemoteActions(
         rising_bits & (UPPER_REMOTE_KEY_PD9 | UPPER_REMOTE_KEY_PD10));

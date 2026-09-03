@@ -28,9 +28,9 @@ static uint32_t disable_count[UPPER_MOTOR_COUNT];
 static const motor_cfg_t test_motor_cfg[UPPER_MOTOR_COUNT] = {0};
 
 /* 功能：提供测试用 CAN 发送桩并记录输出帧；用途：隔离真实硬件发送接口；返回 true 表示桩接受该帧。 */
-static bool Test_Send(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */,
-                      const motor_cmd_t *cmd /* 函数读取或写入的对象地址 */,
-                      void *user_data /* 调用回调函数时传递的用户上下文 */)
+static bool Test_Send(const motor_cfg_t *cfg /**< 当前电机的型号、总线及节点配置 */,
+                      const motor_cmd_t *cmd /**< 测试发送桩接收的电机控制命令 */,
+                      void *user_data /**< 调用回调函数时传递的用户上下文 */)
 {
     (void)cfg;
     (void)cmd;
@@ -56,11 +56,11 @@ static void Test_Reset(void)
 }
 
 /* 功能：提供 MotorManager_Init 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool MotorManager_Init(motor_manager_t *manager,
-                       const motor_cfg_t *cfg,
-                       size_t motor_count,
-                       motor_send_t send,
-                       void *user_data)
+bool MotorManager_Init(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                       const motor_cfg_t *cfg /**< 当前电机的型号、总线及节点配置 */,
+                       size_t motor_count /**< 调用方提供的电机配置数量 */,
+                       motor_send_t send /**< 电机管理器用于下发电机命令的回调函数 */,
+                       void *user_data /**< 调用回调函数时传递的用户上下文 */)
 {
     (void)cfg;
     (void)motor_count;
@@ -71,9 +71,9 @@ bool MotorManager_Init(motor_manager_t *manager,
 }
 
 /* 功能：提供 MotorManager_SetEnabled 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool MotorManager_SetEnabled(motor_manager_t *manager,
-                             size_t motor_index,
-                             bool enabled)
+bool MotorManager_SetEnabled(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                             size_t motor_index /**< 电机在管理器配置表中的下标 */,
+                             bool enabled /**< 是否启用指定电机的管理器输出 */)
 {
     assert(manager != NULL);
     assert(motor_index < UPPER_MOTOR_COUNT);
@@ -86,7 +86,7 @@ bool MotorManager_SetEnabled(motor_manager_t *manager,
 }
 
 /* 功能：提供 MotorManager_Process 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-void MotorManager_Process(motor_manager_t *manager, uint32_t tick_ms)
+void MotorManager_Process(motor_manager_t *manager /**< 需要操作的电机管理器 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     assert(manager != NULL);
     (void)tick_ms;
@@ -94,14 +94,14 @@ void MotorManager_Process(motor_manager_t *manager, uint32_t tick_ms)
 }
 
 /* 功能：提供 MotorManager_StopAll 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-void MotorManager_StopAll(motor_manager_t *manager)
+void MotorManager_StopAll(motor_manager_t *manager /**< 需要操作的电机管理器 */)
 {
     assert(manager != NULL);
     stop_all_count++;
 }
 
 /* 功能：提供 Arm_Calc 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
+bool Arm_Calc(const arm_target_t *target /**< 本周期机械臂关节控制目标 */, arm_output_t *output /**< 用于写出机械臂电机命令的对象 */)
 {
     assert(target != NULL);
     assert(output != NULL);
@@ -109,7 +109,7 @@ bool Arm_Calc(const arm_target_t *target, arm_output_t *output)
 }
 
 /* 功能：提供 Arm_Apply 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool Arm_Apply(motor_manager_t *manager, const arm_output_t *output)
+bool Arm_Apply(motor_manager_t *manager /**< 需要操作的电机管理器 */, const arm_output_t *output /**< 待下发的机械臂电机命令 */)
 {
     assert(manager != NULL);
     assert(output != NULL);
@@ -118,7 +118,7 @@ bool Arm_Apply(motor_manager_t *manager, const arm_output_t *output)
 }
 
 /* 功能：提供 Gate_Calc 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool Gate_Calc(const gate_target_t *target, gate_output_t *output)
+bool Gate_Calc(const gate_target_t *target /**< 本周期挡板机构控制目标 */, gate_output_t *output /**< 用于写出挡板 M2006 命令的对象 */)
 {
     assert(target != NULL);
     assert(output != NULL);
@@ -126,7 +126,7 @@ bool Gate_Calc(const gate_target_t *target, gate_output_t *output)
 }
 
 /* 功能：提供 Gate_Apply 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool Gate_Apply(motor_manager_t *manager, const gate_output_t *output)
+bool Gate_Apply(motor_manager_t *manager /**< 需要操作的电机管理器 */, const gate_output_t *output /**< 待下发的挡板 M2006 电机命令 */)
 {
     assert(manager != NULL);
     assert(output != NULL);
@@ -135,8 +135,8 @@ bool Gate_Apply(motor_manager_t *manager, const gate_output_t *output)
 }
 
 /* 功能：提供 Gripper_Calc 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool Gripper_Calc(const gripper_target_t *target,
-                  gripper_output_t *output)
+bool Gripper_Calc(const gripper_target_t *target /**< 本周期夹爪机构控制目标 */,
+                  gripper_output_t *output /**< 用于写出夹爪 M2006 命令的对象 */)
 {
     assert(target != NULL);
     assert(output != NULL);
@@ -144,8 +144,8 @@ bool Gripper_Calc(const gripper_target_t *target,
 }
 
 /* 功能：提供 Gripper_Apply 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool Gripper_Apply(motor_manager_t *manager,
-                   const gripper_output_t *output)
+bool Gripper_Apply(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                   const gripper_output_t *output /**< 待下发的夹爪 M2006 电机命令 */)
 {
     assert(manager != NULL);
     assert(output != NULL);

@@ -4,8 +4,7 @@
  */
 
 #ifndef CAN_FRAME_H
-/** 防止 can_frame.h 被重复包含。 */
-#define CAN_FRAME_H
+#define CAN_FRAME_H /**< 防止 can_frame.h 被重复包含。 */
 
 #include <stdbool.h>
 #include <stdint.h>

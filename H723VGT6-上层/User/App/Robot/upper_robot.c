@@ -8,11 +8,11 @@
 #include <string.h>
 
 /* 功能：初始化上层机器人对象和电机管理器；用途：让 DJI 电机以上电位置零点进入位控；返回 true 表示机器人进入运行态。 */
-bool UpperRobot_Init(upper_robot_t *robot,
-                     const motor_cfg_t *motor_cfg,
-                     size_t motor_count,
-                     motor_send_t send,
-                     void *user_data)
+bool UpperRobot_Init(upper_robot_t *robot /**< 需要操作的上层机器人对象 */,
+                     const motor_cfg_t *motor_cfg /**< 上层机器人使用的电机端口配置表 */,
+                     size_t motor_count /**< 调用方提供的电机配置数量 */,
+                     motor_send_t send /**< 电机管理器用于下发电机命令的回调函数 */,
+                     void *user_data /**< 调用回调函数时传递的用户上下文 */)
 {
     if ((robot == NULL) || (motor_cfg == NULL) || (motor_count == 0U))
     {
@@ -42,8 +42,8 @@ bool UpperRobot_Init(upper_robot_t *robot,
 }
 
 /* 功能：保存一份新的整机控制目标；用途：供后续 1 ms 控制周期统一读取；无返回值表示覆盖目标快照。 */
-void UpperRobot_SetTarget(upper_robot_t *robot,
-                          const upper_target_t *target)
+void UpperRobot_SetTarget(upper_robot_t *robot /**< 需要操作的上层机器人对象 */,
+                          const upper_target_t *target /**< 本周期上层机器人机构控制目标 */)
 {
     if ((robot != NULL) && (target != NULL))
     {
@@ -52,7 +52,7 @@ void UpperRobot_SetTarget(upper_robot_t *robot,
 }
 
 /* 功能：将就绪或停止状态切换为运行；用途：允许周期控制开始下发电机命令；无返回值表示仅执行合法状态转换。 */
-void UpperRobot_Start(upper_robot_t *robot)
+void UpperRobot_Start(upper_robot_t *robot /**< 需要操作的上层机器人对象 */)
 {
     if ((robot != NULL) &&
         ((robot->state == ROBOT_READY) || (robot->state == ROBOT_STOP)))
@@ -62,7 +62,7 @@ void UpperRobot_Start(upper_robot_t *robot)
 }
 
 /* 功能：停止全部电机并进入停止态；用途：执行正常停机；无返回值表示状态和电机均被更新。 */
-void UpperRobot_Stop(upper_robot_t *robot)
+void UpperRobot_Stop(upper_robot_t *robot /**< 需要操作的上层机器人对象 */)
 {
     if (robot == NULL)
     {
@@ -74,7 +74,7 @@ void UpperRobot_Stop(upper_robot_t *robot)
 }
 
 /* 功能：紧急停止全部电机并进入停止态；用途：立即撤销输出并等待新的显式控制目标。 */
-void UpperRobot_EStop(upper_robot_t *robot)
+void UpperRobot_EStop(upper_robot_t *robot /**< 需要操作的上层机器人对象 */)
 {
     if (robot == NULL)
     {
@@ -91,7 +91,7 @@ void UpperRobot_EStop(upper_robot_t *robot)
 }
 
 /* 功能：把错误态恢复为就绪态；用途：故障排除后重新允许启动；无返回值表示仅在当前为错误态时生效。 */
-void UpperRobot_ClearError(upper_robot_t *robot)
+void UpperRobot_ClearError(upper_robot_t *robot /**< 需要操作的上层机器人对象 */)
 {
     if ((robot != NULL) && (robot->state == ROBOT_ERROR))
     {
@@ -100,7 +100,7 @@ void UpperRobot_ClearError(upper_robot_t *robot)
 }
 
 /* 功能：关闭机械臂全部电机；用途：把机械臂局部计算或应用失败限制在本机构内。 */
-static void UpperRobot_DisableArm(motor_manager_t *manager /* 需要操作的电机管理器 */)
+static void UpperRobot_DisableArm(motor_manager_t *manager /**< 需要操作的电机管理器 */)
 {
     uint32_t index;
 
@@ -117,7 +117,7 @@ static void UpperRobot_DisableArm(motor_manager_t *manager /* 需要操作的电
 }
 
 /* 功能：关闭闸门机构电机；用途：阻止无效闸门目标继续使用旧命令。 */
-static void UpperRobot_DisableGate(motor_manager_t *manager /* 需要操作的电机管理器 */)
+static void UpperRobot_DisableGate(motor_manager_t *manager /**< 需要操作的电机管理器 */)
 {
     (void)MotorManager_SetEnabled(manager,
                                   UPPER_MOTOR_GATE_M2006,
@@ -125,7 +125,7 @@ static void UpperRobot_DisableGate(motor_manager_t *manager /* 需要操作的�
 }
 
 /* 功能：关闭夹爪电机；用途：阻止无效夹爪目标继续使用旧命令。 */
-static void UpperRobot_DisableGripper(motor_manager_t *manager /* 需要操作的电机管理器 */)
+static void UpperRobot_DisableGripper(motor_manager_t *manager /**< 需要操作的电机管理器 */)
 {
     (void)MotorManager_SetEnabled(manager,
                                   UPPER_MOTOR_GRIPPER_M2006,
@@ -133,7 +133,7 @@ static void UpperRobot_DisableGripper(motor_manager_t *manager /* 需要操作�
 }
 
 /* 功能：执行整机 1 ms 控制周期；用途：独立计算并提交各机构命令；单个机构异常时仅关闭对应电机。 */
-void UpperRobot_Control1ms(upper_robot_t *robot, uint32_t tick_ms)
+void UpperRobot_Control1ms(upper_robot_t *robot /**< 需要操作的上层机器人对象 */, uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     arm_output_t arm_output;
     gate_output_t gate_output;

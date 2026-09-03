@@ -15,7 +15,7 @@
 #include "upper_entry.h"
 
 /* 功能：提供 J4310_SetTorqueLimit 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool J4310_SetTorqueLimit(uint8_t motor_id, float torque_limit_nm)
+bool J4310_SetTorqueLimit(uint8_t motor_id /**< J4310 电机编号 */, float torque_limit_nm /**< 允许设置的转矩上限，单位：牛米 */)
 {
     (void)motor_id;
     (void)torque_limit_nm;
@@ -23,9 +23,9 @@ bool J4310_SetTorqueLimit(uint8_t motor_id, float torque_limit_nm)
 }
 
 /* 功能：提供 M3508_SetSpeedPid 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool M3508_SetSpeedPid(uint8_t can_bus,
-                       uint8_t motor_id,
-                       const m3508_pid_cfg_t *cfg)
+bool M3508_SetSpeedPid(uint8_t can_bus /**< CAN 总线编号 */,
+                       uint8_t motor_id /**< DJI 电机编号 */,
+                       const m3508_pid_cfg_t *cfg /**< 待设置或校验的 M3508 PID 配置 */)
 {
     (void)can_bus;
     (void)motor_id;
@@ -34,9 +34,9 @@ bool M3508_SetSpeedPid(uint8_t can_bus,
 }
 
 /* 功能：提供 M3508_SetPositionPid 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool M3508_SetPositionPid(uint8_t can_bus,
-                          uint8_t motor_id,
-                          const m3508_pid_cfg_t *cfg)
+bool M3508_SetPositionPid(uint8_t can_bus /**< CAN 总线编号 */,
+                          uint8_t motor_id /**< DJI 电机编号 */,
+                          const m3508_pid_cfg_t *cfg /**< 待设置或校验的 M3508 PID 配置 */)
 {
     (void)can_bus;
     (void)motor_id;
@@ -45,9 +45,9 @@ bool M3508_SetPositionPid(uint8_t can_bus,
 }
 
 /* 功能：提供 M2006_SetSpeedPid 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool M2006_SetSpeedPid(uint8_t can_bus,
-                       uint8_t motor_id,
-                       const m2006_pid_cfg_t *cfg)
+bool M2006_SetSpeedPid(uint8_t can_bus /**< CAN 总线编号 */,
+                       uint8_t motor_id /**< DJI 电机编号 */,
+                       const m2006_pid_cfg_t *cfg /**< 待设置或校验的 M2006 PID 配置 */)
 {
     (void)can_bus;
     (void)motor_id;
@@ -56,9 +56,9 @@ bool M2006_SetSpeedPid(uint8_t can_bus,
 }
 
 /* 功能：提供 M2006_SetPositionPid 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool M2006_SetPositionPid(uint8_t can_bus,
-                          uint8_t motor_id,
-                          const m2006_pid_cfg_t *cfg)
+bool M2006_SetPositionPid(uint8_t can_bus /**< CAN 总线编号 */,
+                          uint8_t motor_id /**< DJI 电机编号 */,
+                          const m2006_pid_cfg_t *cfg /**< 待设置或校验的 M2006 PID 配置 */)
 {
     (void)can_bus;
     (void)motor_id;
@@ -67,9 +67,9 @@ bool M2006_SetPositionPid(uint8_t can_bus,
 }
 
 /* 功能：提供 MotorManager_SetCmd 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool MotorManager_SetCmd(motor_manager_t *manager,
-                         size_t motor_index,
-                         const motor_cmd_t *cmd)
+bool MotorManager_SetCmd(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                         size_t motor_index /**< 电机在管理器配置表中的下标 */,
+                         const motor_cmd_t *cmd /**< 待暂存的普通电机控制命令 */)
 {
     (void)manager;
     (void)motor_index;
@@ -78,9 +78,9 @@ bool MotorManager_SetCmd(motor_manager_t *manager,
 }
 
 /* 功能：提供 MotorManager_SetEnabled 的测试桩实现；用途：隔离外部依赖并记录或模拟调用结果。 */
-bool MotorManager_SetEnabled(motor_manager_t *manager,
-                             size_t motor_index,
-                             bool enabled)
+bool MotorManager_SetEnabled(motor_manager_t *manager /**< 需要操作的电机管理器 */,
+                             size_t motor_index /**< 电机在管理器配置表中的下标 */,
+                             bool enabled /**< 是否启用指定电机的管理器输出 */)
 {
     (void)manager;
     (void)motor_index;

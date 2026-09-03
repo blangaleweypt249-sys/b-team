@@ -18,7 +18,7 @@ extern osThreadId_t commRxTaskHandle;
 volatile w25q_status_t w25q_init_status = W25Q_ERROR_NOT_INIT;
 
 /* 功能：运行上层 1 ms 控制任务；参数 argument 为 RTOS 任务入口参数。 */
-void StartAppTask(void *argument)
+void StartAppTask(void *argument /**< RTOS 创建任务时传入的任务参数 */)
 {
   uint32_t next_wake;
 
@@ -34,7 +34,7 @@ void StartAppTask(void *argument)
 }
 
 /* 功能：初始化 Flash 与通信运行时并持续处理接收事件；参数 argument 为 RTOS 任务入口参数；发生初始化错误时进入错误处理。 */
-void StartCommRxTask(void *argument)
+void StartCommRxTask(void *argument /**< RTOS 创建任务时传入的任务参数 */)
 {
   uint32_t flags;
   HAL_StatusTypeDef comm_status;

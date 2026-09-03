@@ -1874,6 +1874,16 @@
               <FilePath>../User/Driver/PcLink/upper_pc_link.h</FilePath>
             </File>
             <File>
+              <FileName>upper_pc_service.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/Driver/PcLink/upper_pc_service.c</FilePath>
+            </File>
+            <File>
+              <FileName>upper_pc_service.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/Driver/PcLink/upper_pc_service.h</FilePath>
+            </File>
+            <File>
               <FileName>upper_remote_link.c</FileName>
               <FileType>1</FileType>
               <FilePath>../User/Driver/RemoteLink/upper_remote_link.c</FilePath>
@@ -1897,26 +1907,6 @@
               <FileName>arm.h</FileName>
               <FileType>5</FileType>
               <FilePath>../User/App/Arm/arm.h</FilePath>
-            </File>
-            <File>
-              <FileName>j4310_auto_return.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../User/App/Arm/j4310_auto_return.c</FilePath>
-            </File>
-            <File>
-              <FileName>j4310_auto_return.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>../User/App/Arm/j4310_auto_return.h</FilePath>
-            </File>
-            <File>
-              <FileName>j4310_position_control.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../User/App/Arm/j4310_position_control.c</FilePath>
-            </File>
-            <File>
-              <FileName>j4310_position_control.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>../User/App/Arm/j4310_position_control.h</FilePath>
             </File>
             <File>
               <FileName>gate.c</FileName>

@@ -7,29 +7,21 @@
 
 #include <string.h>
 
-/** 遥控数据帧的第一个同步字节。 */
-#define REMOTE_HEADER_0            0xA5U
-/** 遥控数据帧的第二个同步字节。 */
-#define REMOTE_HEADER_1            0x5AU
-/** 一帧完整遥控数据占用的字节数。 */
-#define REMOTE_FRAME_SIZE          10U
-/** 主遥控按键位图在遥控帧中的字节下标。 */
-#define REMOTE_PRIMARY_KEY_INDEX    6U
-/** 主遥控开关位图在遥控帧中的字节下标。 */
-#define REMOTE_PRIMARY_SWITCH_INDEX 7U
-/** 副遥控按键位图在遥控帧中的字节下标。 */
-#define REMOTE_KEY_INDEX           8U
-/** 副遥控开关位图在遥控帧中的字节下标。 */
-#define REMOTE_SWITCH_INDEX        9U
-/** 是否启用对应通信链路的超时看门狗检查。 */
-#define UPPER_REMOTE_WATCHDOGS_ENABLED 0U
+#define REMOTE_HEADER_0            0xA5U /**< 遥控数据帧的第一个同步字节。 */
+#define REMOTE_HEADER_1            0x5AU /**< 遥控数据帧的第二个同步字节。 */
+#define REMOTE_FRAME_SIZE          10U /**< 一帧完整遥控数据占用的字节数。 */
+#define REMOTE_PRIMARY_KEY_INDEX    6U /**< 主遥控按键位图在遥控帧中的字节下标。 */
+#define REMOTE_PRIMARY_SWITCH_INDEX 7U /**< 主遥控开关位图在遥控帧中的字节下标。 */
+#define REMOTE_KEY_INDEX           8U /**< 副遥控按键位图在遥控帧中的字节下标。 */
+#define REMOTE_SWITCH_INDEX        9U /**< 副遥控开关位图在遥控帧中的字节下标。 */
+#define UPPER_REMOTE_WATCHDOGS_ENABLED 0U /**< 遥控链路是否启用接收超时看门狗。 */
 
-/* PE0/PD6 are independent mode selectors. A single damaged frame must not
- * turn an ordinary button press into a mode change. */
-static bool UpperRemoteLink_FilterModeBit(upper_remote_link_t *link /* 需要操作的通信链路对象 */,
-                                          uint8_t sample_bits /* 本帧采样到的 PE0、PD6 模式开关位 */,
-                                          uint8_t bit /* 需要检查或设置的单个位 */,
-                                          uint8_t *stable_frames /* 函数读取或写入的对象地址 */)
+    /* PE0 和 PD6 是相互独立的模式选择键。单个损坏的数据帧不得
+     * 将普通按键操作误判为模式切换。 */
+static bool UpperRemoteLink_FilterModeBit(upper_remote_link_t *link /**< 副遥控通信链路上下文 */,
+                                          uint8_t sample_bits /**< 本帧采样到的 PE0、PD6 模式开关位 */,
+                                          uint8_t bit /**< 需要检查或设置的单个位 */,
+                                          uint8_t *stable_frames /**< 用于记录当前连续稳定遥控帧数的计数器 */)
 {
     bool sample_set = (sample_bits & bit) != 0U;
     bool candidate_set = (link->mode_candidate_bits & bit) != 0U;
@@ -74,8 +66,8 @@ static bool UpperRemoteLink_FilterModeBit(upper_remote_link_t *link /* 需要操
     return true;
 }
 
-static void UpperRemoteLink_UpdateModeSwitches(upper_remote_link_t *link /* 需要操作的通信链路对象 */,
-                                                uint8_t sample_bits /* 本帧采样到的 PE0、PD6 模式开关位 */)
+static void UpperRemoteLink_UpdateModeSwitches(upper_remote_link_t *link /**< 副遥控通信链路上下文 */,
+                                                uint8_t sample_bits /**< 本帧采样到的 PE0、PD6 模式开关位 */)
 {
     sample_bits &= UPPER_REMOTE_PRIMARY_SWITCH_MASK;
     if (!link->mode_switches_initialized)
@@ -97,7 +89,7 @@ static void UpperRemoteLink_UpdateModeSwitches(upper_remote_link_t *link /* 需�
 }
 
 /* 功能：从遥控接收缓存头部丢弃指定字节；用途：消费已处理数据或恢复帧同步；无返回值表示缓存已前移。 */
-static void UpperRemoteLink_Discard(upper_remote_link_t *link /* 需要操作的通信链路对象 */, size_t size /* 待处理数据的字节数 */)
+static void UpperRemoteLink_Discard(upper_remote_link_t *link /**< 副遥控通信链路上下文 */, size_t size /**< 需要从遥控接收缓存头部丢弃的字节数 */)
 {
     if (size >= link->buffered_size)
     {
@@ -112,9 +104,9 @@ static void UpperRemoteLink_Discard(upper_remote_link_t *link /* 需要操作的
 }
 
 /* 功能：解码并接收一帧合法遥控数据；用途：更新按键、摇杆、序列号和接收时刻；无返回值表示最新控制状态已保存。 */
-static void UpperRemoteLink_AcceptFrame(upper_remote_link_t *link /* 需要操作的通信链路对象 */,
-                                        const uint8_t *frame /* 需要解析或发送的 CAN 或协议帧 */,
-                                        uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperRemoteLink_AcceptFrame(upper_remote_link_t *link /**< 副遥控通信链路上下文 */,
+                                        const uint8_t *frame /**< 已通过校验的遥控协议帧 */,
+                                        uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     link->control_version++;
     link->control.primary_key_bits =
@@ -134,8 +126,8 @@ static void UpperRemoteLink_AcceptFrame(upper_remote_link_t *link /* 需要操�
 }
 
 /* 功能：扫描遥控接收缓存并提取完整帧；用途：处理分包、粘包、噪声和帧头重同步；无返回值表示当前可解析数据已消费。 */
-static void UpperRemoteLink_Process(upper_remote_link_t *link /* 需要操作的通信链路对象 */,
-                                    uint32_t tick_ms /* 当前系统毫秒时刻 */)
+static void UpperRemoteLink_Process(upper_remote_link_t *link /**< 副遥控通信链路上下文 */,
+                                    uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     size_t header_offset;
 
@@ -184,7 +176,7 @@ static void UpperRemoteLink_Process(upper_remote_link_t *link /* 需要操作的
 }
 
 /* 功能：初始化遥控链路对象和诊断状态；用途：建立可接收定长遥控帧的初始状态；无返回值表示对象已复位。 */
-void UpperRemoteLink_Init(upper_remote_link_t *link)
+void UpperRemoteLink_Init(upper_remote_link_t *link /**< 副遥控通信链路上下文 */)
 {
     if (link != NULL)
     {
@@ -193,10 +185,10 @@ void UpperRemoteLink_Init(upper_remote_link_t *link)
 }
 
 /* 功能：向遥控链路压入新收到的字节流；用途：缓存数据并触发定长帧解析；返回值表示本次接收的有效帧数。 */
-void UpperRemoteLink_Push(upper_remote_link_t *link,
-                          const uint8_t *data,
-                          size_t size,
-                          uint32_t tick_ms)
+void UpperRemoteLink_Push(upper_remote_link_t *link /**< 副遥控通信链路上下文 */,
+                          const uint8_t *data /**< 待送入副遥控链路的原始字节流 */,
+                          size_t size /**< 本次送入副遥控链路的字节数 */,
+                          uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     size_t index;
 
@@ -219,9 +211,9 @@ void UpperRemoteLink_Push(upper_remote_link_t *link,
 }
 
 /* 功能：读取当前遥控输入并判断是否超时；用途：向应用层提供按键、摇杆和在线状态；返回 true 表示输出参数有效。 */
-bool UpperRemoteLink_GetControl(const upper_remote_link_t *link,
-                                uint32_t tick_ms,
-                                upper_remote_control_t *control)
+bool UpperRemoteLink_GetControl(const upper_remote_link_t *link /**< 副遥控通信链路上下文 */,
+                                uint32_t tick_ms /**< 当前系统毫秒时刻 */,
+                                upper_remote_control_t *control /**< 用于写出当前遥控按键、开关和在线状态的对象 */)
 {
     bool online;
     uint32_t version_before;
@@ -281,8 +273,8 @@ bool UpperRemoteLink_GetControl(const upper_remote_link_t *link,
 }
 
 /* 功能：读取遥控链路诊断统计；用途：观察收帧、丢帧、重同步和缓存状态；无返回值表示统计已复制到输出。 */
-void UpperRemoteLink_GetDiagnostics(const upper_remote_link_t *link,
-                                    upper_remote_diagnostics_t *diagnostics)
+void UpperRemoteLink_GetDiagnostics(const upper_remote_link_t *link /**< 副遥控通信链路上下文 */,
+                                    upper_remote_diagnostics_t *diagnostics /**< 用于写出遥控收帧、丢帧及重同步统计的对象 */)
 {
     if (diagnostics == NULL)
     {

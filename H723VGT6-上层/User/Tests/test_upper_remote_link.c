@@ -11,19 +11,18 @@
 
 #include "upper_remote_link.h"
 
-/** 该通信帧完整编码后的固定字节数。 */
-#define TEST_FRAME_SIZE 10U
+#define TEST_FRAME_SIZE 10U /**< 遥控链路测试输入帧的固定字节数。 */
 
 /* 功能：构造一帧固定格式的遥控测试数据；用途：生成不同按键、摇杆和序列号输入；返回值表示完整帧数据。 */
-static void Test_BuildFixedFrame(uint8_t frame[TEST_FRAME_SIZE] /* 需要解析或发送的 CAN 或协议帧 */,
-                                 uint8_t left_x /* 主遥控左摇杆横向原始值 */,
-                                 uint8_t left_y /* 主遥控左摇杆纵向原始值 */,
-                                 uint8_t right_x /* 主遥控右摇杆横向原始值 */,
-                                 uint8_t right_y /* 主遥控右摇杆纵向原始值 */,
-                                 uint8_t primary_keys /* 主遥控 PC0、PC1 按键的当前位图 */,
-                                 uint8_t primary_switch /* 主遥控 PE0、PD6 开关的当前位图 */,
-                                 uint8_t secondary_keys /* 副遥控 PD8 至 PD13 按键的当前位图 */,
-                                 uint8_t secondary_switches /* 副遥控开关的当前位图 */)
+static void Test_BuildFixedFrame(uint8_t frame[TEST_FRAME_SIZE] /**< 用于写出固定格式遥控测试帧的缓冲区 */,
+                                 uint8_t left_x /**< 主遥控左摇杆横向原始值 */,
+                                 uint8_t left_y /**< 主遥控左摇杆纵向原始值 */,
+                                 uint8_t right_x /**< 主遥控右摇杆横向原始值 */,
+                                 uint8_t right_y /**< 主遥控右摇杆纵向原始值 */,
+                                 uint8_t primary_keys /**< 主遥控 PC0、PC1 按键的当前位图 */,
+                                 uint8_t primary_switch /**< 主遥控 PE0、PD6 开关的当前位图 */,
+                                 uint8_t secondary_keys /**< 副遥控 PD8 至 PD13 按键的当前位图 */,
+                                 uint8_t secondary_switches /**< 副遥控开关的当前位图 */)
 {
     frame[0] = 0xA5U;
     frame[1] = 0x5AU;

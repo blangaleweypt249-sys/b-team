@@ -4,8 +4,7 @@
  */
 
 #ifndef PC_PROTOCOL_H
-/** 防止 pc_protocol.h 被重复包含。 */
-#define PC_PROTOCOL_H
+#define PC_PROTOCOL_H /**< 防止 pc_protocol.h 被重复包含。 */
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,12 +14,9 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-/** 当前上位机通信帧格式的版本号。 */
-#define PC_PROTOCOL_VERSION       3U
-/** 单个上位机通信帧允许携带的最大载荷字节数。 */
-#define PC_PROTOCOL_MAX_PAYLOAD   128U
-/** 上位机通信帧中同步头、帧头和校验字段占用的字节数。 */
-#define PC_PROTOCOL_FRAME_OVERHEAD 10U
+#define PC_PROTOCOL_VERSION       3U /**< 当前上位机通信帧格式的版本号。 */
+#define PC_PROTOCOL_MAX_PAYLOAD   128U /**< 单个上位机通信帧允许携带的最大载荷字节数。 */
+#define PC_PROTOCOL_FRAME_OVERHEAD 10U /**< 上位机通信帧中同步头、帧头和校验字段占用的字节数。 */
 
 /** 表示上位机通信帧承载的消息种类。 */
 typedef enum
@@ -47,12 +43,12 @@ typedef enum
 typedef struct
 {
     uint8_t type; /**< 该帧载荷所表达的上位机消息种类。 */
-    uint16_t sequence; /**< 用于匹配请求和响应的消息序号。 */
+    uint16_t sequence; /**< 当前协议帧携带的消息序号。 */
     uint16_t payload_len; /**< 该帧实际携带的载荷字节数。 */
     uint8_t payload[PC_PROTOCOL_MAX_PAYLOAD]; /**< 该帧携带的业务数据。 */
 } pc_frame_t;
 
-typedef void (*pc_frame_handler_t)(const pc_frame_t *frame /* 需要解析或发送的 CAN 或协议帧 */, void *user_data /* 调用回调函数时传递的用户上下文 */);
+typedef void (*pc_frame_handler_t)(const pc_frame_t *frame /**< 待解析的上位机协议帧 */, void *user_data /**< 调用回调函数时传递的用户上下文 */);
 
 /** 保存 上位机链路 运行过程中需要集中管理的数据。 */
 typedef struct
@@ -66,22 +62,22 @@ typedef struct
 } pc_parser_t;
 
 /* 功能：清零并初始化流式协议解析器；用途：开始接收新会话；无返回值表示解析状态被复位。 */
-void PcProtocol_Init(pc_parser_t *parser /* 需要操作的协议解析器 */);
+void PcProtocol_Init(pc_parser_t *parser /**< 需要操作的协议解析器 */);
 /* 功能：编码一帧完整的上位机协议数据；用途：生成同步头、帧头、载荷和 CRC；返回 0 表示参数或缓冲区无效。 */
-size_t PcProtocol_Encode(uint8_t type /* 需要构造、发送或统计的消息或帧种类 */,
-                         uint16_t sequence /* 用于匹配请求和响应的消息序号 */,
-                         const uint8_t *payload /* 函数读取或写入的对象地址 */,
-                         uint16_t payload_len /* 协议帧实际携带的载荷字节数 */,
-                         uint8_t *output /* 用于写出计算结果或编码数据的缓冲区 */,
-                         size_t output_size /* 输出缓冲区可用的字节数 */);
+size_t PcProtocol_Encode(uint8_t type /**< 待编码的上位机协议消息类型 */,
+                         uint16_t sequence /**< 用于匹配请求和响应的消息序号 */,
+                         const uint8_t *payload /**< 待封装进上位机帧的载荷首地址 */,
+                         uint16_t payload_len /**< 协议帧实际携带的载荷字节数 */,
+                         uint8_t *output /**< 用于写出编码后协议帧的缓冲区 */,
+                         size_t output_size /**< 输出缓冲区可用的字节数 */);
 /* 功能：逐字节推进上位机协议解析；用途：从任意长度的数据块中识别完整帧；有效帧通过 handler 回调交付。 */
-void PcProtocol_Push(pc_parser_t *parser /* 需要操作的协议解析器 */,
-                     const uint8_t *data /* 待处理数据的首地址 */,
-                     size_t size /* 待处理数据的字节数 */,
-                     pc_frame_handler_t handler /* 收到有效数据后调用的处理函数 */,
-                     void *user_data /* 调用回调函数时传递的用户上下文 */);
+void PcProtocol_Push(pc_parser_t *parser /**< 需要操作的协议解析器 */,
+                     const uint8_t *data /**< 待送入上位机协议解析器的原始字节流 */,
+                     size_t size /**< 本次送入协议解析器的字节数 */,
+                     pc_frame_handler_t handler /**< 收到有效数据后调用的处理函数 */,
+                     void *user_data /**< 调用回调函数时传递的用户上下文 */);
 /* 功能：计算 Modbus 多项式形式的 CRC16；用途：校验上位机帧完整性；返回值表示校验码。 */
-uint16_t PcProtocol_Crc16(const uint8_t *data /* 待处理数据的首地址 */, size_t size /* 待处理数据的字节数 */);
+uint16_t PcProtocol_Crc16(const uint8_t *data /**< 待计算CRC16的上位机协议数据 */, size_t size /**< 参与CRC16计算的数据字节数 */);
 
 #ifdef __cplusplus
 }

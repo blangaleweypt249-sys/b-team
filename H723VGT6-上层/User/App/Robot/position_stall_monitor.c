@@ -9,8 +9,8 @@
 #include <string.h>
 
 bool PositionStallMonitor_Init(
-    position_stall_monitor_t *monitor,
-    const position_stall_monitor_cfg_t *cfg)
+    position_stall_monitor_t *monitor /**< 需要初始化或更新的位置堵转监视器 */,
+    const position_stall_monitor_cfg_t *cfg /**< 位置堵转判定阈值与持续时间配置 */)
 {
     if ((monitor == NULL) || (cfg == NULL) ||
         !isfinite(cfg->minimum_error_rad) ||
@@ -29,9 +29,9 @@ bool PositionStallMonitor_Init(
     return true;
 }
 
-void PositionStallMonitor_Arm(position_stall_monitor_t *monitor,
-                              float target_position_rad,
-                              uint32_t tick_ms)
+void PositionStallMonitor_Arm(position_stall_monitor_t *monitor /**< 需要初始化或更新的位置堵转监视器 */,
+                              float target_position_rad /**< 轨迹目标关节角，单位：弧度 */,
+                              uint32_t tick_ms /**< 当前系统毫秒时刻 */)
 {
     if ((monitor == NULL) || !isfinite(target_position_rad))
     {
@@ -50,7 +50,7 @@ void PositionStallMonitor_Arm(position_stall_monitor_t *monitor,
     monitor->stall_timing = false;
 }
 
-void PositionStallMonitor_Disarm(position_stall_monitor_t *monitor)
+void PositionStallMonitor_Disarm(position_stall_monitor_t *monitor /**< 需要初始化或更新的位置堵转监视器 */)
 {
     if (monitor == NULL)
     {
@@ -62,12 +62,12 @@ void PositionStallMonitor_Disarm(position_stall_monitor_t *monitor)
     monitor->stall_started_at_ms = 0U;
 }
 
-bool PositionStallMonitor_Update(position_stall_monitor_t *monitor,
-                                 uint32_t tick_ms,
-                                 bool feedback_valid,
-                                 float position_rad,
-                                 float velocity_rad_s,
-                                 float effort)
+bool PositionStallMonitor_Update(position_stall_monitor_t *monitor /**< 需要初始化或更新的位置堵转监视器 */,
+                                 uint32_t tick_ms /**< 当前系统毫秒时刻 */,
+                                 bool feedback_valid /**< 当前反馈快照是否有效 */,
+                                 float position_rad /**< 用于堵转判断的实测位置，单位：弧度 */,
+                                 float velocity_rad_s /**< 用于堵转判断的实测速度，单位：弧度每秒 */,
+                                 float effort /**< 当前控制输出的转矩或电流绝对值 */)
 {
     bool stalled;
 

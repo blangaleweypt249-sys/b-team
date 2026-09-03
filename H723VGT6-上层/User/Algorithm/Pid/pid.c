@@ -8,7 +8,7 @@
 #include <string.h>
 
 /* 功能：将数值限制在正负上限内；用途：抑制 PID 积分和输出饱和；返回值表示限幅后的数值。 */
-static float PID_Clamp(float value /* 需要检查、限幅或编码的输入值 */, float limit /* 输入值允许达到的绝对值上限 */)
+static float PID_Clamp(float value /**< 待限制绝对值的 PID 积分或输出量 */, float limit /**< 输入值允许达到的绝对值上限 */)
 {
     if (limit <= 0.0f)
     {
@@ -26,7 +26,7 @@ static float PID_Clamp(float value /* 需要检查、限幅或编码的输入值
 }
 
 /* 功能：初始化 PID 控制器并保存参数；用途：建立可用的控制状态；执行后历史误差和积分均被清零。 */
-void PID_Init(pid_t *pid, const pid_cfg_t *cfg)
+void PID_Init(pid_t *pid /**< 需要操作的 PID 控制器 */, const pid_cfg_t *cfg /**< PID 增益及积分、输出限幅配置 */)
 {
     if ((pid == NULL) || (cfg == NULL))
     {
@@ -46,7 +46,7 @@ void PID_Init(pid_t *pid, const pid_cfg_t *cfg)
 }
 
 /* 功能：清空 PID 运行状态但保留配置；用途：切换工况或停机后重新起算；执行后控制器无历史累积。 */
-void PID_Reset(pid_t *pid)
+void PID_Reset(pid_t *pid /**< 需要操作的 PID 控制器 */)
 {
     pid_cfg_t cfg;
 
@@ -61,10 +61,10 @@ void PID_Reset(pid_t *pid)
 }
 
 /* 功能：计算一次 PID 控制输出；用途：根据目标、反馈和周期形成闭环控制量；返回值表示限幅后的控制输出。 */
-float PID_Calc(pid_t *pid,
-               float target,
-               float feedback,
-               float dt_s)
+float PID_Calc(pid_t *pid /**< 需要操作的 PID 控制器 */,
+               float target /**< PID 控制器的目标值 */,
+               float feedback /**< 控制器当前使用的反馈值 */,
+               float dt_s /**< 本次计算的控制周期，单位：秒 */)
 {
     float error;
     float raw_derivative;

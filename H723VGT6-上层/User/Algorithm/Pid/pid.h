@@ -4,8 +4,7 @@
  */
 
 #ifndef PID_H
-/** 防止 pid.h 被重复包含。 */
-#define PID_H
+#define PID_H /**< 防止 pid.h 被重复包含。 */
 
 #include <stdbool.h>
 
@@ -31,13 +30,13 @@ typedef struct
 } pid_t;
 
 /* 功能：初始化 PID 控制器并保存参数；用途：建立可用的控制状态；执行后历史误差和积分均被清零。 */
-void PID_Init(pid_t *pid /* 需要操作的 PID 控制器 */, const pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */);
+void PID_Init(pid_t *pid /**< 需要操作的 PID 控制器 */, const pid_cfg_t *cfg /**< PID 增益及积分、输出限幅配置 */);
 /* 功能：清空 PID 运行状态但保留配置；用途：切换工况或停机后重新起算；执行后控制器无历史累积。 */
-void PID_Reset(pid_t *pid /* 需要操作的 PID 控制器 */);
+void PID_Reset(pid_t *pid /**< 需要操作的 PID 控制器 */);
 /* 功能：计算一次 PID 控制输出；用途：根据目标、反馈和周期形成闭环控制量；返回值表示限幅后的控制输出。 */
-float PID_Calc(pid_t *pid /* 需要操作的 PID 控制器 */,
-               float target /* 本次需要应用的控制目标 */,
-               float feedback /* 控制器当前使用的反馈值 */,
-               float dt_s /* 本次计算的控制周期，单位：秒 */);
+float PID_Calc(pid_t *pid /**< 需要操作的 PID 控制器 */,
+               float target /**< PID 控制器的目标值 */,
+               float feedback /**< 控制器当前使用的反馈值 */,
+               float dt_s /**< 本次计算的控制周期，单位：秒 */);
 
 #endif

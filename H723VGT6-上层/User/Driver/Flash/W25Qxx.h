@@ -5,8 +5,7 @@
  */
 
 #ifndef W25QXX_H
-/** 防止 W25Qxx.h 被重复包含。 */
-#define W25QXX_H
+#define W25QXX_H /**< 防止 W25Qxx.h 被重复包含。 */
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -33,73 +32,48 @@
 #include "main.h"
 #include "spi.h"
 
-/** 选择 HAL 阻塞延时方式时使用的配置值。 */
-#define W25Q_DELAY_USE_HAL            0U
-/** 选择 RTOS 任务延时方式时使用的配置值。 */
-#define W25Q_DELAY_USE_OS             1U
+#define W25Q_DELAY_USE_HAL            0U /**< 选择 HAL 阻塞延时方式时使用的配置值。 */
+#define W25Q_DELAY_USE_OS             1U /**< 选择 RTOS 任务延时方式时使用的配置值。 */
 
-/* 只改这里：0U = HAL_Delay，1U = osDelay。 */
-#define W25Q_DELAY_MODE               1U
+#define W25Q_DELAY_MODE               1U /**< 只改这里：0U = HAL_Delay，1U = osDelay。 */
 
 #if (W25Q_DELAY_MODE == W25Q_DELAY_USE_OS)
 /* CMSIS-RTOS v1 工程请改为 cmsis_os.h。 */
 #include "cmsis_os2.h"
 #endif
 
-/** W25Qxx 芯片连接的 HAL SPI 句柄。 */
-#define W25Q_SPI_HANDLE               hspi1
-/** W25Qxx 片选信号所在的 GPIO 端口。 */
-#define W25Q_CS_GPIO_PORT             FLASH_CS_GPIO_Port
-/** W25Qxx 片选信号所在的 GPIO 引脚。 */
-#define W25Q_CS_GPIO_PIN              FLASH_CS_Pin
-/** 单次 W25Qxx SPI 阻塞传输允许等待的最长时间，单位：毫秒。 */
-#define W25Q_SPI_TIMEOUT_MS           100U
+#define W25Q_SPI_HANDLE               hspi1 /**< W25Qxx 芯片连接的 HAL SPI 句柄。 */
+#define W25Q_CS_GPIO_PORT             FLASH_CS_GPIO_Port /**< W25Qxx 片选信号所在的 GPIO 端口。 */
+#define W25Q_CS_GPIO_PIN              FLASH_CS_Pin /**< W25Qxx 片选信号所在的 GPIO 引脚。 */
+#define W25Q_SPI_TIMEOUT_MS           100U /**< 单次 W25Qxx SPI 阻塞传输允许等待的最长时间，单位：毫秒。 */
 
-/** 拉低片选信号，开始一次 W25Qxx SPI 事务。 */
 #define W25Q_MCU_CS_SELECT()                                             \
-    HAL_GPIO_WritePin(W25Q_CS_GPIO_PORT, W25Q_CS_GPIO_PIN, GPIO_PIN_RESET)
+    HAL_GPIO_WritePin(W25Q_CS_GPIO_PORT, W25Q_CS_GPIO_PIN, GPIO_PIN_RESET) /**< 拉低片选信号，开始一次 W25Qxx SPI 事务。 */
 
-/** 释放片选信号，结束一次 W25Qxx SPI 事务。 */
 #define W25Q_MCU_CS_DESELECT()                                           \
-    HAL_GPIO_WritePin(W25Q_CS_GPIO_PORT, W25Q_CS_GPIO_PIN, GPIO_PIN_SET)
+    HAL_GPIO_WritePin(W25Q_CS_GPIO_PORT, W25Q_CS_GPIO_PIN, GPIO_PIN_SET) /**< 释放片选信号，结束一次 W25Qxx SPI 事务。 */
 
-/**
- * 通过已配置的 SPI 外设同时收发一个字节。
- * @param tx_data_ptr SPI 发送缓冲区首地址。
- * @param rx_data_ptr SPI 接收缓冲区首地址。
- */
-#define W25Q_MCU_SPI_RW_BYTE(tx_data_ptr, rx_data_ptr)                    \
+#define W25Q_MCU_SPI_RW_BYTE(tx_data_ptr /**< SPI单字节发送缓冲区首地址 */, \
+                             rx_data_ptr /**< SPI单字节接收缓冲区首地址 */) \
     (HAL_SPI_TransmitReceive(&W25Q_SPI_HANDLE,                            \
                              (tx_data_ptr),                              \
                              (rx_data_ptr),                              \
                              1U,                                        \
-                             W25Q_SPI_TIMEOUT_MS) == HAL_OK)
+                             W25Q_SPI_TIMEOUT_MS) == HAL_OK) /**< 通过配置的SPI外设同时收发一个字节。 */
 
-/**
- * 通过已配置的 SPI 外设收发一段连续数据。
- * @param tx_data_ptr SPI 发送缓冲区首地址。
- * @param rx_data_ptr SPI 接收缓冲区首地址。
- * @param data_len_byte 本次传输或处理的数据字节数。
- */
-#define W25Q_MCU_SPI_TRANSFER(tx_data_ptr, rx_data_ptr, data_len_byte)    \
+#define W25Q_MCU_SPI_TRANSFER(tx_data_ptr /**< SPI连续发送缓冲区首地址 */, \
+                              rx_data_ptr /**< SPI连续接收缓冲区首地址 */, \
+                              data_len_byte /**< SPI连续传输的字节数 */) \
     (HAL_SPI_TransmitReceive(&W25Q_SPI_HANDLE,                            \
                              (tx_data_ptr),                              \
                              (rx_data_ptr),                              \
                              (data_len_byte),                            \
-                             W25Q_SPI_TIMEOUT_MS) == HAL_OK)
+                             W25Q_SPI_TIMEOUT_MS) == HAL_OK) /**< 通过配置的SPI外设同步收发一段连续数据。 */
 
-/**
- * 在未启动调度器时使用 HAL 提供毫秒延时。
- * @param delay_ms 需要等待的时间，单位：毫秒。
- */
-#define W25Q_MCU_HAL_DELAY_MS(delay_ms)  HAL_Delay(delay_ms)
+#define W25Q_MCU_HAL_DELAY_MS(delay_ms /**< HAL阻塞等待时间，单位：毫秒 */) HAL_Delay(delay_ms) /**< 使用HAL阻塞延时。 */
 
 #if (W25Q_DELAY_MODE == W25Q_DELAY_USE_OS)
-/**
- * 在 RTOS 运行期间挂起当前任务完成毫秒延时。
- * @param delay_ms 需要等待的时间，单位：毫秒。
- */
-#define W25Q_MCU_OS_DELAY_MS(delay_ms)   ((void)osDelay(delay_ms))
+#define W25Q_MCU_OS_DELAY_MS(delay_ms /**< RTOS任务挂起时间，单位：毫秒 */) ((void)osDelay(delay_ms)) /**< 使用RTOS任务延时。 */
 #endif
 /* ====================== 更换 MCU / 工程时必改区结束 ===================== */
 
@@ -108,28 +82,20 @@
 #error "W25Q_DELAY_MODE must be 0 (HAL_Delay) or 1 (osDelay)"
 #endif
 
-/** 16 Mbit W25Qxx 器件对应的 JEDEC 标识。 */
-#define W25Q16_ID                    0xEF4015UL
-/** 32 Mbit W25Qxx 器件对应的 JEDEC 标识。 */
-#define W25Q32_ID                    0xEF4016UL
-/** 64 Mbit W25Qxx 器件对应的 JEDEC 标识。 */
-#define W25Q64_ID                    0xEF4017UL
-/** 128 Mbit W25Qxx 器件对应的 JEDEC 标识。 */
-#define W25Q128_ID                   0xEF4018UL
+#define W25Q16_ID                    0xEF4015UL /**< 16 Mbit W25Qxx 器件对应的 JEDEC 标识。 */
+#define W25Q32_ID                    0xEF4016UL /**< 32 Mbit W25Qxx 器件对应的 JEDEC 标识。 */
+#define W25Q64_ID                    0xEF4017UL /**< 64 Mbit W25Qxx 器件对应的 JEDEC 标识。 */
+#define W25Q128_ID                   0xEF4018UL /**< 128 Mbit W25Qxx 器件对应的 JEDEC 标识。 */
 
-/** W25Qxx 单页可编程的数据字节数。 */
-#define W25Q_PAGE_SIZE_BYTE          256U
-/** W25Qxx 单个可擦除扇区的字节数。 */
-#define W25Q_SECTOR_SIZE_BYTE        4096UL
+#define W25Q_PAGE_SIZE_BYTE          256U /**< W25Qxx 单页可编程的数据字节数。 */
+#define W25Q_SECTOR_SIZE_BYTE        4096UL /**< W25Qxx 单个可擦除扇区的字节数。 */
 
 #ifndef W25Q_READY_TIMEOUT_MS
-/** 等待 W25Qxx 完成编程或擦除操作的最长时间，单位：毫秒。 */
-#define W25Q_READY_TIMEOUT_MS        1000U
+#define W25Q_READY_TIMEOUT_MS        1000U /**< 等待 W25Qxx 完成编程或擦除操作的最长时间，单位：毫秒。 */
 #endif
 
 #ifndef W25Q_LOCK_TIMEOUT_MS
-/** 等待取得共享 SPI 总线锁的最长时间，单位：毫秒。 */
-#define W25Q_LOCK_TIMEOUT_MS         1000U
+#define W25Q_LOCK_TIMEOUT_MS         1000U /**< 等待取得共享 SPI 总线锁的最长时间，单位：毫秒。 */
 #endif
 
 /**
@@ -157,14 +123,14 @@ typedef struct
 {
     void (*cs_select)(void); /**< 开始 SPI 事务时拉低 Flash 片选信号的回调。 */
     void (*cs_deselect)(void); /**< 结束 SPI 事务时释放 Flash 片选信号的回调。 */
-    bool (*spi_rw_byte)(uint8_t tx_data, uint8_t *rx_data); /**< 通过 SPI 同时收发单字节的回调。 */
-    bool (*spi_transfer)(const uint8_t *tx_data,
-                         uint8_t *rx_data,
-                         uint16_t data_len_byte); /**< 通过 SPI 收发连续数据块的回调。 */
-    void (*delay_ms)(uint32_t delay_ms); /**< 等待指定毫秒数的延时回调。 */
+    bool (*spi_rw_byte)(uint8_t tx_data /**< SPI 单字节发送值 */, uint8_t *rx_data /**< SPI 单字节接收值的输出地址 */); /**< 通过 SPI 同时收发单字节的回调。 */
+    bool (*spi_transfer)(const uint8_t *tx_data /**< SPI 连续发送缓冲区首地址 */,
+                         uint8_t *rx_data /**< SPI 连续接收缓冲区首地址 */,
+                         uint16_t data_len_byte /**< SPI 连续传输的字节数 */); /**< 通过 SPI 收发连续数据块的回调。 */
+    void (*delay_ms)(uint32_t delay_ms /**< 需要等待的时间，单位：毫秒 */); /**< 等待指定毫秒数的延时回调。 */
 
     /* 多任务或共享 SPI 总线时，两个锁接口必须同时绑定。 */
-    bool (*bus_lock)(uint32_t timeout_ms); /**< 在共享 SPI 总线上取得互斥锁的回调。 */
+    bool (*bus_lock)(uint32_t timeout_ms /**< 等待取得总线锁的最长时间，单位：毫秒 */); /**< 在共享 SPI 总线上取得互斥锁的回调。 */
     void (*bus_unlock)(void); /**< 释放共享 SPI 总线互斥锁的回调。 */
 
     uint32_t flash_id; /**< 初始化时读取到的完整 JEDEC 器件标识。 */
@@ -196,75 +162,59 @@ w25q_status_t W25Q_PortGetInitStatus(void);
 
 /**
  * @brief 使用 0x90 命令读取制造商和器件 ID
- * @param dev W25Qxx 设备句柄
- * @param device_id 制造商 ID 与器件 ID 的组合值
  * @retval W25Q_OK 读取成功
  * @retval 其他值 具体错误见 w25q_status_t
  */
-w25q_status_t W25Q_ReadDeviceId(w25q_handle_t *dev /* 函数读取或写入的对象地址 */, uint16_t *device_id /* 函数读取或写入的对象地址 */);
+w25q_status_t W25Q_ReadDeviceId(w25q_handle_t *dev /**< W25Q Flash 设备句柄 */, uint16_t *device_id /**< 用于写出 W25Q 器件标识 */);
 
 /**
  * @brief 初始化 W25Qxx 设备并读取 JEDEC ID
- * @param dev W25Qxx 设备句柄
  * @retval W25Q_OK 初始化成功
  * @retval W25Q_ERROR_INVALID_ARG 底层接口未完整绑定
  * @retval W25Q_ERROR_UNSUPPORTED_DEVICE 芯片不受支持
  * @retval W25Q_ERROR_SPI SPI 通信失败
  * @retval W25Q_ERROR_LOCK_TIMEOUT 获取总线锁超时
  */
-w25q_status_t W25Q_Init(w25q_handle_t *dev /* 函数读取或写入的对象地址 */);
+w25q_status_t W25Q_Init(w25q_handle_t *dev /**< W25Q Flash 设备句柄 */);
 
 /**
  * @brief 擦除指定的 4 KB 扇区
- * @param dev W25Qxx 设备句柄
- * @param sector_addr 扇区首地址，必须按 4 KB 对齐
  * @retval W25Q_OK 擦除成功
  * @retval 其他值 具体错误见 w25q_status_t
  */
-w25q_status_t W25Q_EraseSector(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
-                               uint32_t sector_addr /* 待擦除或改写扇区的起始地址 */);
+w25q_status_t W25Q_EraseSector(w25q_handle_t *dev /**< W25Q Flash 设备句柄 */,
+                               uint32_t sector_addr /**< 待擦除扇区的起始地址 */);
 
 /**
  * @brief 从指定扇区首地址开始擦除若干个完整的 4 KB 扇区
- * @param dev W25Qxx 设备句柄
- * @param sector_addr 第一个扇区的首地址，必须按 4 KB 对齐
- * @param sector_count 要擦除的扇区数量
  * @retval W25Q_OK 擦除成功，数量为 0 时不执行操作
  * @retval 其他值 具体错误见 w25q_status_t
  * @note 实际擦除长度固定为 sector_count * W25Q_SECTOR_SIZE_BYTE
  */
-w25q_status_t W25Q_EraseSectors(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
-                                uint32_t sector_addr /* 待擦除或改写扇区的起始地址 */,
-                                uint32_t sector_count /* Flash 扇区总数或本次连续操作的扇区数量 */);
+w25q_status_t W25Q_EraseSectors(w25q_handle_t *dev /**< W25Q Flash 设备句柄 */,
+                                uint32_t sector_addr /**< 连续擦除区域的首个扇区地址 */,
+                                uint32_t sector_count /**< 本次连续擦除的扇区数量 */);
 
 /**
  * @brief 从 Flash 连续读取数据
- * @param dev W25Qxx 设备句柄
- * @param read_addr 起始读取地址
- * @param data 接收缓冲区
- * @param data_len_byte 读取长度(Byte)
  * @retval W25Q_OK 读取成功
  * @retval 其他值 具体错误见 w25q_status_t
  */
-w25q_status_t W25Q_ReadData(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
-                            uint32_t read_addr /* Flash 读取操作的起始字节地址 */,
-                            uint8_t *data /* 待处理数据的首地址 */,
-                            uint32_t data_len_byte /* 本次传输或处理的数据字节数 */);
+w25q_status_t W25Q_ReadData(w25q_handle_t *dev /**< W25Q Flash 设备句柄 */,
+                            uint32_t read_addr /**< Flash 读取操作的起始字节地址 */,
+                            uint8_t *data /**< Flash读取数据的输出缓冲区 */,
+                            uint32_t data_len_byte /**< Flash连续读取字节数 */);
 
 /**
  * @brief 向 Flash 写入数据，自动处理页边界和必要的扇区擦除
- * @param dev W25Qxx 设备句柄
- * @param write_addr 起始写入地址
- * @param data 待写入数据
- * @param data_len_byte 写入长度(Byte)
  * @retval W25Q_OK 写入成功
  * @retval 其他值 具体错误见 w25q_status_t
  * @note 若需要擦除，驱动会保留同一扇区中写入范围外的原数据
  * @note 自动擦除写入使用一个静态 4 KB 扇区缓冲区
  */
-w25q_status_t W25Q_WriteData(w25q_handle_t *dev /* 函数读取或写入的对象地址 */,
-                             uint32_t write_addr /* Flash 写入操作的起始字节地址 */,
-                             const uint8_t *data /* 待处理数据的首地址 */,
-                             uint32_t data_len_byte /* 本次传输或处理的数据字节数 */);
+w25q_status_t W25Q_WriteData(w25q_handle_t *dev /**< W25Q Flash 设备句柄 */,
+                             uint32_t write_addr /**< Flash 写入操作的起始字节地址 */,
+                             const uint8_t *data /**< 待写入Flash的数据缓冲区 */,
+                             uint32_t data_len_byte /**< Flash连续写入字节数 */);
 
 #endif

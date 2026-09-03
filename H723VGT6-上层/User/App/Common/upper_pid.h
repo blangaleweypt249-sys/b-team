@@ -4,8 +4,7 @@
  */
 
 #ifndef UPPER_PID_H
-/** 防止 upper_pid.h 被重复包含。 */
-#define UPPER_PID_H
+#define UPPER_PID_H /**< 防止 upper_pid.h 被重复包含。 */
 
 /** 保存 PID 控制器 初始化和控制所需的配置参数。 */
 typedef struct

@@ -9,7 +9,7 @@
 #include "fdcan_dlc.h"
 
 /* 功能：把逻辑 CAN 总线号映射为 HAL 句柄；用途：统一选择 FDCAN 外设；返回 NULL 表示总线号无效。 */
-static FDCAN_HandleTypeDef *BspCan_GetHandle(uint8_t can_bus /* CAN 总线编号 */)
+static FDCAN_HandleTypeDef *BspCan_GetHandle(uint8_t can_bus /**< CAN 总线编号 */)
 {
     switch (can_bus)
     {
@@ -28,7 +28,7 @@ static FDCAN_HandleTypeDef *BspCan_GetHandle(uint8_t can_bus /* CAN 总线编号
 }
 
 /* 功能：通过指定 FDCAN 总线发送经典 CAN 帧；用途：为上层电机协议提供统一发送口；返回 true 表示帧成功进入发送队列。 */
-bool BspCan_Send(uint8_t can_bus, const can_frame_t *frame)
+bool BspCan_Send(uint8_t can_bus /**< CAN 总线编号 */, const can_frame_t *frame /**< 待发送的 CAN 数据帧 */)
 {
     FDCAN_HandleTypeDef *hfdcan;
     FDCAN_TxHeaderTypeDef header;

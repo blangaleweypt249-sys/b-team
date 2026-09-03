@@ -13,9 +13,9 @@ static motor_cmd_t test_last_command;
 static size_t test_send_count;
 
 /* 功能：提供测试用 CAN 发送桩并记录输出帧；用途：隔离真实硬件发送接口；返回 true 表示桩接受该帧。 */
-static bool Test_Send(const motor_cfg_t *cfg /* 初始化或更新时使用的配置参数 */,
-                      const motor_cmd_t *cmd /* 函数读取或写入的对象地址 */,
-                      void *user_data /* 调用回调函数时传递的用户上下文 */)
+static bool Test_Send(const motor_cfg_t *cfg /**< 当前电机的型号、总线及节点配置 */,
+                      const motor_cmd_t *cmd /**< 测试发送桩接收的电机控制命令 */,
+                      void *user_data /**< 调用回调函数时传递的用户上下文 */)
 {
     (void)cfg;
     (void)user_data;

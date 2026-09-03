@@ -13,7 +13,7 @@
 #include "upper_motor_port.h"
 
 /* 功能：校验闸门电机 PID 参数是否合法；参数 cfg 为待检查配置；返回 true 表示参数完整且位于有效范围。 */
-static bool Gate_PidValid(const upper_pid_cfg_t *cfg /* 初始化或更新时使用的配置参数 */)
+static bool Gate_PidValid(const upper_pid_cfg_t *cfg /**< 待校验的机构 PID 配置 */)
 {
     return (cfg != NULL) && isfinite(cfg->kp) && isfinite(cfg->ki) &&
            isfinite(cfg->kd) && isfinite(cfg->integral_limit) &&
@@ -23,14 +23,14 @@ static bool Gate_PidValid(const upper_pid_cfg_t *cfg /* 初始化或更新时使
 }
 
 /* 功能：比较两组闸门电机 PID 配置是否一致；参数 left、right 为待比较配置；返回 true 表示所有字段相同。 */
-static bool Gate_PidEqual(const upper_pid_cfg_t *left /* 函数读取或写入的对象地址 */,
-                          const upper_pid_cfg_t *right /* 函数读取或写入的对象地址 */)
+static bool Gate_PidEqual(const upper_pid_cfg_t *left /**< 待比较的左侧机构 PID 配置 */,
+                          const upper_pid_cfg_t *right /**< 待比较的右侧机构 PID 配置 */)
 {
     return memcmp(left, right, sizeof(*left)) == 0;
 }
 
 /* 功能：将数值限制在指定区间内；参数 value 为输入值，lower、upper 为上下限；返回限幅后的结果。 */
-static float Gate_Clamp(float value /* 需要检查、限幅或编码的输入值 */, float lower /* 允许输出的下限 */, float upper /* 允许输出的上限 */)
+static float Gate_Clamp(float value /**< 待限幅的挡板控制量 */, float lower /**< 允许输出的下限 */, float upper /**< 允许输出的上限 */)
 {
     if (value < lower)
     {
@@ -44,7 +44,7 @@ static float Gate_Clamp(float value /* 需要检查、限幅或编码的输入�
 }
 
 /* 功能：校验闸门控制目标并生成 M2006 电机命令；参数 target 为目标，output 为输出；返回 true 表示计算成功。 */
-bool Gate_Calc(const gate_target_t *target, gate_output_t *output)
+bool Gate_Calc(const gate_target_t *target /**< 本周期挡板机构控制目标 */, gate_output_t *output /**< 用于写出挡板 M2006 命令的对象 */)
 {
     if ((target == NULL) || (output == NULL))
     {
@@ -103,7 +103,7 @@ bool Gate_Calc(const gate_target_t *target, gate_output_t *output)
 }
 
 /* 功能：把闸门控制输出和更新后的 PID 参数写入电机管理器；参数 manager、output 分别为管理器和输出；返回 true 表示下发成功。 */
-bool Gate_Apply(motor_manager_t *manager, const gate_output_t *output)
+bool Gate_Apply(motor_manager_t *manager /**< 需要操作的电机管理器 */, const gate_output_t *output /**< 待下发的挡板 M2006 电机命令 */)
 {
     bool success;
     static bool pid_applied;

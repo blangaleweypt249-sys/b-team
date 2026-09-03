@@ -7,13 +7,11 @@
 
 #include <string.h>
 
-/** DJI 一号至四号电机电流组帧的 CAN 标识符。 */
-#define DJI_GROUP_ID_1_TO_4  0x200U
-/** DJI 五号至八号电机电流组帧的 CAN 标识符。 */
-#define DJI_GROUP_ID_5_TO_8  0x1FFU
+#define DJI_GROUP_ID_1_TO_4  0x200U /**< DJI 一号至四号电机电流组帧的 CAN 标识符。 */
+#define DJI_GROUP_ID_5_TO_8  0x1FFU /**< DJI 五号至八号电机电流组帧的 CAN 标识符。 */
 
 /* 功能：把 16 位有符号数写成大端字节；用途：编码 DJI 电机电流字段；无返回值表示结果写入 data。 */
-static void DjiGroup_WriteI16Be(uint8_t *data /* 待处理数据的首地址 */, int16_t value /* 需要检查、限幅或编码的输入值 */)
+static void DjiGroup_WriteI16Be(uint8_t *data /**< 用于写入DJI电流原始值的两字节缓冲区 */, int16_t value /**< 待按大端字节序写入的电流原始值 */)
 {
     uint16_t raw;
 
@@ -23,9 +21,9 @@ static void DjiGroup_WriteI16Be(uint8_t *data /* 待处理数据的首地址 */,
 }
 
 /* 功能：把四路电流命令打包为 DJI 分组 CAN 帧；用途：控制 1-4 或 5-8 号电机；返回 true 表示构帧成功。 */
-bool DjiGroup_BuildFrame(uint8_t start_motor_id,
-                         const int16_t current_raw[DJI_GROUP_MOTOR_COUNT],
-                         can_frame_t *frame)
+bool DjiGroup_BuildFrame(uint8_t start_motor_id /**< DJI 组帧覆盖的第一个电机编号 */,
+                         const int16_t current_raw[DJI_GROUP_MOTOR_COUNT] /**< DJI 协议中的电流命令原始值 */,
+                         can_frame_t *frame /**< 用于写出待发送 CAN 帧的对象 */)
 {
     uint32_t index;
 
