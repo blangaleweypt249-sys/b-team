@@ -22,7 +22,7 @@
 #define REMOTE_FRAME_GAP_MS        5U
 #define REMOTE_AXIS_CENTER         128U
 #define REMOTE_AXIS_DEADZONE       4
-#define REMOTE_FAST_SPEED_MM_S     150
+#define REMOTE_FAST_SPEED_MM_S     165
 #define REMOTE_FINE_SPEED_MM_S     75
 #define REMOTE_KEYBOARD_S_MM_S     75
 #define REMOTE_ROTATION_MRAD_S     10

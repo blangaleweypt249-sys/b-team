@@ -22,6 +22,8 @@
 #define IMU_GYRO_BIAS_TRACK_LIMIT   0.15f
 #define IMU_GYRO_BIAS_TRACK_RATE     0.002f
 #define IMU_YAW_STATIC_GYRO_LIMIT    0.03f
+#define IMU_MANUAL_RELEASE_GYRO_LIMIT 0.5f
+#define IMU_MANUAL_RELEASE_SETTLE_MS  100U
 
 enum
 {
@@ -125,7 +127,9 @@ typedef struct
     imu_gyro_filter_t gyro_filter;
     imu_yaw_control_mode_t mode;
     uint32_t last_update_ms;
+    uint32_t release_quiet_since_ms;
     bool update_time_valid;
+    bool release_quiet_valid;
     bool target_valid;
     bool stop_correcting;
 } imu_yaw_control_t;
@@ -241,6 +245,7 @@ static void reset_control_dynamics(void)
     memset(&yaw_control.gyro_filter, 0, sizeof(yaw_control.gyro_filter));
     yaw_control.last_update_ms = 0U;
     yaw_control.update_time_valid = false;
+    yaw_control.release_quiet_valid = false;
     yaw_control.stop_correcting = false;
 }
 
@@ -701,6 +706,7 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
         return omega;
     }
 
+    now_ms = HAL_GetTick();
     // 手动旋转优先，旋转过程中持续记录当前航向，松手后原地保持
     manual_rotation = (omega > imu_config.yaw_cmd_threshold) ||
                       (omega < -imu_config.yaw_cmd_threshold);
@@ -716,7 +722,35 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
         imu_data.yaw_error_deg = 0.0f;
         imu_data.omega_output = omega;
         imu_data.yaw_hold_active = false;
+        yaw_control.release_quiet_valid = false;
         return omega;
+    }
+
+    /* 松开旋转后先等待机械惯性结束，期间不让航向环反向回拉。 */
+    if (yaw_control.mode == IMU_YAW_CONTROL_MANUAL)
+    {
+        imu_data.target_yaw_deg = imu_data.yaw_deg;
+        imu_data.yaw_error_deg = 0.0f;
+        imu_data.omega_output = 0;
+        imu_data.yaw_hold_active = false;
+        if (fabsf(imu_data.gyro_z_deg_s) >
+            IMU_MANUAL_RELEASE_GYRO_LIMIT)
+        {
+            yaw_control.release_quiet_valid = false;
+            return 0;
+        }
+        if (!yaw_control.release_quiet_valid)
+        {
+            yaw_control.release_quiet_since_ms = now_ms;
+            yaw_control.release_quiet_valid = true;
+            return 0;
+        }
+        if ((uint32_t)(now_ms - yaw_control.release_quiet_since_ms) <
+            IMU_MANUAL_RELEASE_SETTLE_MS)
+        {
+            return 0;
+        }
+        yaw_control.release_quiet_valid = false;
     }
 
     stopped = (abs((int)vx) <= imu_config.yaw_linear_threshold) &&
@@ -739,7 +773,6 @@ int16_t ImuMain_CalcOmega(int16_t vx, int16_t vy, int16_t omega)
         yaw_control.mode = hold_mode;
     }
 
-    now_ms = HAL_GetTick();
     if (yaw_control.update_time_valid &&
         ((uint32_t)(now_ms - yaw_control.last_update_ms) <
          imu_config.yaw_control_period_ms))

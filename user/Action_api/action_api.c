@@ -5,6 +5,8 @@
 #include "path_main.h"
 #include "up_main.h"
 
+#include <math.h>
+
 #define SECOND_ZERO_COMPENSATION_DEG 17.0f
 #define RS_L_SUPPORT_DEG             179.0f
 #define RS_R_SUPPORT_DEG             177.0f
@@ -16,7 +18,9 @@
 #define ALIGN_TRAVEL_DEG             45.0f
 #define ALIGN_TOLERANCE_DEG          3.0f
 #define ACTION_TIMEOUT_MS            5000U
-#define CHASSIS_YAW_STEP_DEG         90.0f
+#define CHASSIS_WORLD_CARDINAL_DEG   90.0f
+#define CHASSIS_WORLD_HALF_TURN_DEG 180.0f
+#define CHASSIS_WORLD_FULL_TURN_DEG 360.0f
 #define REMOTE_PA2_BUTTON_BIT        (1U << 4U)
 #define REMOTE_DOUBLE_CLICK_MS       400U
 
@@ -58,6 +62,37 @@ static bool time_reached(uint32_t now_ms, uint32_t due_ms)
     return (int32_t)(now_ms - due_ms) >= 0;
 }
 
+static float normalize_world_yaw(float yaw_deg)
+{
+    while (yaw_deg >= CHASSIS_WORLD_HALF_TURN_DEG)
+    {
+        yaw_deg -= CHASSIS_WORLD_FULL_TURN_DEG;
+    }
+    while (yaw_deg < -CHASSIS_WORLD_HALF_TURN_DEG)
+    {
+        yaw_deg += CHASSIS_WORLD_FULL_TURN_DEG;
+    }
+    return yaw_deg;
+}
+
+static float next_world_cardinal_yaw(float world_yaw_deg, bool ccw)
+{
+    float cardinal_index;
+
+    if (ccw)
+    {
+        cardinal_index = floorf(world_yaw_deg /
+                                CHASSIS_WORLD_CARDINAL_DEG) + 1.0f;
+    }
+    else
+    {
+        cardinal_index = ceilf(world_yaw_deg /
+                               CHASSIS_WORLD_CARDINAL_DEG) - 1.0f;
+    }
+    return normalize_world_yaw(cardinal_index *
+                               CHASSIS_WORLD_CARDINAL_DEG);
+}
+
 static void set_action_step(action_step_t step)
 {
     action_step = step;
@@ -80,6 +115,8 @@ static void fail_action(HAL_StatusTypeDef status)
 static HAL_StatusTypeDef request_chassis_yaw(action_cmd_t action)
 {
     imu_data_t imu;
+    float reference_imu_yaw;
+    float world_yaw;
     float target_yaw;
 
     if (!ImuMain_GetData(&imu) || !imu.online || !imu.yaw_valid ||
@@ -93,9 +130,12 @@ static HAL_StatusTypeDef request_chassis_yaw(action_cmd_t action)
     }
     else
     {
-        target_yaw = imu.yaw_hold_active ? imu.target_yaw_deg : imu.yaw_deg;
-        target_yaw += (action == ACTION_CMD_CHASSIS_CCW_90) ?
-                      CHASSIS_YAW_STEP_DEG : -CHASSIS_YAW_STEP_DEG;
+        reference_imu_yaw = imu.yaw_hold_active ? imu.target_yaw_deg :
+                                                  imu.yaw_deg;
+        /* Existing field coordinates use world yaw = -IMU yaw. */
+        world_yaw = -reference_imu_yaw;
+        target_yaw = -next_world_cardinal_yaw(
+            world_yaw, action == ACTION_CMD_CHASSIS_CCW_90);
     }
     ImuMain_EnableYawHold(true);
     return ImuMain_SetTargetYaw(target_yaw);
@@ -303,6 +343,7 @@ void Action_UpdateRemoteButtons(uint8_t buttons, uint8_t online)
         ((uint32_t)(now_ms - pa2_first_click_ms) > REMOTE_DOUBLE_CLICK_MS))
     {
         pa2_click_pending = false;
+        (void)Action_Request(ACTION_CMD_CHASSIS_ZERO);
     }
     if ((pressed & REMOTE_PA2_BUTTON_BIT) != 0U)
     {

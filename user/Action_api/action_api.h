@@ -16,9 +16,9 @@ typedef enum
     ACTION_CMD_REAR_DOWN = 6U,    /* 后部 DM 继续反向回到支撑。 */
     ACTION_CMD_M2006_COAST = 7U,  /* 两台 M2006 失去位置保持。 */
     ACTION_CMD_ALIGN = 8U,        /* 四台抬升电机在第二次零点与 +45 度对准位之间切换。 */
-    ACTION_CMD_CHASSIS_ZERO = 9U,
-    ACTION_CMD_CHASSIS_CCW_90 = 10U,
-    ACTION_CMD_CHASSIS_CW_90 = 11U,
+    ACTION_CMD_CHASSIS_ZERO = 9U,  /* 转到世界坐标航向 0 度。 */
+    ACTION_CMD_CHASSIS_CCW_90 = 10U, /* 逆时针切到下一世界正交方向。 */
+    ACTION_CMD_CHASSIS_CW_90 = 11U,  /* 顺时针切到下一世界正交方向。 */
     ACTION_CMD_ALIGN_BLOCK_PNP = 12U,
     ACTION_CMD_NONE = 0xFFU
 } action_cmd_t;

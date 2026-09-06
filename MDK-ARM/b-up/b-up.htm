@@ -3,7 +3,7 @@
 <title>Static Call Graph - [b-up\b-up.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image b-up\b-up.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6180002: Last Updated: Fri Aug 21 16:39:33 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6180002: Last Updated: Sat Aug 22 21:02:07 2026
 <BR><P>
 <H3>Maximum Stack Usage =        496 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -873,7 +873,7 @@ Global Symbols
 
 <P><STRONG><a name="[249]"></a>__semihosting_library_function</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, indicate_semi.o(.text), UNUSED)
 
-<P><STRONG><a name="[c7]"></a>Action_Request</STRONG> (Thumb, 240 bytes, Stack size 80 bytes, action_api.o(.text.Action_Request))
+<P><STRONG><a name="[c7]"></a>Action_Request</STRONG> (Thumb, 444 bytes, Stack size 80 bytes, action_api.o(.text.Action_Request))
 <BR><BR>[Stack]<UL><LI>Max Depth = 96<LI>Call Chain = Action_Request &rArr; AutoChassis_AlignBlockPnp
 </UL>
 <BR>[Calls]<UL><LI><a href="#[cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_SetTargetYaw
@@ -909,13 +909,16 @@ Global Symbols
 <BR><BR>[Called By]<UL><LI><a href="#[9f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartCommTask
 </UL>
 
-<P><STRONG><a name="[d5]"></a>Action_UpdateRemoteButtons</STRONG> (Thumb, 160 bytes, Stack size 16 bytes, action_api.o(.text.Action_UpdateRemoteButtons))
-<BR><BR>[Stack]<UL><LI>Max Depth = 112<LI>Call Chain = Action_UpdateRemoteButtons &rArr; Action_Request &rArr; AutoChassis_AlignBlockPnp
+<P><STRONG><a name="[d5]"></a>Action_UpdateRemoteButtons</STRONG> (Thumb, 216 bytes, Stack size 72 bytes, action_api.o(.text.Action_UpdateRemoteButtons))
+<BR><BR>[Stack]<UL><LI>Max Depth = 168<LI>Call Chain = Action_UpdateRemoteButtons &rArr; Action_Request &rArr; AutoChassis_AlignBlockPnp
 </UL>
 <BR>[Calls]<UL><LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
 <LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Action_Request
+<LI><a href="#[cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_SetTargetYaw
 <LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;PathMain_Stop
+<LI><a href="#[cb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_EnableYawHold
 <LI><a href="#[ca]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;AutoChassis_AlignBlockPnp
+<LI><a href="#[c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_GetData
 </UL>
 <BR>[Called By]<UL><LI><a href="#[9f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartCommTask
 </UL>
@@ -989,7 +992,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[19a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Road_Run
 </UL>
 
-<P><STRONG><a name="[ec]"></a>Chassis_Init</STRONG> (Thumb, 206 bytes, Stack size 32 bytes, chassis_main.o(.text.Chassis_Init))
+<P><STRONG><a name="[ec]"></a>Chassis_Init</STRONG> (Thumb, 192 bytes, Stack size 32 bytes, chassis_main.o(.text.Chassis_Init))
 <BR><BR>[Stack]<UL><LI>Max Depth = 156 + Unknown Stack Size
 <LI>Call Chain = Chassis_Init &rArr; VescMotor_SendRpm &rArr; VescCan_Send &rArr; HAL_FDCAN_AddMessageToTxFifoQ
 </UL>
@@ -1029,21 +1032,20 @@ Global Symbols
 <LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;AutoChassis_Request
 </UL>
 
-<P><STRONG><a name="[f2]"></a>Chassis_Run1ms</STRONG> (Thumb, 1652 bytes, Stack size 104 bytes, chassis_main.o(.text.Chassis_Run1ms))
-<BR><BR>[Stack]<UL><LI>Max Depth = 252 + Unknown Stack Size
+<P><STRONG><a name="[f2]"></a>Chassis_Run1ms</STRONG> (Thumb, 1188 bytes, Stack size 64 bytes, chassis_main.o(.text.Chassis_Run1ms))
+<BR><BR>[Stack]<UL><LI>Max Depth = 212 + Unknown Stack Size
 <LI>Call Chain = Chassis_Run1ms &rArr; Chassis_ApplyMotion &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
 </UL>
 <BR>[Calls]<UL><LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
 <LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_CaptureCurrentYaw
-<LI><a href="#[f8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_CalcOmega
-<LI><a href="#[f7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Restart
+<LI><a href="#[f7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_CalcOmega
 <LI><a href="#[e9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescMotor_SetRpm
-<LI><a href="#[c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_GetData
 <LI><a href="#[f6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescMotor_Update
 <LI><a href="#[f5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescMotor_Parse
 <LI><a href="#[f4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Read
 <LI><a href="#[f3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Recover
 <LI><a href="#[f0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescMotor_SendRpm
+<LI><a href="#[f8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_SetWheelRpm
 <LI><a href="#[f1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_LimitWheelRpm
 <LI><a href="#[e7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_ApplyMotion
 <LI><a href="#[e8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_ldivmod
@@ -1393,8 +1395,8 @@ Global Symbols
 <P><STRONG><a name="[1bd]"></a>HAL_FDCAN_AddMessageToTxFifoQ</STRONG> (Thumb, 238 bytes, Stack size 28 bytes, stm32h7xx_hal_fdcan.o(.text.HAL_FDCAN_AddMessageToTxFifoQ))
 <BR><BR>[Stack]<UL><LI>Max Depth = 28<LI>Call Chain = HAL_FDCAN_AddMessageToTxFifoQ
 </UL>
-<BR>[Called By]<UL><LI><a href="#[1da]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Send
-<LI><a href="#[1bb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Send
+<BR>[Called By]<UL><LI><a href="#[1bb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Send
+<LI><a href="#[1da]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Send
 </UL>
 
 <P><STRONG><a name="[121]"></a>HAL_FDCAN_ClockCalibrationCallback</STRONG> (Thumb, 2 bytes, Stack size 0 bytes, stm32h7xx_hal_fdcan.o(.text.HAL_FDCAN_ClockCalibrationCallback))
@@ -1445,8 +1447,8 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[1bc]"></a>HAL_FDCAN_GetTxFifoFreeLevel</STRONG> (Thumb, 12 bytes, Stack size 0 bytes, stm32h7xx_hal_fdcan.o(.text.HAL_FDCAN_GetTxFifoFreeLevel))
-<BR><BR>[Called By]<UL><LI><a href="#[1da]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Send
-<LI><a href="#[1bb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Send
+<BR><BR>[Called By]<UL><LI><a href="#[1bb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Send
+<LI><a href="#[1da]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Send
 </UL>
 
 <P><STRONG><a name="[11f]"></a>HAL_FDCAN_HighPriorityMessageCallback</STRONG> (Thumb, 2 bytes, Stack size 0 bytes, stm32h7xx_hal_fdcan.o(.text.HAL_FDCAN_HighPriorityMessageCallback))
@@ -1517,7 +1519,6 @@ Global Symbols
 <P><STRONG><a name="[1b8]"></a>HAL_FDCAN_Start</STRONG> (Thumb, 52 bytes, Stack size 0 bytes, stm32h7xx_hal_fdcan.o(.text.HAL_FDCAN_Start))
 <BR><BR>[Called By]<UL><LI><a href="#[114]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Recover
 <LI><a href="#[112]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Init
-<LI><a href="#[f7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Restart
 <LI><a href="#[ed]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Init
 </UL>
 
@@ -1525,7 +1526,6 @@ Global Symbols
 <BR><BR>[Called By]<UL><LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Stop
 <LI><a href="#[114]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Recover
 <LI><a href="#[112]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Init
-<LI><a href="#[f7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Restart
 <LI><a href="#[ef]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescCan_Stop
 </UL>
 
@@ -1621,7 +1621,7 @@ Global Symbols
 <LI><a href="#[19a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Road_Run
 <LI><a href="#[198]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Road_Init
 <LI><a href="#[ca]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;AutoChassis_AlignBlockPnp
-<LI><a href="#[f8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_CalcOmega
+<LI><a href="#[f7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_CalcOmega
 <LI><a href="#[dd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_RequestVelocity
 <LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Up_StopAll
 <LI><a href="#[113]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Fdcan_Run1ms
@@ -2109,23 +2109,24 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> startup_stm32h723xx.o(RESET)
 </UL>
-<P><STRONG><a name="[f8]"></a>ImuMain_CalcOmega</STRONG> (Thumb, 1264 bytes, Stack size 16 bytes, imu_main.o(.text.ImuMain_CalcOmega))
-<BR><BR>[Stack]<UL><LI>Max Depth = 16<LI>Call Chain = ImuMain_CalcOmega
+<P><STRONG><a name="[f7]"></a>ImuMain_CalcOmega</STRONG> (Thumb, 1380 bytes, Stack size 24 bytes, imu_main.o(.text.ImuMain_CalcOmega))
+<BR><BR>[Stack]<UL><LI>Max Depth = 24<LI>Call Chain = ImuMain_CalcOmega
 </UL>
 <BR>[Calls]<UL><LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
 </UL>
 <BR>[Called By]<UL><LI><a href="#[f2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Run1ms
 </UL>
 
-<P><STRONG><a name="[d6]"></a>ImuMain_CaptureCurrentYaw</STRONG> (Thumb, 108 bytes, Stack size 0 bytes, imu_main.o(.text.ImuMain_CaptureCurrentYaw))
+<P><STRONG><a name="[d6]"></a>ImuMain_CaptureCurrentYaw</STRONG> (Thumb, 102 bytes, Stack size 0 bytes, imu_main.o(.text.ImuMain_CaptureCurrentYaw))
 <BR><BR>[Called By]<UL><LI><a href="#[199]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;PathMain_Run
 <LI><a href="#[f2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Run1ms
 <LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;PathMain_Stop
 <LI><a href="#[ca]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;AutoChassis_AlignBlockPnp
 </UL>
 
-<P><STRONG><a name="[cb]"></a>ImuMain_EnableYawHold</STRONG> (Thumb, 76 bytes, Stack size 0 bytes, imu_main.o(.text.ImuMain_EnableYawHold))
-<BR><BR>[Called By]<UL><LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Action_Request
+<P><STRONG><a name="[cb]"></a>ImuMain_EnableYawHold</STRONG> (Thumb, 74 bytes, Stack size 0 bytes, imu_main.o(.text.ImuMain_EnableYawHold))
+<BR><BR>[Called By]<UL><LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Action_UpdateRemoteButtons
+<LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Action_Request
 <LI><a href="#[ca]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;AutoChassis_AlignBlockPnp
 </UL>
 
@@ -2133,7 +2134,7 @@ Global Symbols
 <BR><BR>[Stack]<UL><LI>Max Depth = 16<LI>Call Chain = ImuMain_GetData
 </UL>
 <BR>[Called By]<UL><LI><a href="#[199]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;PathMain_Run
-<LI><a href="#[f2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Run1ms
+<LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Action_UpdateRemoteButtons
 <LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Action_Request
 <LI><a href="#[19a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Road_Run
 <LI><a href="#[e7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_ApplyMotion
@@ -2164,7 +2165,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[9d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartChassisTask
 </UL>
 
-<P><STRONG><a name="[179]"></a>ImuMain_Run1ms</STRONG> (Thumb, 1960 bytes, Stack size 64 bytes, imu_main.o(.text.ImuMain_Run1ms))
+<P><STRONG><a name="[179]"></a>ImuMain_Run1ms</STRONG> (Thumb, 1952 bytes, Stack size 64 bytes, imu_main.o(.text.ImuMain_Run1ms))
 <BR><BR>[Stack]<UL><LI>Max Depth = 184<LI>Call Chain = ImuMain_Run1ms &rArr; Imu_Process &rArr; start_receive &rArr; HAL_UARTEx_ReceiveToIdle_DMA &rArr; UART_Start_Receive_DMA &rArr; HAL_DMA_Start_IT &rArr; DMA_SetConfig
 </UL>
 <BR>[Calls]<UL><LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
@@ -2186,8 +2187,9 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[fc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ComputerLink_Run
 </UL>
 
-<P><STRONG><a name="[cc]"></a>ImuMain_SetTargetYaw</STRONG> (Thumb, 252 bytes, Stack size 0 bytes, imu_main.o(.text.ImuMain_SetTargetYaw))
-<BR><BR>[Called By]<UL><LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Action_Request
+<P><STRONG><a name="[cc]"></a>ImuMain_SetTargetYaw</STRONG> (Thumb, 248 bytes, Stack size 0 bytes, imu_main.o(.text.ImuMain_SetTargetYaw))
+<BR><BR>[Called By]<UL><LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Action_UpdateRemoteButtons
+<LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Action_Request
 </UL>
 
 <P><STRONG><a name="[17b]"></a>Imu_GetRawData</STRONG> (Thumb, 58 bytes, Stack size 8 bytes, imu_1.o(.text.Imu_GetRawData))
@@ -2263,7 +2265,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[9f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;StartCommTask
 </UL>
 
-<P><STRONG><a name="[182]"></a>LoraLink_Run</STRONG> (Thumb, 1156 bytes, Stack size 96 bytes, lora_link.o(.text.LoraLink_Run))
+<P><STRONG><a name="[182]"></a>LoraLink_Run</STRONG> (Thumb, 1152 bytes, Stack size 96 bytes, lora_link.o(.text.LoraLink_Run))
 <BR><BR>[Stack]<UL><LI>Max Depth = 160<LI>Call Chain = LoraLink_Run &rArr; McuLink_Send &rArr; HAL_UART_Transmit_DMA &rArr; HAL_DMA_Start_IT &rArr; DMA_SetConfig
 </UL>
 <BR>[Calls]<UL><LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
@@ -2465,8 +2467,8 @@ Global Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
 <LI><a href="#[19a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Road_Run
-<LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_CaptureCurrentYaw
 <LI><a href="#[c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_GetData
+<LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_CaptureCurrentYaw
 <LI><a href="#[de]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_GetControlMode
 <LI><a href="#[d9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_SetControlMode
 <LI><a href="#[d8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_ReleaseVelocity
@@ -2596,10 +2598,10 @@ Global Symbols
 <BR><BR>[Stack]<UL><LI>Max Depth = 56 + Unknown Stack Size
 <LI>Call Chain = RsApp_Init &rArr; RsMotor_Init
 </UL>
-<BR>[Calls]<UL><LI><a href="#[177]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memclr4
+<BR>[Calls]<UL><LI><a href="#[1a9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_SetHandler
+<LI><a href="#[177]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memclr4
 <LI><a href="#[1a8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsMotor_Init
 <LI><a href="#[1a7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;command_valid
-<LI><a href="#[1a9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_SetHandler
 </UL>
 <BR>[Called By]<UL><LI><a href="#[1c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Up_Init
 </UL>
@@ -2816,9 +2818,9 @@ Global Symbols
 <P><STRONG><a name="[1ab]"></a>RsMotor_Start</STRONG> (Thumb, 452 bytes, Stack size 32 bytes, rs00.o(.text.RsMotor_Start))
 <BR><BR>[Stack]<UL><LI>Max Depth = 140<LI>Call Chain = RsMotor_Start &rArr; write_u8 &rArr; RsBus_Send &rArr; HAL_FDCAN_AddMessageToTxFifoQ
 </UL>
-<BR>[Calls]<UL><LI><a href="#[1c0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;write_u8
+<BR>[Calls]<UL><LI><a href="#[1bb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Send
+<LI><a href="#[1c0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;write_u8
 <LI><a href="#[1bf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;send_command
-<LI><a href="#[1bb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsBus_Send
 </UL>
 <BR>[Called By]<UL><LI><a href="#[1aa]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RsApp_Run
 </UL>
@@ -2897,7 +2899,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[9d]"></a>StartChassisTask</STRONG> (Thumb, 130 bytes, Stack size 32 bytes, freertos.o(.text.StartChassisTask))
-<BR><BR>[Stack]<UL><LI>Max Depth = 284 + Unknown Stack Size
+<BR><BR>[Stack]<UL><LI>Max Depth = 244 + Unknown Stack Size
 <LI>Call Chain = StartChassisTask &rArr; Chassis_Run1ms &rArr; Chassis_ApplyMotion &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
 </UL>
 <BR>[Calls]<UL><LI><a href="#[f2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Run1ms
@@ -3207,15 +3209,6 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[f2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Run1ms
 </UL>
 
-<P><STRONG><a name="[f7]"></a>VescCan_Restart</STRONG> (Thumb, 66 bytes, Stack size 8 bytes, vesc_can.o(.text.VescCan_Restart))
-<BR><BR>[Stack]<UL><LI>Max Depth = 8<LI>Call Chain = VescCan_Restart
-</UL>
-<BR>[Calls]<UL><LI><a href="#[1b8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FDCAN_Start
-<LI><a href="#[1ba]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FDCAN_Stop
-</UL>
-<BR>[Called By]<UL><LI><a href="#[f2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Run1ms
-</UL>
-
 <P><STRONG><a name="[1da]"></a>VescCan_Send</STRONG> (Thumb, 240 bytes, Stack size 80 bytes, vesc_can.o(.text.VescCan_Send))
 <BR><BR>[Stack]<UL><LI>Max Depth = 108 + Unknown Stack Size
 <LI>Call Chain = VescCan_Send &rArr; HAL_FDCAN_AddMessageToTxFifoQ
@@ -3268,6 +3261,7 @@ Global Symbols
 <BR><BR>[Stack]<UL><LI>Max Depth = 8<LI>Call Chain = VescMotor_SetRpm
 </UL>
 <BR>[Called By]<UL><LI><a href="#[f2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Run1ms
+<LI><a href="#[f8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_SetWheelRpm
 <LI><a href="#[e7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_ApplyMotion
 </UL>
 
@@ -4058,8 +4052,8 @@ Local Symbols
 <P><STRONG><a name="[e7]"></a>Chassis_ApplyMotion</STRONG> (Thumb, 732 bytes, Stack size 112 bytes, chassis_main.o(.text.Chassis_ApplyMotion))
 <BR><BR>[Stack]<UL><LI>Max Depth = 148<LI>Call Chain = Chassis_ApplyMotion &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
 </UL>
-<BR>[Calls]<UL><LI><a href="#[e9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescMotor_SetRpm
-<LI><a href="#[c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_GetData
+<BR>[Calls]<UL><LI><a href="#[c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ImuMain_GetData
+<LI><a href="#[e9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescMotor_SetRpm
 <LI><a href="#[e5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__hardfp_sinf
 <LI><a href="#[e4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__hardfp_cosf
 <LI><a href="#[e8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_ldivmod
@@ -4071,6 +4065,14 @@ Local Symbols
 <BR><BR>[Stack]<UL><LI>Max Depth = 64<LI>Call Chain = Chassis_LimitWheelRpm &rArr; __aeabi_ldivmod
 </UL>
 <BR>[Calls]<UL><LI><a href="#[e8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_ldivmod
+</UL>
+<BR>[Called By]<UL><LI><a href="#[f2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Run1ms
+</UL>
+
+<P><STRONG><a name="[f8]"></a>Chassis_SetWheelRpm</STRONG> (Thumb, 66 bytes, Stack size 16 bytes, chassis_main.o(.text.Chassis_SetWheelRpm))
+<BR><BR>[Stack]<UL><LI>Max Depth = 24<LI>Call Chain = Chassis_SetWheelRpm &rArr; VescMotor_SetRpm
+</UL>
+<BR>[Calls]<UL><LI><a href="#[e9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VescMotor_SetRpm
 </UL>
 <BR>[Called By]<UL><LI><a href="#[f2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_Run1ms
 </UL>
